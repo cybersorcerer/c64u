@@ -306,3 +306,42 @@ func (f *Formatter) PrintHeader(text string) {
 		fmt.Println(headerStyle.Render(text))
 	}
 }
+
+// GetTitleStyle returns a style for help titles
+func (f *Formatter) GetTitleStyle() lipgloss.Style {
+	if f.NoColor {
+		return lipgloss.NewStyle()
+	}
+	return lipgloss.NewStyle().
+		Foreground(lipgloss.Color("12")).
+		Bold(true)
+}
+
+// GetSectionStyle returns a style for help section headers
+func (f *Formatter) GetSectionStyle() lipgloss.Style {
+	if f.NoColor {
+		return lipgloss.NewStyle()
+	}
+	return lipgloss.NewStyle().
+		Foreground(lipgloss.Color("14")).
+		Bold(true)
+}
+
+// GetCommandStyle returns a style for command names in help
+func (f *Formatter) GetCommandStyle() lipgloss.Style {
+	if f.NoColor {
+		return lipgloss.NewStyle()
+	}
+	return lipgloss.NewStyle().
+		Foreground(lipgloss.Color("10")).
+		Bold(true)
+}
+
+// GetFlagStyle returns a style for flag names in help
+func (f *Formatter) GetFlagStyle() lipgloss.Style {
+	if f.NoColor {
+		return lipgloss.NewStyle()
+	}
+	return lipgloss.NewStyle().
+		Foreground(lipgloss.Color("11"))
+}
