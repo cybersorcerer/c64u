@@ -13,6 +13,13 @@ A command-line interface for controlling the [Commodore C64 Ultimate](https://co
 
 ## Installation
 
+### Easy
+
+- Open the dist/ folder
+- Open the folder for your OS
+- Right click on c64u and select "Download linked File"
+- Copy the c64u binary to a directory in your $PATH.
+
 ### From Source
 
 ```bash
