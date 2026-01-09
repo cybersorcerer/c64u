@@ -5,6 +5,7 @@ A command-line interface for controlling the [Commodore C64 Ultimate](https://co
 ## Features
 
 - **Complete REST API Coverage**: All C64 Ultimate API endpoints supported
+- **C64 Ultimate Filesystem Integration**: Manipulate files on C64 Filesystem
 - **Flexible Configuration**: Config file, environment variables, or CLI flags
 - **Multiple Output Formats**: Human-readable text or JSON for scripting
 - **Cross-Platform**: Builds for macOS, Linux, and Windows
