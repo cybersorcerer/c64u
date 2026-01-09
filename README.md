@@ -341,7 +341,7 @@ make lint
 
 ### Adding New Commands
 
-Commands are organized by API category. See the [implementation plan](../../.claude/plans/) for details.
+Commands are organized by API category.
 
 ## API Reference
 
