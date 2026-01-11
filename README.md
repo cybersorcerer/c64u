@@ -264,6 +264,25 @@ c64u fs cp <source> <dest>                     # Copy file (download+upload)
 c64u fs cat <path>                             # Show file information
 ```
 
+**Examples:**
+
+```bash
+# List root directory
+c64u fs ls /
+
+# Upload PRG file
+c64u fs upload myprogram.prg /Temp/myprogram.prg
+
+# Download from SD card
+c64u fs download /SD/games/game.prg ./game.prg
+
+# Create directory
+c64u fs mkdir /Temp/myproject
+
+# Move file
+c64u fs mv /Temp/old.prg /Temp/new.prg
+```
+
 #### Configuration Management
 
 Manage C64 Ultimate configuration settings:
@@ -309,25 +328,6 @@ c64u config export                       # Print to stdout
     "Drive": "Disabled"
   }
 }
-```
-
-**Examples:**
-
-```bash
-# List root directory
-c64u fs ls /
-
-# Upload PRG file
-c64u fs upload myprogram.prg /Temp/myprogram.prg
-
-# Download from SD card
-c64u fs download /SD/games/game.prg ./game.prg
-
-# Create directory
-c64u fs mkdir /Temp/myproject
-
-# Move file
-c64u fs mv /Temp/old.prg /Temp/new.prg
 ```
 
 ## Output Formats
