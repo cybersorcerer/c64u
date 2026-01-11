@@ -5,7 +5,6 @@ A command-line interface for controlling the [Commodore C64 Ultimate](https://co
 ## Features
 
 - **Complete REST API Coverage**: All C64 Ultimate API endpoints supported
-- **C64 Ultimate Filesystem Integration**: Manipulate files on C64 Filesystem
 - **Flexible Configuration**: Config file, environment variables, or CLI flags
 - **Multiple Output Formats**: Human-readable text or JSON for scripting
 - **Cross-Platform**: Builds for macOS, Linux, and Windows
@@ -66,7 +65,7 @@ make release
 ### 1. Create Configuration File
 
 ```bash
-c64u config init
+c64u cli-config init
 ```
 
 This creates `~/.config/c64u/config.toml` with default settings.
@@ -89,8 +88,8 @@ port = 80
 # Get API version
 c64u about
 
-# Show current configuration
-c64u config show
+# Show current CLI configuration
+c64u cli-config show
 ```
 
 ## Configuration
@@ -98,11 +97,13 @@ c64u config show
 ### Priority Order
 
 1. **CLI Flags** (highest priority)
+
    ```bash
    c64u --host 192.168.1.100 --port 80 about
    ```
 
 2. **Environment Variables**
+
    ```bash
    export C64U_HOST=192.168.1.100
    export C64U_PORT=80
@@ -142,14 +143,16 @@ c64u about
 c64u info
 ```
 
-#### Configuration Management
+#### CLI Configuration Management
+
+Manage c64u CLI tool configuration file (`~/.config/c64u/config.toml`):
 
 ```bash
-# Create default config file
-c64u config init
+# Create default CLI config file
+c64u cli-config init
 
-# Show current configuration
-c64u config show
+# Show current CLI configuration
+c64u cli-config show
 ```
 
 #### Runners - Media & Program Execution
@@ -261,6 +264,53 @@ c64u fs cp <source> <dest>                     # Copy file (download+upload)
 c64u fs cat <path>                             # Show file information
 ```
 
+#### Configuration Management
+
+Manage C64 Ultimate configuration settings:
+
+```bash
+# List all categories
+c64u config list
+
+# Show all settings in a category
+c64u config show "Drive A Settings"
+c64u config show "drive a*"              # Wildcards supported
+
+# Get detailed info about a setting
+c64u config get "Drive A Settings" "Drive Type"
+c64u config get "drive a*" "*bus*"       # Wildcards supported
+
+# Set a configuration item
+c64u config set "Drive A Settings" "Drive Type" "1581"
+c64u config set "drive a*" "*bus*" "9"
+
+# Set multiple settings from JSON file
+c64u config set-multiple settings.json
+
+# Persistence
+c64u config save-to-flash                # Save to non-volatile memory
+c64u config load-from-flash              # Load from flash (discards unsaved changes)
+c64u config reset-to-default             # Reset to factory defaults
+
+# Export/Import
+c64u config export config-backup.json    # Export all settings to JSON
+c64u config export                       # Print to stdout
+```
+
+**JSON format for set-multiple:**
+
+```json
+{
+  "Drive A Settings": {
+    "Drive": "Enabled",
+    "Drive Type": "1581"
+  },
+  "Drive B Settings": {
+    "Drive": "Disabled"
+  }
+}
+```
+
 **Examples:**
 
 ```bash
@@ -357,7 +407,7 @@ c64u runners run-prg-upload program.prg
 
 ### Project Structure
 
-```
+```text
 c64u/
 ├── cmd/c64u/          # Main application entry point
 ├── internal/
@@ -395,7 +445,7 @@ Commands are organized by API category. See the [implementation plan](../../.cla
 ## API Reference
 
 The C64 Ultimate REST API documentation is available at:
-https://1541u-documentation.readthedocs.io/en/latest/api/api_calls.html
+<https://1541u-documentation.readthedocs.io/en/latest/api/api_calls.html>
 
 ## Troubleshooting
 
@@ -415,8 +465,8 @@ c64u --verbose --host 192.168.1.100 api-version
 ### Configuration Issues
 
 ```bash
-# Check current configuration
-c64u config show
+# Check current CLI configuration
+c64u cli-config show
 
 # Verify config file location
 ls -la ~/.config/c64u/config.toml
