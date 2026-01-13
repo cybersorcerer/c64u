@@ -188,11 +188,11 @@ var infoCmd = &cobra.Command{
 	},
 }
 
-// configCmd represents the config command group
-var configCmd = &cobra.Command{
-	Use:   "config",
-	Short: "Manage c64u configuration",
-	Long:  `View and manage the c64u CLI configuration file.`,
+// cliConfigCmd represents the CLI config command group
+var cliConfigCmd = &cobra.Command{
+	Use:   "cli-config",
+	Short: "Manage c64u CLI configuration",
+	Long:  `View and manage the c64u CLI configuration file (not C64 Ultimate hardware config).`,
 }
 
 // configInitCmd creates a default config file
@@ -213,11 +213,11 @@ var configInitCmd = &cobra.Command{
 	},
 }
 
-// configShowCmd shows the current configuration
-var configShowCmd = &cobra.Command{
+// cliConfigShowCmd shows the current CLI configuration
+var cliConfigShowCmd = &cobra.Command{
 	Use:   "show",
-	Short: "Show current configuration",
-	Long:  `Display the current configuration settings being used.`,
+	Short: "Show current CLI configuration",
+	Long:  `Display the current c64u CLI configuration settings being used.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		cfg, err := config.Load()
 		if err != nil {
@@ -336,16 +336,18 @@ func init() {
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(aboutCmd)
 	rootCmd.AddCommand(infoCmd)
+	rootCmd.AddCommand(cliConfigCmd)
 	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(runnersCmd)
 	rootCmd.AddCommand(machineCmd)
 	rootCmd.AddCommand(drivesCmd)
 	rootCmd.AddCommand(streamsCmd)
 	rootCmd.AddCommand(filesCmd)
+	rootCmd.AddCommand(fsCmd)
 
-	// Config subcommands
-	configCmd.AddCommand(configInitCmd)
-	configCmd.AddCommand(configShowCmd)
+	// CLI Config subcommands
+	cliConfigCmd.AddCommand(configInitCmd)
+	cliConfigCmd.AddCommand(cliConfigShowCmd)
 }
 
 func main() {
