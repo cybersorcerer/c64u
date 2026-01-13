@@ -1,0 +1,123 @@
+# GoReleaser configuration for c64u
+# https://goreleaser.com
+
+version: 2
+
+before:
+  hooks:
+    # Ensure dependencies are up to date
+    - go mod tidy
+
+builds:
+  - id: c64u
+    main: ./cmd/c64u
+    binary: c64u
+
+    env:
+      - CGO_ENABLED=0
+
+    # Build for multiple platforms
+    goos:
+      - linux
+      - darwin
+      - windows
+
+    goarch:
+      - amd64
+      - arm64
+
+    # Skip combinations that don't make sense
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+    # Set version information via ldflags
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: c64u-archive
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+
+    files:
+      - README.md
+      - LICENSE.md
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - '^ci:'
+      - 'merge conflict'
+      - Merge pull request
+      - Merge remote-tracking branch
+      - Merge branch
+
+# GitHub Release
+release:
+  github:
+    owner: cybersorcerer
+    name: c64.nvim
+
+  # If set to auto, will mark the release as not ready for production
+  # in case there is an indicator for this in the tag e.g. v1.0.0-rc1
+  prerelease: auto
+
+  # Customize release notes
+  name_template: "c64u {{.Version}}"
+
+  # Additional release notes
+  header: |
+    ## c64u - Commodore C64 Ultimate CLI
+
+    Command-line interface for controlling the C64 Ultimate via its REST API.
+
+    ### Installation
+
+    Download the appropriate binary for your platform below and add it to your PATH.
+
+  footer: |
+    ---
+
+    **Full Changelog**: https://github.com/cybersorcerer/c64.nvim/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+# Homebrew tap (optional - requires separate homebrew-tap repo)
+# brews:
+#   - name: c64u
+#     repository:
+#       owner: cybersorcerer
+#       name: homebrew-tap
+#     description: "CLI tool for controlling the Commodore C64 Ultimate"
+#     homepage: "https://github.com/cybersorcerer/c64.nvim"
+#     license: "Apache-2.0"
+#     install: |
+#       bin.install "c64u"
+
+# Snapcraft (Linux Snap package - optional)
+# snapcrafts:
+#   - name: c64u
+#     summary: CLI tool for C64 Ultimate
+#     description: |
+#       Command-line interface for controlling the Commodore C64 Ultimate
+#       via its REST API.
+#     grade: stable
+#     confinement: strict
+#     publish: true
