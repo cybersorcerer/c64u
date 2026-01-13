@@ -2,7 +2,10 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 
+	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/diskimage"
 	"github.com/spf13/cobra"
 )
 
@@ -336,6 +339,138 @@ Example:
 	},
 }
 
+var filesPackD64Cmd = &cobra.Command{
+	Use:   "pack-d64 <source-dir> <output-file> [--name NAME] [--id ID] [--tracks N]",
+	Short: "Pack directory into D64 disk image",
+	Long: `Create a D64 disk image from all files in a directory.
+
+Reads all files from the source directory and packs them into a D64 disk image.
+Supports .prg, .seq, .usr, and .rel files.
+
+Examples:
+  c64u files pack-d64 ./myfiles game.d64 --name "MY GAME" --id "01"
+  c64u files pack-d64 ./build output.d64 --tracks 40`,
+	Args: cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		runPackD64(cmd, args, false)
+	},
+}
+
+var filesPackD64UploadCmd = &cobra.Command{
+	Use:   "pack-d64-upload <source-dir> <remote-path> [--name NAME] [--id ID] [--mount DRIVE]",
+	Short: "Pack directory and upload to C64 Ultimate",
+	Long: `Create a D64 disk image from a directory and upload it to the C64 Ultimate.
+
+Creates a temporary D64 image, uploads it via FTP, and optionally mounts it.
+
+Examples:
+  c64u files pack-d64-upload ./myfiles /usb0/game.d64 --name "MY GAME"
+  c64u files pack-d64-upload ./build /Temp/test.d64 --mount A`,
+	Args: cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		runPackD64(cmd, args, true)
+	},
+}
+
+func runPackD64(cmd *cobra.Command, args []string, upload bool) {
+	sourceDir := args[0]
+	outputPath := args[1]
+
+	diskName, _ := cmd.Flags().GetString("name")
+	diskID, _ := cmd.Flags().GetString("id")
+	tracks, _ := cmd.Flags().GetInt("tracks")
+	mount, _ := cmd.Flags().GetString("mount") // Used for upload variant
+
+	// Use directory name as disk name if not specified
+	if diskName == "" {
+		diskName = filepath.Base(sourceDir)
+		if len(diskName) > 16 {
+			diskName = diskName[:16]
+		}
+	}
+
+	// Default disk ID
+	if diskID == "" {
+		diskID = "2A"
+	}
+
+	// Default tracks
+	if tracks == 0 {
+		tracks = 35
+	}
+
+	// Validate tracks
+	if tracks != 35 && tracks != 40 {
+		formatter.Error("Invalid track count", []string{
+			fmt.Sprintf("Track count must be 35 or 40, got %d", tracks),
+		})
+		return
+	}
+
+	// Check if source directory exists
+	if _, err := os.Stat(sourceDir); os.IsNotExist(err) {
+		formatter.Error("Source directory not found", []string{sourceDir})
+		return
+	}
+
+	// Create pack options
+	opts := &diskimage.PackOptions{
+		DiskName: diskName,
+		DiskID:   diskID,
+		Tracks:   tracks,
+	}
+
+	// For upload, create temporary file
+	actualOutput := outputPath
+	if upload {
+		tmpFile, err := os.CreateTemp("", "c64u-*.d64")
+		if err != nil {
+			formatter.Error("Failed to create temporary file", []string{err.Error()})
+			return
+		}
+		actualOutput = tmpFile.Name()
+		tmpFile.Close()
+		defer os.Remove(actualOutput)
+	}
+
+	// Pack directory into D64
+	if err := diskimage.PackDirectory(sourceDir, actualOutput, opts); err != nil {
+		formatter.Error("Failed to create D64 image", []string{err.Error()})
+		return
+	}
+
+	if upload {
+		// TODO: Upload via FTP to C64 Ultimate
+		// For now, show error that upload is not yet implemented
+		_ = mount // Will be used when FTP upload is implemented
+		formatter.Error("Upload functionality not yet implemented", []string{
+			"Use 'c64u fs upload' to upload the created D64 file manually",
+		})
+		return
+	}
+
+	// Get file info
+	files, _ := diskimage.GetDiskInfo(sourceDir, nil)
+
+	data := map[string]interface{}{
+		"output":     outputPath,
+		"disk_name":  diskName,
+		"disk_id":    diskID,
+		"tracks":     tracks,
+		"file_count": len(files),
+	}
+
+	formatter.Success("D64 image created", data)
+
+	// Show files included
+	if !jsonOut {
+		fmt.Println("\nFiles included:")
+		for i, file := range files {
+			fmt.Printf("  %2d. %s\n", i+1, file.Name)
+		}
+	}
+}
+
 func init() {
 	// Streams commands
 	streamsCmd.AddCommand(streamsStartCmd)
@@ -347,6 +482,8 @@ func init() {
 	filesCmd.AddCommand(filesCreateD71Cmd)
 	filesCmd.AddCommand(filesCreateD81Cmd)
 	filesCmd.AddCommand(filesCreateDNPCmd)
+	filesCmd.AddCommand(filesPackD64Cmd)
+	filesCmd.AddCommand(filesPackD64UploadCmd)
 
 	// Flags for file creation commands
 	filesCreateD64Cmd.Flags().Int("tracks", 35, "Number of tracks (35 or 40)")
@@ -356,4 +493,14 @@ func init() {
 	filesCreateDNPCmd.Flags().Int("tracks", 0, "Number of tracks (max 255)")
 	filesCreateDNPCmd.Flags().String("name", "", "Disk name")
 	filesCreateDNPCmd.MarkFlagRequired("tracks")
+
+	// Flags for pack-d64 commands
+	filesPackD64Cmd.Flags().String("name", "", "Disk name (max 16 chars, defaults to directory name)")
+	filesPackD64Cmd.Flags().String("id", "2A", "Disk ID (2 chars)")
+	filesPackD64Cmd.Flags().Int("tracks", 35, "Number of tracks (35 or 40)")
+
+	filesPackD64UploadCmd.Flags().String("name", "", "Disk name (max 16 chars, defaults to directory name)")
+	filesPackD64UploadCmd.Flags().String("id", "2A", "Disk ID (2 chars)")
+	filesPackD64UploadCmd.Flags().Int("tracks", 35, "Number of tracks (35 or 40)")
+	filesPackD64UploadCmd.Flags().String("mount", "", "Mount in drive (A/B/C/D)")
 }

@@ -66,10 +66,24 @@ clean:
 	rm -rf $(BUILD_DIR) $(DIST_DIR)
 	rm -f coverage.out coverage.html
 
-# Build for all platforms
+# Build for all platforms using GoReleaser
 .PHONY: release
-release: clean
-	@echo "Building release binaries..."
+release:
+	@echo "Building release with GoReleaser..."
+	@if command -v goreleaser >/dev/null 2>&1; then \
+		goreleaser release --snapshot --clean; \
+	else \
+		echo "GoReleaser not found. Installing..."; \
+		echo "Run: brew install goreleaser (macOS) or go install github.com/goreleaser/goreleaser@latest"; \
+		echo ""; \
+		echo "Falling back to manual build..."; \
+		$(MAKE) release-manual; \
+	fi
+
+# Manual build for all platforms (fallback)
+.PHONY: release-manual
+release-manual: clean
+	@echo "Building release binaries manually..."
 	@mkdir -p $(DIST_DIR)
 
 	@echo "Building for macOS (Intel)..."
@@ -89,6 +103,17 @@ release: clean
 
 	@echo "Release binaries built in $(DIST_DIR)/"
 	@ls -lh $(DIST_DIR)/
+
+# Create a GitHub release using GoReleaser
+.PHONY: release-publish
+release-publish:
+	@echo "Publishing release with GoReleaser..."
+	@if [ -z "$(GITHUB_TOKEN)" ]; then \
+		echo "Error: GITHUB_TOKEN environment variable not set"; \
+		echo "Set it with: export GITHUB_TOKEN=your_github_token"; \
+		exit 1; \
+	fi
+	goreleaser release --clean
 
 # Download dependencies
 .PHONY: deps
@@ -132,19 +157,31 @@ dev:
 help:
 	@echo "c64u Makefile targets:"
 	@echo ""
-	@echo "  make build          - Build binary for current platform"
-	@echo "  make install        - Install binary to ~/bin or /usr/local/bin"
-	@echo "  make test           - Run tests"
-	@echo "  make test-coverage  - Run tests with coverage report"
-	@echo "  make clean          - Remove build artifacts"
-	@echo "  make release        - Build for all platforms"
-	@echo "  make deps           - Download and tidy dependencies"
-	@echo "  make fmt            - Format code"
-	@echo "  make lint           - Run linter (requires golangci-lint)"
-	@echo "  make run            - Build and run the binary"
-	@echo "  make dev            - Build development version with verbose output"
-	@echo "  make help           - Show this help message"
+	@echo "Build Commands:"
+	@echo "  make build           - Build binary for current platform"
+	@echo "  make install         - Install binary to ~/bin or /usr/local/bin"
+	@echo "  make dev             - Build development version with verbose output"
+	@echo ""
+	@echo "Release Commands:"
+	@echo "  make release         - Build for all platforms (uses GoReleaser if available)"
+	@echo "  make release-manual  - Build for all platforms manually"
+	@echo "  make release-publish - Publish release to GitHub (requires GITHUB_TOKEN)"
+	@echo ""
+	@echo "Testing Commands:"
+	@echo "  make test            - Run tests"
+	@echo "  make test-coverage   - Run tests with coverage report"
+	@echo ""
+	@echo "Development Commands:"
+	@echo "  make deps            - Download and tidy dependencies"
+	@echo "  make fmt             - Format code"
+	@echo "  make lint            - Run linter (requires golangci-lint)"
+	@echo "  make clean           - Remove build artifacts"
+	@echo "  make run             - Build and run the binary"
+	@echo ""
+	@echo "  make help            - Show this help message"
 	@echo ""
 	@echo "Version: $(VERSION)"
 	@echo "Commit:  $(COMMIT)"
 	@echo "Date:    $(DATE)"
+	@echo ""
+	@echo "GoReleaser: $$(command -v goreleaser >/dev/null 2>&1 && echo 'installed' || echo 'not installed')"
