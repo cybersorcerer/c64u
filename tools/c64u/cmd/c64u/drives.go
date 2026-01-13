@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -199,6 +200,25 @@ Example:
 		if _, err := os.Stat(localFile); os.IsNotExist(err) {
 			formatter.Error("File not found", []string{localFile})
 			return
+		}
+
+		// Auto-detect image type from file extension if not specified
+		if imageType == "" {
+			ext := strings.ToLower(filepath.Ext(localFile))
+			if len(ext) > 0 && ext[0] == '.' {
+				ext = ext[1:] // Remove the leading dot
+			}
+			// Validate it's a supported type
+			validTypes := map[string]bool{"d64": true, "g64": true, "d71": true, "g71": true, "d81": true}
+			if validTypes[ext] {
+				imageType = ext
+			} else {
+				formatter.Error("Unable to detect image type", []string{
+					fmt.Sprintf("File extension '.%s' is not a recognized disk image type", ext),
+					"Please specify --type manually (d64, g64, d71, g71, d81)",
+				})
+				return
+			}
 		}
 
 		resp, err := apiClient.DrivesMountUpload(drive, localFile, imageType, mode)
