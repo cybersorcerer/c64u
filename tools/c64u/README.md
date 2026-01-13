@@ -279,12 +279,14 @@ c64u files create-d71 <path> [--name NAME]
 c64u files create-d81 <path> [--name NAME]
 c64u files create-dnp <path> --tracks N [--name NAME]
 
-# Pack local directory into disk image
+# Pack local directory into disk image (EXPERIMENTAL)
 c64u files pack-d64 <source-dir> <output-file> [--name NAME] [--id ID] [--tracks N]
 
-# Pack and upload (FTP upload not yet implemented)
-c64u files pack-d64-upload <source-dir> <remote-path> [--name NAME] [--id ID] [--mount DRIVE]
+# Upload to C64 Ultimate
+c64u fs upload <local-file> <remote-path>
 ```
+
+> **⚠️ EXPERIMENTAL FEATURE**: The `pack-d64` command is experimental. While basic functionality works, there may be edge cases or compatibility issues with certain files or disk configurations. Always test generated disk images before relying on them.
 
 **Pack D64 Examples:**
 
@@ -297,6 +299,9 @@ c64u files pack-d64 ./build output.d64 --tracks 40 --name "BIG DISK"
 
 # Use directory name as disk name
 c64u files pack-d64 ./demo-files demo.d64
+
+# Create and upload to C64 Ultimate
+c64u files pack-d64 ./myproject game.d64 && c64u fs upload game.d64 /SD/games/game.d64
 ```
 
 **Supported file types:** `.prg`, `.seq`, `.usr`, `.rel` (and their P00/S00/U00/R00 variants)

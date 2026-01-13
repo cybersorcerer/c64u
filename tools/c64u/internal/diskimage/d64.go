@@ -315,15 +315,22 @@ func (d *D64) findFreeSector(track, startSector int) (int, error) {
 }
 
 // padPETSCII pads a string with PETSCII $A0 characters to the specified length
+// and converts ASCII to PETSCII screen codes
 func padPETSCII(s string, length int) []byte {
 	result := make([]byte, length)
 	for i := range result {
 		result[i] = PETSCIIPadding
 	}
 
-	// Convert ASCII to PETSCII (uppercase)
+	// Convert ASCII to PETSCII screen codes
+	// In C64 directory, uppercase letters A-Z are stored as $41-$5A (ASCII codes)
+	// Numbers 0-9 are $30-$39
+	// Space is $20
+	// Special chars vary
 	sUpper := strings.ToUpper(s)
-	copy(result, []byte(sUpper))
+	for i := 0; i < len(sUpper) && i < length; i++ {
+		result[i] = byte(sUpper[i])
+	}
 
 	return result
 }
@@ -470,24 +477,36 @@ func (d *D64) addFileData(filename string, data []byte, fileType byte) error {
 	}
 
 	// Write directory entry
-	dirEntry[0x00] = 0x00 // Track/sector link (not used for file entries)
-	dirEntry[0x01] = 0x00
-	dirEntry[0x02] = fileType
-	dirEntry[0x03] = byte(firstTrack)
-	dirEntry[0x04] = byte(firstSector)
+	// dirEntry points to start of 32-byte entry (already offset by allocateDirectoryEntry)
+	// Directory entry format (each entry is 32 bytes):
+	// 0x00: File type (with flags in high bits)
+	// 0x01: Track of first data sector
+	// 0x02: Sector of first data sector
+	// 0x03-0x12: Filename (16 bytes PETSCII, padded with $A0)
+	// 0x13-0x1B: REL file side-sector info (zero for PRG/SEQ/USR)
+	// 0x1C-0x1D: File size in sectors (low byte, high byte)
+	// 0x1E-0x1F: Unused (zero)
+
+	dirEntry[0x00] = fileType
+	dirEntry[0x01] = byte(firstTrack)
+	dirEntry[0x02] = byte(firstSector)
 
 	// Filename (16 bytes, PETSCII padded)
 	filenamePadded := padPETSCII(filename, 16)
-	copy(dirEntry[0x05:0x15], filenamePadded)
+	copy(dirEntry[0x03:0x13], filenamePadded)
 
-	// Bytes 15-1D: Zero for PRG/SEQ/USR files
-	for i := 0x15; i <= 0x1D; i++ {
+	// Bytes 0x13-0x1B: Zero for PRG/SEQ/USR files (REL file info)
+	for i := 0x13; i <= 0x1B; i++ {
 		dirEntry[i] = 0x00
 	}
 
 	// File size in sectors (little endian)
-	dirEntry[0x1E] = byte(sectorsNeeded & 0xFF)
-	dirEntry[0x1F] = byte((sectorsNeeded >> 8) & 0xFF)
+	dirEntry[0x1C] = byte(sectorsNeeded & 0xFF)
+	dirEntry[0x1D] = byte((sectorsNeeded >> 8) & 0xFF)
+
+	// Bytes 0x1E-0x1F: Unused
+	dirEntry[0x1E] = 0x00
+	dirEntry[0x1F] = 0x00
 
 	return nil
 }
@@ -516,6 +535,7 @@ func (d *D64) allocateDirectoryEntry() ([]byte, error) {
 			entryOffset := 0x02 + i*DirEntrySize
 			entry := dirSector[entryOffset : entryOffset+DirEntrySize]
 
+			// Check file type at byte 0 of directory entry
 			if entry[0x00] == FileTypeDEL || entry[0x00] == 0x00 {
 				return entry, nil
 			}
