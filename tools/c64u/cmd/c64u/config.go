@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -48,8 +50,11 @@ Examples:
 			fmt.Println()
 
 			for _, cat := range categories {
-				fmt.Printf("  • %s\n", cat)
+				fmt.Printf("  ▸ %s\n", cat)
 			}
+
+			fmt.Println()
+			formatter.Info(fmt.Sprintf("Found %d configuration categories", len(categories)))
 		}
 	},
 }
@@ -81,11 +86,80 @@ Examples:
 		if jsonOut {
 			formatter.PrintData(settings)
 		} else {
-			formatter.PrintHeader(fmt.Sprintf("Category: %s", category))
-			fmt.Println()
+			// The response can have multiple categories when using wildcards
+			// Each category name is a key with nested settings
 
-			for key, value := range settings {
-				formatter.PrintKeyValue(key, fmt.Sprintf("%v", value))
+			// Collect category names (excluding "errors") and sort them
+			var categoryNames []string
+			for categoryName := range settings {
+				if categoryName == "errors" {
+					continue // Skip errors field
+				}
+				categoryNames = append(categoryNames, categoryName)
+			}
+			sort.Strings(categoryNames)
+
+			// Display categories in alphabetical order
+			foundCategories := 0
+			for _, categoryName := range categoryNames {
+				value := settings[categoryName]
+				settingsMap, ok := value.(map[string]interface{})
+				if !ok {
+					continue
+				}
+
+				// Print header for this category
+				if foundCategories > 0 {
+					fmt.Println() // Add spacing between categories
+				}
+				formatter.PrintHeader(categoryName)
+				fmt.Println()
+
+				// Collect and sort setting keys for consistent order
+				var settingKeys []string
+				for key := range settingsMap {
+					settingKeys = append(settingKeys, key)
+				}
+				sort.Strings(settingKeys)
+
+				// Print all settings in this category in alphabetical order
+				for _, key := range settingKeys {
+					val := settingsMap[key]
+
+					// Format value properly based on type
+					var valueStr string
+					switch v := val.(type) {
+					case string:
+						valueStr = v
+					case bool:
+						if v {
+							valueStr = "● enabled"
+						} else {
+							valueStr = "○ disabled"
+						}
+					case float64:
+						// Check if it's an integer value
+						if v == float64(int64(v)) {
+							valueStr = fmt.Sprintf("%d", int64(v))
+						} else {
+							valueStr = fmt.Sprintf("%.2f", v)
+						}
+					case nil:
+						valueStr = "─ (not set)"
+					default:
+						valueStr = fmt.Sprintf("%v", v)
+					}
+					formatter.PrintKeyValue(key, valueStr)
+				}
+
+				foundCategories++
+			}
+
+			if foundCategories == 0 {
+				formatter.Info("No settings found")
+			} else {
+				fmt.Println()
+				formatter.Info(fmt.Sprintf("Displayed %d categor%s", foundCategories, map[bool]string{true: "y", false: "ies"}[foundCategories == 1]))
 			}
 		}
 	},
@@ -123,7 +197,41 @@ Examples:
 			fmt.Println()
 
 			for key, value := range info {
-				formatter.PrintKeyValue(key, fmt.Sprintf("%v", value))
+				// Format value properly based on type
+				var valueStr string
+				switch v := value.(type) {
+				case string:
+					valueStr = v
+				case bool:
+					if v {
+						valueStr = "● true"
+					} else {
+						valueStr = "○ false"
+					}
+				case float64:
+					// Check if it's an integer value
+					if v == float64(int64(v)) {
+						valueStr = fmt.Sprintf("%d", int64(v))
+					} else {
+						valueStr = fmt.Sprintf("%.2f", v)
+					}
+				case []interface{}:
+					// Format arrays/lists
+					if len(v) == 0 {
+						valueStr = "[]"
+					} else {
+						var items []string
+						for _, item := range v {
+							items = append(items, fmt.Sprintf("%v", item))
+						}
+						valueStr = strings.Join(items, ", ")
+					}
+				case nil:
+					valueStr = "─ (not set)"
+				default:
+					valueStr = fmt.Sprintf("%v", v)
+				}
+				formatter.PrintKeyValue(key, valueStr)
 			}
 		}
 	},

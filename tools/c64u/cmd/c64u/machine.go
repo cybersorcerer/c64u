@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/api"
+	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -16,7 +17,66 @@ var machineCmd = &cobra.Command{
 	Long: `Control the C64 Ultimate machine state and perform memory operations.
 
 Commands include reset, reboot, pause/resume, power control, and direct
-memory read/write operations via DMA.`,
+memory read/write operations via DMA.
+
+Examples:
+  c64u machine reset
+  c64u machine --interactive`,
+	Run: func(cmd *cobra.Command, args []string) {
+		interactive, _ := cmd.Flags().GetBool("interactive")
+
+		if interactive {
+			action, err := runInteractiveMachine()
+			if err != nil {
+				if err.Error() == "cancelled" {
+					formatter.Info("Operation cancelled")
+					return
+				}
+				formatter.Error("Interactive mode failed", []string{err.Error()})
+				return
+			}
+
+			// Execute the selected action
+			switch action {
+			case "reset":
+				machineResetCmd.Run(cmd, []string{})
+			case "reboot":
+				machineRebootCmd.Run(cmd, []string{})
+			case "pause":
+				machinePauseCmd.Run(cmd, []string{})
+			case "resume":
+				machineResumeCmd.Run(cmd, []string{})
+			case "poweroff":
+				machinePowerOffCmd.Run(cmd, []string{})
+			case "menu":
+				machineMenuButtonCmd.Run(cmd, []string{})
+			}
+		} else {
+			cmd.Help()
+		}
+	},
+}
+
+// ============================================================================
+// Interactive Machine Control Helper
+// ============================================================================
+
+func runInteractiveMachine() (action string, err error) {
+	selector := tui.NewSelector("Select Machine Operation", []tui.SelectorItem{
+		{Label: "Reset", Value: "reset", Description: "Reset the machine without changing configuration"},
+		{Label: "Reboot", Value: "reboot", Description: "Restart with cartridge reinitialization"},
+		{Label: "Pause", Value: "pause", Description: "Pause machine execution (DMA)"},
+		{Label: "Resume", Value: "resume", Description: "Resume from paused state"},
+		{Label: "Menu Button", Value: "menu", Description: "Simulate pressing the Menu button"},
+		{Label: "Power Off", Value: "poweroff", Description: "Power off machine (U64 only)"},
+	})
+
+	selected, err := selector.Run()
+	if err != nil {
+		return "", err
+	}
+
+	return selected.Value, nil
 }
 
 // ============================================================================
@@ -333,5 +393,6 @@ func init() {
 	machineCmd.AddCommand(machineDebugRegSetCmd)
 
 	// Add flags
+	machineCmd.Flags().Bool("interactive", false, "Interactive machine control menu")
 	machineReadMemCmd.Flags().Int("length", 256, "Number of bytes to read")
 }
