@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/diskimage"
 	"github.com/spf13/cobra"
@@ -429,10 +430,24 @@ func runPackD64(cmd *cobra.Command, args []string) {
 
 	// Show files included
 	if !jsonOut {
-		fmt.Println("\nFiles included:")
+		fmt.Println()
+		formatter.PrintHeader("Files Included")
+		fmt.Println()
 		for i, file := range files {
-			fmt.Printf("  %2d. %s\n", i+1, file.Name)
+			// Get icon for file type
+			icon := "·"
+			ext := strings.ToLower(filepath.Ext(file.Name))
+			switch ext {
+			case ".prg", ".p00":
+				icon = "▶"
+			case ".seq", ".s00", ".txt", ".asm", ".sym", ".bas", ".md", ".log":
+				icon = "―"
+			case ".usr", ".u00":
+				icon = "◆"
+			}
+			fmt.Printf("  %s  %2d. %s\n", icon, i+1, file.Name)
 		}
+		fmt.Println()
 	}
 }
 

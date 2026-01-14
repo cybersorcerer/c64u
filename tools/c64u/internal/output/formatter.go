@@ -203,36 +203,93 @@ func (f *Formatter) PrintTable(headers []string, rows [][]string) {
 		return
 	}
 
-	// Calculate column widths
+	// Calculate column widths (accounting for actual cell content, not styled)
+	// For styled cells, we need to strip ANSI codes to get real width
 	widths := make([]int, len(headers))
 	for i, h := range headers {
-		widths[i] = len(h)
+		// Use runeWidth for headers too, in case they contain emojis
+		widths[i] = runeWidth(h)
 	}
 	for _, row := range rows {
 		for i, cell := range row {
-			if i < len(widths) && len(cell) > widths[i] {
-				widths[i] = len(cell)
+			if i < len(widths) {
+				// Strip ANSI escape codes for width calculation
+				cleanCell := stripAnsi(cell)
+				// Account for emoji width (they take 2 terminal cells)
+				displayWidth := runeWidth(cleanCell)
+				if displayWidth > widths[i] {
+					widths[i] = displayWidth
+				}
 			}
 		}
 	}
 
+	// Table styles
+	headerStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("14")).
+		Bold(true)
+
+	separatorStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("8"))
+
 	// Print header
-	for i, h := range headers {
-		fmt.Printf("%-*s  ", widths[i], h)
+	if f.NoColor {
+		for i, h := range headers {
+			// Calculate padding needed
+			headerWidth := runeWidth(h)
+			padding := widths[i] - headerWidth
+			if padding < 0 {
+				padding = 0
+			}
+			fmt.Print(h)
+			fmt.Print(strings.Repeat(" ", padding))
+			fmt.Print("  ")
+		}
+		fmt.Println()
+	} else {
+		for i, h := range headers {
+			// Calculate padding needed
+			headerWidth := runeWidth(h)
+			padding := widths[i] - headerWidth
+			if padding < 0 {
+				padding = 0
+			}
+			fmt.Print(headerStyle.Render(h))
+			fmt.Print(strings.Repeat(" ", padding))
+			fmt.Print("  ")
+		}
+		fmt.Println()
 	}
-	fmt.Println()
 
 	// Print separator
-	for _, w := range widths {
-		fmt.Print(strings.Repeat("-", w) + "  ")
+	separator := ""
+	for i, w := range widths {
+		if i > 0 {
+			separator += "  "
+		}
+		separator += strings.Repeat("─", w)
 	}
-	fmt.Println()
+
+	if f.NoColor {
+		fmt.Println(separator)
+	} else {
+		fmt.Println(separatorStyle.Render(separator))
+	}
 
 	// Print rows
 	for _, row := range rows {
 		for i, cell := range row {
 			if i < len(widths) {
-				fmt.Printf("%-*s  ", widths[i], cell)
+				// Calculate actual display width of cell content
+				cleanCell := stripAnsi(cell)
+				cellWidth := runeWidth(cleanCell)
+				padding := widths[i] - cellWidth
+				if padding < 0 {
+					padding = 0
+				}
+				fmt.Print(cell)
+				fmt.Print(strings.Repeat(" ", padding))
+				fmt.Print("  ")
 			}
 		}
 		fmt.Println()
@@ -344,4 +401,214 @@ func (f *Formatter) GetFlagStyle() lipgloss.Style {
 	}
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color("11"))
+}
+
+// FormatFileSize formats bytes in human-readable format
+func FormatFileSize(bytes uint64) string {
+	if bytes == 0 {
+		return "0 B"
+	}
+
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+
+	div, exp := uint64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// GetFileIcon returns a minimal symbol for file type
+func GetFileIcon(filename string, isDir bool) string {
+	if isDir {
+		return "▸"
+	}
+
+	ext := strings.ToLower(filename[strings.LastIndex(filename, "."):])
+
+	// Disk images
+	if strings.HasSuffix(ext, ".d64") || strings.HasSuffix(ext, ".d71") ||
+	   strings.HasSuffix(ext, ".d81") || strings.HasSuffix(ext, ".g64") ||
+	   strings.HasSuffix(ext, ".g71") || strings.HasSuffix(ext, ".dnp") {
+		return "●"
+	}
+
+	// Programs
+	if strings.HasSuffix(ext, ".prg") || strings.HasSuffix(ext, ".p00") {
+		return "▶"
+	}
+
+	// Music
+	if strings.HasSuffix(ext, ".sid") {
+		return "♪"
+	}
+
+	// Cartridges
+	if strings.HasSuffix(ext, ".crt") {
+		return "■"
+	}
+
+	// Text files
+	if strings.HasSuffix(ext, ".seq") || strings.HasSuffix(ext, ".s00") ||
+	   strings.HasSuffix(ext, ".txt") || strings.HasSuffix(ext, ".asm") ||
+	   strings.HasSuffix(ext, ".sym") || strings.HasSuffix(ext, ".bas") ||
+	   strings.HasSuffix(ext, ".md") || strings.HasSuffix(ext, ".log") {
+		return "―"
+	}
+
+	// User files
+	if strings.HasSuffix(ext, ".usr") || strings.HasSuffix(ext, ".u00") {
+		return "◆"
+	}
+
+	// Tape archives
+	if strings.HasSuffix(ext, ".t64") {
+		return "□"
+	}
+
+	// Default
+	return "·"
+}
+
+// GetFileTypeStyle returns lipgloss style for file type
+func GetFileTypeStyle(filename string, isDir bool) lipgloss.Style {
+	if isDir {
+		// Directories: Blue, bold
+		return lipgloss.NewStyle().
+			Foreground(lipgloss.Color("12")).
+			Bold(true)
+	}
+
+	ext := strings.ToLower(filename[strings.LastIndex(filename, "."):])
+
+	// Disk images: Magenta
+	if strings.HasSuffix(ext, ".d64") || strings.HasSuffix(ext, ".d71") ||
+	   strings.HasSuffix(ext, ".d81") || strings.HasSuffix(ext, ".g64") ||
+	   strings.HasSuffix(ext, ".g71") || strings.HasSuffix(ext, ".dnp") {
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("13"))
+	}
+
+	// Programs: Green
+	if strings.HasSuffix(ext, ".prg") || strings.HasSuffix(ext, ".p00") {
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
+	}
+
+	// Music: Cyan
+	if strings.HasSuffix(ext, ".sid") {
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
+	}
+
+	// Cartridges: Yellow
+	if strings.HasSuffix(ext, ".crt") {
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
+	}
+
+	// Text files: White
+	if strings.HasSuffix(ext, ".seq") || strings.HasSuffix(ext, ".s00") ||
+	   strings.HasSuffix(ext, ".txt") || strings.HasSuffix(ext, ".asm") ||
+	   strings.HasSuffix(ext, ".sym") || strings.HasSuffix(ext, ".bas") {
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
+	}
+
+	// Default: Dim gray
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+}
+
+// GetFileTypeLabel returns human-readable type label
+func GetFileTypeLabel(filename string, isDir bool) string {
+	if isDir {
+		return "DIR"
+	}
+
+	ext := strings.ToLower(filename[strings.LastIndex(filename, "."):])
+
+	switch {
+	case strings.HasSuffix(ext, ".d64"):
+		return "D64"
+	case strings.HasSuffix(ext, ".d71"):
+		return "D71"
+	case strings.HasSuffix(ext, ".d81"):
+		return "D81"
+	case strings.HasSuffix(ext, ".g64"):
+		return "G64"
+	case strings.HasSuffix(ext, ".g71"):
+		return "G71"
+	case strings.HasSuffix(ext, ".dnp"):
+		return "DNP"
+	case strings.HasSuffix(ext, ".prg"), strings.HasSuffix(ext, ".p00"):
+		return "PRG"
+	case strings.HasSuffix(ext, ".seq"), strings.HasSuffix(ext, ".s00"):
+		return "SEQ"
+	case strings.HasSuffix(ext, ".usr"), strings.HasSuffix(ext, ".u00"):
+		return "USR"
+	case strings.HasSuffix(ext, ".rel"), strings.HasSuffix(ext, ".r00"):
+		return "REL"
+	case strings.HasSuffix(ext, ".sid"):
+		return "SID"
+	case strings.HasSuffix(ext, ".crt"):
+		return "CRT"
+	case strings.HasSuffix(ext, ".t64"):
+		return "T64"
+	case strings.HasSuffix(ext, ".txt"):
+		return "TXT"
+	case strings.HasSuffix(ext, ".asm"):
+		return "ASM"
+	case strings.HasSuffix(ext, ".sym"):
+		return "SYM"
+	case strings.HasSuffix(ext, ".bas"):
+		return "BAS"
+	default:
+		// Return uppercase extension without dot
+		if len(ext) > 1 {
+			return strings.ToUpper(ext[1:])
+		}
+		return "FILE"
+	}
+}
+
+// stripAnsi removes ANSI escape codes from a string
+func stripAnsi(str string) string {
+	// Simple regex-free approach: remove ESC sequences
+	var result strings.Builder
+	i := 0
+	for i < len(str) {
+		if str[i] == '\x1b' && i+1 < len(str) && str[i+1] == '[' {
+			// Found ANSI escape sequence, skip until 'm'
+			i += 2
+			for i < len(str) && str[i] != 'm' {
+				i++
+			}
+			i++ // skip the 'm'
+		} else {
+			result.WriteByte(str[i])
+			i++
+		}
+	}
+	return result.String()
+}
+
+// runeWidth calculates the display width of a string accounting for emoji width
+func runeWidth(str string) int {
+	width := 0
+	for _, r := range str {
+		if r >= 0x1F300 && r <= 0x1F9FF { // Emoji ranges
+			width += 2
+		} else if r >= 0x2600 && r <= 0x26FF { // Miscellaneous Symbols
+			width += 2
+		} else if r >= 0x2700 && r <= 0x27BF { // Dingbats
+			width += 2
+		} else if r >= 0xFE00 && r <= 0xFE0F { // Variation Selectors
+			// Don't count variation selectors
+		} else if r >= 0x1F000 && r <= 0x1FAFF { // Various emoji blocks
+			width += 2
+		} else {
+			width += 1
+		}
+	}
+	return width
 }

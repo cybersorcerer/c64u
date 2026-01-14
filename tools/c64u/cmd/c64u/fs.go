@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -58,31 +59,41 @@ Examples:
 		if jsonOut {
 			formatter.PrintData(entries)
 		} else {
+			// Print header with directory icon
 			formatter.PrintHeader(fmt.Sprintf("📁 %s", path))
 			fmt.Println()
 
-			// Prepare table data
+			// Prepare table data with enhanced styling
 			var rows [][]string
 			for _, entry := range entries {
-				icon := "📄"
-				typeStr := "file"
-				size := fmt.Sprintf("%d", entry.Size)
+				// Get icon and type label
+				icon := output.GetFileIcon(entry.Name, entry.IsDir)
+				typeLabel := output.GetFileTypeLabel(entry.Name, entry.IsDir)
 
+				// Format size
+				var sizeStr string
 				if entry.IsDir {
-					icon = "📁"
-					typeStr = "dir"
-					size = "-"
+					sizeStr = "-"
+				} else {
+					sizeStr = output.FormatFileSize(entry.Size)
+				}
+
+				// Apply color styling to filename
+				style := output.GetFileTypeStyle(entry.Name, entry.IsDir)
+				styledName := entry.Name
+				if !formatter.NoColor {
+					styledName = style.Render(entry.Name)
 				}
 
 				rows = append(rows, []string{
 					icon,
-					entry.Name,
-					typeStr,
-					size,
+					styledName,
+					typeLabel,
+					sizeStr,
 				})
 			}
 
-			formatter.PrintTable([]string{"", "Name", "Type", "Size"}, rows)
+			formatter.PrintTable([]string{"", "NAME", "TYPE", "SIZE"}, rows)
 		}
 	},
 }
