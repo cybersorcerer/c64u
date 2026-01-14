@@ -20,7 +20,7 @@ Download the latest release from [GitHub Releases](https://github.com/cybersorce
 - `c64u_Darwin_arm64.tar.gz` - macOS (Apple Silicon)
 - `c64u_Linux_x86_64.tar.gz` - Linux (x86_64)
 - `c64u_Linux_arm64.tar.gz` - Linux (ARM64)
-- `c64u_Windows_x86_64.zip` - Windows
+- `c64u_Windows_x86_64.tar.gz` - Windows
 
 **Quick Install (macOS/Linux):**
 
@@ -45,7 +45,7 @@ c64u version
 
 ```bash
 # Clone the repository (or navigate to the tools directory)
-cd /path/to/c64.nvim/tools/c64u
+cd /path/to/c64u/tools/c64u
 
 # Build and install
 make install
