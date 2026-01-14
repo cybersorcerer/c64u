@@ -125,6 +125,8 @@ func (c *Client) FTPList(path string) ([]FileEntry, error) {
 	}
 	defer conn.Quit()
 
+	// Simply list the path - FTP server automatically detects disk images
+	// and shows their contents when listed directly (e.g., "ls /SD/test.d64")
 	entries, err := conn.List(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list directory: %w", err)
