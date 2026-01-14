@@ -97,7 +97,7 @@ release:
   footer: |
     ---
 
-    **Full Changelog**: https://github.com/cybersorcerer/c64.nvim/compare/{{ .PreviousTag }}...{{ .Tag }}
+    **Full Changelog**: https://github.com/cybersorcerer/c64u/compare/{{ .PreviousTag }}...{{ .Tag }}
 
 # Homebrew tap (optional - requires separate homebrew-tap repo)
 # brews:
@@ -106,7 +106,7 @@ release:
 #       owner: cybersorcerer
 #       name: homebrew-tap
 #     description: "CLI tool for controlling the Commodore C64 Ultimate"
-#     homepage: "https://github.com/cybersorcerer/c64.nvim"
+#     homepage: "https://github.com/cybersorcerer/c64u"
 #     license: "Apache-2.0"
 #     install: |
 #       bin.install "c64u"

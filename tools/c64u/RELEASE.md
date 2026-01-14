@@ -3,6 +3,7 @@
 ## Prerequisites
 
 1. GitHub CLI (`gh`) installed
+
    ```bash
    # macOS
    brew install gh
@@ -12,6 +13,7 @@
    ```
 
 2. All binaries built
+
    ```bash
    cd tools/c64u
    make release
