@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strings"
 )
 
 // ConfigSettings represents multiple configuration settings
@@ -70,8 +71,14 @@ func (c *Client) SetConfigItem(category, item, value string) error {
 		url.PathEscape(item),
 		url.QueryEscape(value))
 
-	_, err := c.Put(endpoint, nil)
-	return err
+	resp, err := c.Put(endpoint, nil)
+	if err != nil {
+		return err
+	}
+	if resp.HasErrors() {
+		return fmt.Errorf("API error: %s", strings.Join(resp.Errors, ", "))
+	}
+	return nil
 }
 
 // SetMultipleConfigs changes multiple configuration settings simultaneously
@@ -83,19 +90,37 @@ func (c *Client) SetMultipleConfigs(settings ConfigSettings) error {
 
 // LoadConfigFromFlash restores configuration from non-volatile memory
 func (c *Client) LoadConfigFromFlash() error {
-	_, err := c.Put("/v1/configs:load_from_flash", nil)
-	return err
+	resp, err := c.Put("/v1/configs:load_from_flash", nil)
+	if err != nil {
+		return err
+	}
+	if resp.HasErrors() {
+		return fmt.Errorf("API error: %s", strings.Join(resp.Errors, ", "))
+	}
+	return nil
 }
 
 // SaveConfigToFlash writes current configuration to non-volatile memory
 func (c *Client) SaveConfigToFlash() error {
-	_, err := c.Put("/v1/configs:save_to_flash", nil)
-	return err
+	resp, err := c.Put("/v1/configs:save_to_flash", nil)
+	if err != nil {
+		return err
+	}
+	if resp.HasErrors() {
+		return fmt.Errorf("API error: %s", strings.Join(resp.Errors, ", "))
+	}
+	return nil
 }
 
 // ResetConfigToDefault resets current settings to factory defaults
 // Note: Does not affect saved values in flash
 func (c *Client) ResetConfigToDefault() error {
-	_, err := c.Put("/v1/configs:reset_to_default", nil)
-	return err
+	resp, err := c.Put("/v1/configs:reset_to_default", nil)
+	if err != nil {
+		return err
+	}
+	if resp.HasErrors() {
+		return fmt.Errorf("API error: %s", strings.Join(resp.Errors, ", "))
+	}
+	return nil
 }

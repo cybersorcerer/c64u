@@ -210,6 +210,28 @@ func (c *Client) FTPDownload(remotePath, localPath string) error {
 	return nil
 }
 
+// FTPReadFile reads a file from C64 Ultimate via FTP into memory
+func (c *Client) FTPReadFile(remotePath string) ([]byte, error) {
+	conn, err := c.getFTPConn()
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Quit()
+
+	resp, err := conn.Retr(remotePath)
+	if err != nil {
+		return nil, fmt.Errorf("FTP read failed: %w", err)
+	}
+	defer resp.Close()
+
+	data, err := io.ReadAll(resp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file content: %w", err)
+	}
+
+	return data, nil
+}
+
 // FTPMkdir creates a directory on C64 Ultimate via FTP
 func (c *Client) FTPMkdir(path string) error {
 	conn, err := c.getFTPConn()

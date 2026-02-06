@@ -1,12 +1,15 @@
 # c64u - Commodore C64 Ultimate CLI
 
-A command-line interface for controlling the [Commodore C64 Ultimate](https://commodore.net) via its REST API.
+A command-line interface for controlling the [Commodore C64 Ultimate](https://commodore.net) via its REST API written in go. This project is currently work in progress, so there may still be some bugs. C64U is primarily intended for those of you who want to develop for the Commodore C64 Ultimate with VS Code or Neovim, or who want to create small automations with scripting languages. A development environment with full CLI integration in Neovim can be found [here](https://github.com/cybersorcerer/c64.nvim). A plugin for VSCode including a Tree Browser is in the makeing.
 
 ## Features
 
 - **Complete REST API Coverage**: All C64 Ultimate API endpoints supported
+- **Interactive TUI**: Full-screen terminal UI for browsing, mounting, and controlling
+- **FTP Integration**: Access the C64 Ultimate Filesystem
 - **Flexible Configuration**: Config file, environment variables, or CLI flags
 - **Multiple Output Formats**: Human-readable text or JSON for scripting
+- **Debug Logging**: Built-in debug mode for troubleshooting
 - **Cross-Platform**: Builds for macOS, Linux, and Windows
 - **Easy Integration**: Works seamlessly with c64.nvim, VSCode, and scripts
 
@@ -161,9 +164,40 @@ c64u cli-config show
 --port int         HTTP port (default: 80) (env: C64U_PORT)
 --json             Output in JSON format
 --verbose          Enable verbose output (shows HTTP requests)
+--debug, -d        Enable debug logging to ~/.local/share/c64u/c64u.log
 ```
 
 ### Commands
+
+#### Interactive TUI
+
+Launch the full-screen interactive terminal UI:
+
+```bash
+c64u ui
+```
+
+The TUI provides a menu-driven interface with the following views:
+
+- **File Browser**: Navigate the C64 Ultimate filesystem, mount disk images, run programs, and view files
+- **Drive Management**: Mount/unmount images, load custom ROMs, enable/disable drives, switch drive modes
+- **Machine Control**: Reset, reboot, pause/resume, power off
+- **Configuration**: Browse and edit device settings, save/load from flash
+
+**TUI Keyboard Shortcuts:**
+
+| Key | Action |
+| ----- | -------- |
+| `↑/↓` or `j/k` | Navigate |
+| `Enter` | Select / Confirm |
+| `←/Backspace/h` | Parent directory (File Browser) |
+| `Tab` | Toggle Text/Hex view (File Viewer) |
+| `PgUp/PgDn` | Scroll pages (File Viewer) |
+| `?` | Toggle help overlay |
+| `Esc` | Back / Close |
+| `Ctrl+C` | Quit |
+
+**File Viewer**: Unknown file types are loaded via FTP and displayed in a scrollable viewer with switchable Text and Hex-Dump modes.
 
 #### Version Information
 
@@ -477,7 +511,9 @@ c64u/
 ├── internal/
 │   ├── api/           # REST API client
 │   ├── config/        # Configuration handling
-│   └── output/        # Output formatting
+│   ├── debug/         # Debug logging
+│   ├── output/        # Output formatting
+│   └── tui/           # Interactive terminal UI (Bubble Tea)
 ├── go.mod             # Go module definition
 ├── Makefile           # Build automation
 └── README.md          # This file
@@ -551,6 +587,20 @@ curl http://192.168.1.100/v1/version
 c64u --verbose --host 192.168.1.100 api-version
 ```
 
+### Debug Logging
+
+Enable debug logging to get detailed information about what c64u is doing:
+
+```bash
+# Enable debug mode (logs to ~/.local/share/c64u/c64u.log)
+c64u -d about
+
+# View the log file
+cat ~/.local/share/c64u/c64u.log
+```
+
+The log file is overwritten on each start and contains timestamped debug messages including config loading, API calls, and TUI events.
+
 ### Configuration Issues
 
 ```bash
@@ -572,7 +622,7 @@ Apache 2.0
 
 - Built for the [Commodore C64 Ultimate](https://commodore.net)
 - Based on Gideon's Logic Architectures Ultimate64 FPGA board
-- Part of the [c64.nvim](../../README.md) project
+- Part of the [c64.nvim](https://github.com/cybersorcerer/c64.nvim) project
 
 ## Contributing
 
