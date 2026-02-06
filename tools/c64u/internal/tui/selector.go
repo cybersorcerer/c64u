@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // SelectorItem represents a selectable item
@@ -25,6 +24,7 @@ type Selector struct {
 	cancelled   bool
 	width       int
 	height      int
+	PreventQuit bool // If true, do not send tea.Quit on selection
 }
 
 // NewSelector creates a new selector
@@ -51,12 +51,18 @@ func (s *Selector) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c", "q", "esc":
 			s.cancelled = true
+			if s.PreventQuit {
+				return s, nil
+			}
 			return s, tea.Quit
 
 		case "enter":
 			if len(s.Items) > 0 {
 				s.selected = s.cursor
 				s.confirmed = true
+			}
+			if s.PreventQuit {
+				return s, nil
 			}
 			return s, tea.Quit
 
@@ -87,23 +93,9 @@ func (s *Selector) View() string {
 
 	var b strings.Builder
 
-	// Title - use adaptive colors
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Padding(0, 1)
-
-	b.WriteString(titleStyle.Render(s.Title))
+	// Title
+	b.WriteString(HeaderStyle.Render(s.Title))
 	b.WriteString("\n\n")
-
-	// Items - use reverse video for selection (works with any terminal theme)
-	selectedStyle := lipgloss.NewStyle().
-		Reverse(true). // Reverse video works universally
-		Bold(true)
-
-	normalStyle := lipgloss.NewStyle()
-
-	dimStyle := lipgloss.NewStyle().
-		Faint(true) // Faint/dim works across themes
 
 	// Calculate visible range
 	maxVisible := s.height - 6
@@ -123,28 +115,24 @@ func (s *Selector) View() string {
 	// Render items
 	for i := start; i < end; i++ {
 		item := s.Items[i]
-		cursor := "  "
-		if i == s.cursor {
-			cursor = "▶ "
-		}
 
-		line := cursor + item.Label
+		// Use shared styles
+		line := item.Label
 		if item.Description != "" {
-			line += dimStyle.Render(" - " + item.Description)
+			line += " (" + item.Description + ")"
 		}
 
 		if i == s.cursor {
-			b.WriteString(selectedStyle.Render(line))
+			b.WriteString(SelectedItemStyle.Render(line))
 		} else {
-			b.WriteString(normalStyle.Render(line))
+			b.WriteString(ItemStyle.Render(line))
 		}
 		b.WriteString("\n")
 	}
 
 	// Help text
 	b.WriteString("\n")
-	helpStyle := dimStyle
-	b.WriteString(helpStyle.Render("↑/k: up • ↓/j: down • enter: select • q/esc: cancel"))
+	b.WriteString(StatusBarStyle.Render("↑/k: up • ↓/j: down • enter: select • q/esc: cancel"))
 
 	return b.String()
 }

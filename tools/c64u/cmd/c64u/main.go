@@ -6,6 +6,7 @@ import (
 
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/api"
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/config"
+	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/debug"
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/output"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -19,12 +20,13 @@ var (
 	date    = "unknown"
 
 	// Global flags
-	cfgFile string
-	host    string
-	port    int
-	verbose bool
-	jsonOut bool
-	noColor bool
+	cfgFile   string
+	host      string
+	port      int
+	verbose   bool
+	jsonOut   bool
+	noColor   bool
+	debugMode bool
 
 	// Global instances
 	apiClient *api.Client
@@ -47,12 +49,23 @@ Configuration Priority:
   3. Config file (~/.config/c64u/config.toml)
   4. Defaults (host=localhost, port=80)`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		// Initialize debug logger first (before anything else)
+		if err := debug.Init(debugMode); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Failed to initialize debug logging: %v\n", err)
+		}
+
+		debug.Log("Command: %s %v", cmd.Name(), args)
+		debug.Log("Loading configuration...")
+
 		// Initialize configuration
 		cfg, err := config.Load()
 		if err != nil {
+			debug.LogError("Failed to load config: %v", err)
 			fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
 			os.Exit(1)
 		}
+
+		debug.Log("Config loaded successfully: host=%s, port=%d, verbose=%v", cfg.Host, cfg.Port, cfg.Verbose)
 
 		// Override with command-line flags if provided
 		if cmd.Flags().Changed("host") {
@@ -324,6 +337,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Enable verbose output")
 	rootCmd.PersistentFlags().BoolVar(&jsonOut, "json", false, "Output in JSON format")
 	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "Disable colored output")
+	rootCmd.PersistentFlags().BoolVarP(&debugMode, "debug", "d", false, "Enable debug logging to ~/.local/share/c64u/c64u.log")
 
 	// Bind flags to viper
 	viper.BindPFlag("host", rootCmd.PersistentFlags().Lookup("host"))
