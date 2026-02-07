@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,31 +28,24 @@ func Load() (*Config, error) {
 	viper.SetDefault("verbose", false)
 	viper.SetDefault("json", false)
 
-	// Set config file name and paths
-	viper.SetConfigName("config")
-	viper.SetConfigType("toml")
-	debug.Log("Config file type: toml, name: config")
-
-	// Add config paths to search
-	// 1. ~/.config/c64u/config.toml (XDG standard)
+	// Set exact config file path: ~/.config/c64u/config.toml
+	configFile := ""
 	if homeDir, err := os.UserHomeDir(); err == nil {
-		configDir := filepath.Join(homeDir, ".config", "c64u")
-		viper.AddConfigPath(configDir)
-		debug.Log("Added config search path: %s", configDir)
+		configFile = filepath.Join(homeDir, ".config", "c64u", "config.toml")
+		viper.SetConfigFile(configFile)
+		debug.Log("Config file: %s", configFile)
 	} else {
 		debug.LogError("Failed to get home directory: %v", err)
 	}
 
-	// 2. Current directory
-	viper.AddConfigPath(".")
-	cwd, _ := os.Getwd()
-	debug.Log("Added config search path: %s (current directory)", cwd)
-
 	// Read config file (ignore if not found)
 	debug.Log("Attempting to read config file...")
 	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			// Config file found but another error occurred
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok || errors.Is(err, os.ErrNotExist) {
+			// Config file not found, continue with defaults
+			debug.Log("No config file found, using defaults")
+		} else {
+			// Config file found but has errors (e.g. invalid TOML syntax)
 			configFileUsed := viper.ConfigFileUsed()
 			debug.LogError("Error reading config file: %v", err)
 			debug.LogError("Config file that caused error: %s", configFileUsed)
@@ -70,8 +64,6 @@ func Load() (*Config, error) {
 
 			return nil, fmt.Errorf("error reading config file: %w", err)
 		}
-		// Config file not found, continue with defaults
-		debug.Log("No config file found, using defaults")
 	} else {
 		debug.Log("Config file loaded successfully: %s", viper.ConfigFileUsed())
 	}
