@@ -14,7 +14,7 @@ import (
 var drivesCmd = &cobra.Command{
 	Use:   "drives",
 	Short: "Floppy drive operations",
-	Long: `Manage floppy drives on the C64 Ultimate.
+	Long: `Manage internal floppy drives on the C64 Ultimate.
 
 Commands include mounting/unmounting disk images, resetting drives,
 enabling/disabling drives, loading custom ROMs, and changing drive modes.`,
@@ -141,15 +141,15 @@ var drivesListCmd = &cobra.Command{
 
 var drivesMountCmd = &cobra.Command{
 	Use:   "mount [drive] [image] [--type TYPE] [--mode MODE] [--interactive]",
-	Short: "Mount disk image from C64U filesystem",
-	Long: `Mount a disk image that is already on the C64 Ultimate filesystem.
+	Short: "Mount disk image from C64U filesystem to internal drive",
+	Long: `Mount a disk image to internal drives (a or b) that is already on the C64 Ultimate filesystem.
 
-Drive: 8, 9, 10, 11
+Drive: a, b
 Types: d64, g64, d71, g71, d81
 Modes: readwrite, readonly, unlinked
 
 Examples:
-  c64u drives mount 8 /usb0/games.d64 --mode readonly
+  c64u drives mount a /usb0/games.d64 --mode readonly
   c64u drives mount --interactive`,
 	Args: cobra.MaximumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -210,14 +210,14 @@ Examples:
 var drivesMountUploadCmd = &cobra.Command{
 	Use:   "mount-upload <drive> <local-file> [--type TYPE] [--mode MODE]",
 	Short: "Upload and mount disk image",
-	Long: `Upload a local disk image and mount it to the specified drive.
+	Long: `Upload a local disk image and mount it to the specified internal drive (a or b).
 
-Drive: 8, 9, 10, 11
+Drive: a, b
 Types: d64, g64, d71, g71, d81
 Modes: readwrite, readonly, unlinked
 
 Example:
-  c64u drives mount-upload 8 game.d64 --mode readonly`,
+  c64u drives mount-upload a game.d64 --mode readonly`,
 	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		drive := args[0]
@@ -274,11 +274,11 @@ Example:
 
 var drivesUnmountCmd = &cobra.Command{
 	Use:   "unmount <drive>",
-	Short: "Unmount disk from drive",
-	Long: `Remove the currently mounted disk image from the specified drive.
+	Short: "Unmount disk from internal drive",
+	Long: `Remove the currently mounted disk image from the specified internal drive (a or b).
 
 Example:
-  c64u drives unmount 8`,
+  c64u drives unmount a`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		drive := args[0]
@@ -304,11 +304,11 @@ Example:
 
 var drivesResetCmd = &cobra.Command{
 	Use:   "reset <drive>",
-	Short: "Reset drive",
-	Long: `Reset the specified drive.
+	Short: "Reset internal drive",
+	Long: `Reset the specified internal drive (a or b).
 
 Example:
-  c64u drives reset 8`,
+  c64u drives reset a`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		drive := args[0]
@@ -330,11 +330,11 @@ Example:
 
 var drivesOnCmd = &cobra.Command{
 	Use:   "on <drive>",
-	Short: "Enable drive",
-	Long: `Enable the specified drive.
+	Short: "Enable internal drive",
+	Long: `Enable the specified internal drive (a or b).
 
 Example:
-  c64u drives on 8`,
+  c64u drives on a`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		drive := args[0]
@@ -356,11 +356,11 @@ Example:
 
 var drivesOffCmd = &cobra.Command{
 	Use:   "off <drive>",
-	Short: "Disable drive",
-	Long: `Disable the specified drive.
+	Short: "Disable internal drive",
+	Long: `Disable the specified internal drive (a or b).
 
 Example:
-  c64u drives off 8`,
+  c64u drives off a`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		drive := args[0]
@@ -387,10 +387,10 @@ Example:
 var drivesLoadROMCmd = &cobra.Command{
 	Use:   "load-rom <drive> <file>",
 	Short: "Load custom ROM from C64U filesystem",
-	Long: `Load a custom drive ROM (16K/32K) temporarily from C64U filesystem.
+	Long: `Load a custom drive ROM (16K/32K) temporarily to internal drive (a or b) from C64U filesystem.
 
 Example:
-  c64u drives load-rom 8 /usb0/speeddos.rom`,
+  c64u drives load-rom a /usb0/speeddos.rom`,
 	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		drive := args[0]
@@ -418,10 +418,10 @@ Example:
 var drivesLoadROMUploadCmd = &cobra.Command{
 	Use:   "load-rom-upload <drive> <local-file>",
 	Short: "Upload and load custom ROM",
-	Long: `Upload a local custom drive ROM (16K/32K) and load it temporarily.
+	Long: `Upload a local custom drive ROM (16K/32K) and load it to internal drive (a or b) temporarily.
 
 Example:
-  c64u drives load-rom-upload 8 speeddos.rom`,
+  c64u drives load-rom-upload a speeddos.rom`,
 	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		drive := args[0]
@@ -455,12 +455,12 @@ Example:
 var drivesSetModeCmd = &cobra.Command{
 	Use:   "set-mode <drive> <mode>",
 	Short: "Set drive emulation mode",
-	Long: `Change the drive emulation mode.
+	Long: `Change the drive emulation mode of internal drive (a or b).
 
 Modes: 1541, 1571, 1581
 
 Example:
-  c64u drives set-mode 8 1541`,
+  c64u drives set-mode a 1541`,
 	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		drive := args[0]
