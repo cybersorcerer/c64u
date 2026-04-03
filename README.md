@@ -56,18 +56,6 @@ cd c64u/tools/c64u
 make install
 ```
 
-### Cross-Platform Builds
-
-```bash
-# Build for all platforms (uses GoReleaser if installed, otherwise manual)
-make release
-
-# Manual build for all platforms
-make release-manual
-
-# Binaries will be in dist/
-```
-
 ## Prerequisites
 
 - Go 1.25 or later (for building from source)
@@ -304,14 +292,12 @@ c64u runners run-prg-upload program.prg
 ## Building
 
 ```bash
-make build          # Build for current platform
-make install        # Build and install to ~/.local/bin
-make dev            # Development build (verbose)
-make test           # Run tests
-make fmt            # Format code
-make lint           # Run linter (requires golangci-lint)
-make release        # Build for all platforms
-make release-manual # Build for all platforms without GoReleaser
+make build     # Build for current platform
+make install   # Build and install to ~/.local/bin
+make dev       # Development build (verbose)
+make test      # Run tests
+make fmt       # Format code
+make lint      # Run linter (requires golangci-lint)
 ```
 
 ## Releasing
@@ -319,12 +305,15 @@ make release-manual # Build for all platforms without GoReleaser
 ```bash
 git tag v0.6.0
 git push origin v0.6.0
-# GitHub Action builds and publishes automatically
-
-# Or manually:
-export GITHUB_TOKEN=your_token
-make release-publish
 ```
+
+The GitHub Action builds automatically for all platforms and creates a GitHub Release:
+
+- **macOS** (Intel + Apple Silicon): built on `macos-latest` with CGO — includes video and audio stream
+- **Linux** (x86_64 + ARM64): built on `ubuntu-latest` without CGO
+- **Windows** (x86_64): built on `ubuntu-latest` without CGO
+
+> **Note:** Video and audio stream features are only available in the macOS binaries, as they require native frameworks (Metal, CoreAudio).
 
 ## Troubleshooting
 
