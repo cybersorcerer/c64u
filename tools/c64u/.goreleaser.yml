@@ -3,9 +3,11 @@
 
 version: 2
 
+partial:
+  by: target
+
 before:
   hooks:
-    # Ensure dependencies are up to date
     - go mod tidy
 
 builds:
