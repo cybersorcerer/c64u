@@ -274,6 +274,19 @@ func setupColoredHelp() {
 	// Store default help function
 	defaultHelpFunc := rootCmd.HelpFunc()
 
+	printFlag := func(f *pflag.Flag) {
+		if f.Hidden {
+			return
+		}
+		flagName := fmt.Sprintf("  -%s, --%s", f.Shorthand, f.Name)
+		if f.Shorthand == "" {
+			flagName = fmt.Sprintf("      --%s", f.Name)
+		}
+		fmt.Printf("%s  %s\n",
+			flagStyle.Render(fmt.Sprintf("%-20s", flagName)),
+			f.Usage)
+	}
+
 	// Custom help template with colors
 	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		// Check if colors should be disabled
@@ -288,11 +301,11 @@ func setupColoredHelp() {
 			fmt.Println(cmd.Long)
 		}
 
-		if cmd.HasAvailableSubCommands() {
-			fmt.Println()
-			fmt.Println(sectionStyle.Render("Usage:"))
-			fmt.Printf("  %s\n", cmd.UseLine())
+		fmt.Println()
+		fmt.Println(sectionStyle.Render("Usage:"))
+		fmt.Printf("  %s\n", cmd.UseLine())
 
+		if cmd.HasAvailableSubCommands() {
 			fmt.Println()
 			fmt.Println(sectionStyle.Render("Available Commands:"))
 			for _, c := range cmd.Commands() {
@@ -305,25 +318,22 @@ func setupColoredHelp() {
 			}
 		}
 
-		if cmd.HasAvailableLocalFlags() || cmd.HasAvailableInheritedFlags() {
+		if cmd.HasAvailableLocalFlags() {
 			fmt.Println()
 			fmt.Println(sectionStyle.Render("Flags:"))
-			cmd.Flags().VisitAll(func(f *pflag.Flag) {
-				if f.Hidden {
-					return
-				}
-				flagName := fmt.Sprintf("  -%s, --%s", f.Shorthand, f.Name)
-				if f.Shorthand == "" {
-					flagName = fmt.Sprintf("      --%s", f.Name)
-				}
-				fmt.Printf("%s  %s\n",
-					flagStyle.Render(fmt.Sprintf("%-20s", flagName)),
-					f.Usage)
-			})
+			cmd.LocalFlags().VisitAll(printFlag)
+		}
+
+		if cmd.HasAvailableInheritedFlags() {
+			fmt.Println()
+			fmt.Println(sectionStyle.Render("Global Flags:"))
+			cmd.InheritedFlags().VisitAll(printFlag)
 		}
 
 		fmt.Println()
-		fmt.Printf("Use \"%s [command] --help\" for more information about a command.\n", cmd.CommandPath())
+		if cmd.HasAvailableSubCommands() {
+			fmt.Printf("Use \"%s [command] --help\" for more information about a command.\n", cmd.CommandPath())
+		}
 	})
 }
 
