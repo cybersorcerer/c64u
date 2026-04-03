@@ -1,12 +1,17 @@
 # c64u - Commodore C64 Ultimate CLI
 
-A command-line interface for controlling the [Commodore C64 Ultimate](https://commodore.net) via its REST API.
+A command-line interface for controlling the [Commodore C64 Ultimate](https://commodore.net) via its REST API written in Go. This project is currently work in progress, so there may still be some bugs. c64u is primarily intended for those of you who want to develop for the Commodore C64 Ultimate with VS Code or Neovim, or who want to create small automations with scripting languages. A development environment with full CLI integration in Neovim can be found in the [c64.nvim project](https://github.com/cybersorcerer/c64.nvim). A plugin for VSCode including a Tree Browser is in the making.
 
 ## Features
 
 - **Complete REST API Coverage**: All C64 Ultimate API endpoints supported
+- **Interactive TUI**: Full-screen terminal UI for browsing, mounting, and controlling
+- **Live Video Stream**: Display C64 video output in a native window (U64 only)
+- **Live Audio Stream**: Play back C64 audio in real time (U64 only)
+- **FTP Integration**: Access the C64 Ultimate filesystem
 - **Flexible Configuration**: Config file, environment variables, or CLI flags
 - **Multiple Output Formats**: Human-readable text or JSON for scripting
+- **Debug Logging**: Built-in debug mode for troubleshooting
 - **Cross-Platform**: Builds for macOS, Linux, and Windows
 - **Easy Integration**: Works seamlessly with c64.nvim, VSCode, and scripts
 
@@ -29,7 +34,7 @@ Download the latest release from [GitHub Releases](https://github.com/cybersorce
 curl -L https://github.com/cybersorcerer/c64u/releases/latest/download/c64u_Darwin_arm64.tar.gz | tar xz
 
 # Move binary to PATH
-sudo mv c64u /usr/local/bin/
+mv c64u ~/.local/bin/
 
 # Verify installation
 c64u version
@@ -44,55 +49,28 @@ c64u version
 ### From Source
 
 ```bash
-# Clone the repository (or navigate to the tools directory)
-cd /path/to/c64u/tools/c64u
+git clone https://github.com/cybersorcerer/c64u.git
+cd c64u/tools/c64u
 
-# Build and install
+# Build and install to ~/.local/bin
 make install
-```
-
-This will install `c64u` to `~/bin` or `/usr/local/bin`.
-
-### Manual Build
-
-```bash
-# Build for current platform
-make build
-
-# Binary will be in build/c64u
-./build/c64u version
 ```
 
 ### Cross-Platform Builds
 
-The project uses [GoReleaser](https://goreleaser.com) for cross-platform builds:
-
 ```bash
-# Build for all platforms (uses GoReleaser if installed, otherwise falls back to manual build)
+# Build for all platforms (uses GoReleaser if installed, otherwise manual)
 make release
 
 # Manual build for all platforms
 make release-manual
 
 # Binaries will be in dist/
-# - macOS (Intel & Apple Silicon)
-# - Linux (x86_64 & ARM64)
-# - Windows (x86_64)
-```
-
-**Install GoReleaser (optional):**
-
-```bash
-# macOS
-brew install goreleaser
-
-# Or via Go
-go install github.com/goreleaser/goreleaser@latest
 ```
 
 ## Prerequisites
 
-- Go 1.22 or later (for building)
+- Go 1.25 or later (for building from source)
 - C64 Ultimate hardware on your network
 
 ## Quick Start
@@ -107,50 +85,27 @@ This creates `~/.config/c64u/config.toml` with default settings.
 
 ### 2. Edit Configuration
 
-Edit `~/.config/c64u/config.toml`:
-
 ```toml
-# C64 Ultimate hostname or IP address
+# ~/.config/c64u/config.toml
 host = "192.168.1.100"
-
-# HTTP port (default: 80)
 port = 80
 ```
 
 ### 3. Test Connection
 
 ```bash
-# Get API version
-c64u about
-
-# Show current CLI configuration
-c64u cli-config show
+c64u about        # C64 Ultimate API version
+c64u info         # Device information
 ```
 
 ## Configuration
 
 ### Priority Order
 
-1. **CLI Flags** (highest priority)
-
-   ```bash
-   c64u --host 192.168.1.100 --port 80 about
-   ```
-
-2. **Environment Variables**
-
-   ```bash
-   export C64U_HOST=192.168.1.100
-   export C64U_PORT=80
-   c64u about
-   ```
-
-3. **Config File**
-   `~/.config/c64u/config.toml`
-
-4. **Defaults**
-   - host: `localhost`
-   - port: `80`
+1. **CLI Flags** `--host 192.168.1.100 --port 80`
+2. **Environment Variables** `C64U_HOST`, `C64U_PORT`
+3. **Config File** `~/.config/c64u/config.toml`
+4. **Defaults** host=`localhost`, port=`80`
 
 ## Usage
 
@@ -158,58 +113,75 @@ c64u cli-config show
 
 ```bash
 --host string      C64 Ultimate hostname/IP (env: C64U_HOST)
---port int         HTTP port (default: 80) (env: C64U_PORT)
+--port int         HTTP port, default 80 (env: C64U_PORT)
 --json             Output in JSON format
---verbose          Enable verbose output (shows HTTP requests)
+--verbose          Show HTTP requests/responses
+--debug, -d        Debug logging to ~/.local/share/c64u/c64u.log
+--no-color         Disable colored output
 ```
 
 ### Commands
 
-#### Version Information
+#### Interactive TUI
 
 ```bash
-# CLI tool version
-c64u version
-
-# C64 Ultimate API version
-c64u about
-
-# C64 Ultimate device information
-c64u info
+c64u ui
 ```
 
-#### CLI Configuration Management
+Full-screen terminal UI with:
 
-Manage c64u CLI tool configuration file (`~/.config/c64u/config.toml`):
+- **File Browser**: Navigate filesystem, mount disk images, run programs
+- **Drive Management**: Mount/unmount, load ROMs, enable/disable drives
+- **Machine Control**: Reset, reboot, pause/resume, power off
+- **Configuration**: Browse and edit device settings, save/load from flash
+
+| Key | Action |
+| --- | --- |
+| `↑/↓` or `j/k` | Navigate |
+| `Enter` | Select / Confirm |
+| `←/Backspace/h` | Parent directory (File Browser) |
+| `Tab` | Toggle Text/Hex view (File Viewer) |
+| `PgUp/PgDn` | Scroll (File Viewer) |
+| `?` | Help overlay |
+| `Esc` | Back / Close |
+| `Ctrl+C` | Quit |
+
+#### Data Streams (U64 Only)
 
 ```bash
-# Create default CLI config file
-c64u cli-config init
+# Live listeners — auto-detect local IP, start stream, stop on Ctrl+C
+c64u streams listen video                      # C64 video in a native window
+c64u streams listen audio                      # C64 audio through speakers
+c64u streams listen debug                      # Raw debug stream to stdout
+c64u streams listen debug --raw | xxd          # Pipe to other tools
 
-# Show current CLI configuration
-c64u cli-config show
+# Override local IP
+c64u streams listen video --ip 192.168.1.50
+
+# Manual start/stop
+c64u streams start <stream> <ip>
+c64u streams stop <stream>
 ```
 
-#### Runners - Media & Program Execution
+**Streams:** `video` (port 11000), `audio` (port 11001), `debug` (port 11002)
+
+**Video Stream**: Opens a native 768×544 window (2× scaled) with accurate VIC colors. PAL (384×272) and NTSC (384×240) supported.
+
+**Audio Stream**: Plays 48 kHz stereo 16-bit PCM from the C64 audio mixer with automatic gap compensation.
+
+**Debug Stream**: Streams raw 6510/VIC/1541 CPU bus data for clock-cycle-accurate program tracing (firmware ≥ 3.7 required).
+
+#### Runners — Media & Program Execution
 
 ```bash
-# SID playback
-c64u runners sidplay <file> [--song N]        # Play SID from C64U filesystem
-c64u runners sidplay-upload <file> [--song N] # Upload and play SID
-
-# MOD playback
-c64u runners modplay <file>                    # Play MOD from C64U filesystem
+c64u runners sidplay <file> [--song N]         # Play SID from C64U filesystem
+c64u runners sidplay-upload <file> [--song N]  # Upload and play SID
+c64u runners modplay <file>                    # Play MOD
 c64u runners modplay-upload <file>             # Upload and play MOD
-
-# PRG loading (no execution)
 c64u runners load-prg <file>                   # Load PRG via DMA
 c64u runners load-prg-upload <file>            # Upload and load PRG
-
-# PRG loading and running
 c64u runners run-prg <file>                    # Load and run PRG
 c64u runners run-prg-upload <file>             # Upload and run PRG
-
-# Cartridge
 c64u runners run-crt <file>                    # Start cartridge
 c64u runners run-crt-upload <file>             # Upload and start cartridge
 ```
@@ -217,228 +189,101 @@ c64u runners run-crt-upload <file>             # Upload and start cartridge
 #### Machine Control
 
 ```bash
-# Control commands
 c64u machine reset                             # Reset machine
 c64u machine reboot                            # Reboot with cartridge reinit
 c64u machine pause                             # Pause via DMA
 c64u machine resume                            # Resume from pause
 c64u machine poweroff                          # Power off (U64 only)
 c64u machine menu-button                       # Simulate Menu button press
-
-# Memory operations
 c64u machine write-mem <addr> <data>           # Write hex data to memory
 c64u machine write-mem-file <addr> <file>      # Write file to memory
 c64u machine read-mem <addr> [--length N]      # Read memory (hex dump)
-
-# Debug register (U64 only)
-c64u machine debug-reg                         # Read debug register
-c64u machine debug-reg-set <value>             # Write debug register
+c64u machine debug-reg                         # Read debug register (U64 only)
+c64u machine debug-reg-set <value>             # Write debug register (U64 only)
 ```
 
 #### Drive Operations
 
 ```bash
-# List and mount
 c64u drives list                               # List all drives
 c64u drives mount <drive> <image> [--type TYPE] [--mode MODE]
 c64u drives mount-upload <drive> <file> [--type TYPE] [--mode MODE]
-c64u drives unmount <drive>                    # Remove disk
-
-# Control
-c64u drives reset <drive>                      # Reset drive
-c64u drives on <drive>                         # Enable drive
-c64u drives off <drive>                        # Disable drive
-
-# ROM and mode
-c64u drives load-rom <drive> <file>            # Load custom ROM
-c64u drives load-rom-upload <drive> <file>     # Upload and load ROM
-c64u drives set-mode <drive> <mode>            # Set mode (1541/1571/1581)
+c64u drives unmount <drive>
+c64u drives reset <drive>
+c64u drives on <drive>
+c64u drives off <drive>
+c64u drives load-rom <drive> <file>
+c64u drives load-rom-upload <drive> <file>
+c64u drives set-mode <drive> <mode>            # 1541 / 1571 / 1581
 ```
 
-**Mount types:** `d64`, `g64`, `d71`, `g71`, `d81`
-**Mount modes:** `readwrite`, `readonly`, `unlinked`
-
-#### Data Streams (U64 Only)
-
-```bash
-c64u streams start <stream> <ip>               # Start stream (video/audio/debug)
-c64u streams stop <stream>                     # Stop stream
-```
-
-**Streams:** `video` (port 11000), `audio` (port 11001), `debug` (port 11002)
+**Mount types:** `d64`, `g64`, `d71`, `g71`, `d81` — **Modes:** `readwrite`, `readonly`, `unlinked`
 
 #### File Operations
 
 ```bash
-# File information
-c64u files info <path>                         # Get file info (supports wildcards)
-
-# Create empty disk images on C64 Ultimate
+c64u files info <path>                         # File info (wildcards supported)
 c64u files create-d64 <path> [--tracks N] [--name NAME]
 c64u files create-d71 <path> [--name NAME]
 c64u files create-d81 <path> [--name NAME]
 c64u files create-dnp <path> --tracks N [--name NAME]
 
-# Pack local directory into disk image (EXPERIMENTAL)
+# Pack local directory into D64 image (EXPERIMENTAL)
 c64u files pack-d64 <source-dir> <output-file> [--name NAME] [--id ID] [--tracks N]
-
-# Upload to C64 Ultimate
-c64u fs upload <local-file> <remote-path>
 ```
 
-> **⚠️ EXPERIMENTAL FEATURE**: The `pack-d64` command is experimental. While basic functionality works, there may be edge cases or compatibility issues with certain files or disk configurations. Always test generated disk images before relying on them.
-
-**Pack D64 Examples:**
+#### Filesystem Operations (FTP)
 
 ```bash
-# Create D64 from directory
-c64u files pack-d64 ./myproject game.d64 --name "MY GAME" --id "01"
-
-# Create 40-track D64
-c64u files pack-d64 ./build output.d64 --tracks 40 --name "BIG DISK"
-
-# Use directory name as disk name
-c64u files pack-d64 ./demo-files demo.d64
-
-# Create and upload to C64 Ultimate
-c64u files pack-d64 ./myproject game.d64 && c64u fs upload game.d64 /SD/games/game.d64
+c64u fs ls [path]
+c64u fs upload <local> <remote>
+c64u fs download <remote> <local>
+c64u fs mkdir <path>
+c64u fs rm <path>
+c64u fs mv <source> <dest>
+c64u fs cp <source> <dest>
+c64u fs cat <path>
 ```
 
-**Supported file types:** `.prg`, `.seq`, `.usr`, `.rel` (and their P00/S00/U00/R00 variants)
-
-#### Filesystem Operations (via FTP)
-
-Complete filesystem access to C64 Ultimate via FTP (port 21, anonymous login):
+#### Hardware Configuration
 
 ```bash
-# Directory listing
-c64u fs ls [path]                              # List files and directories
-
-# File transfer
-c64u fs upload <local> <remote>                # Upload file to C64U
-c64u fs download <remote> <local>              # Download file from C64U
-
-# Directory operations
-c64u fs mkdir <path>                           # Create directory
-c64u fs rm <path>                              # Remove file or directory
-
-# File operations
-c64u fs mv <source> <dest>                     # Move/rename file or directory
-c64u fs cp <source> <dest>                     # Copy file (download+upload)
-c64u fs cat <path>                             # Show file information
-```
-
-**Examples:**
-
-```bash
-# List root directory
-c64u fs ls /
-
-# Upload PRG file
-c64u fs upload myprogram.prg /Temp/myprogram.prg
-
-# Download from SD card
-c64u fs download /SD/games/game.prg ./game.prg
-
-# Create directory
-c64u fs mkdir /Temp/myproject
-
-# Move file
-c64u fs mv /Temp/old.prg /Temp/new.prg
-```
-
-#### Configuration Management
-
-Manage C64 Ultimate configuration settings:
-
-```bash
-# List all categories
-c64u config list
-
-# Show all settings in a category
-c64u config show "Drive A Settings"
-c64u config show "drive a*"              # Wildcards supported
-
-# Get detailed info about a setting
+c64u config list                               # List all categories
+c64u config show "Drive A Settings"            # Show category (wildcards supported)
 c64u config get "Drive A Settings" "Drive Type"
-c64u config get "drive a*" "*bus*"       # Wildcards supported
-
-# Set a configuration item
 c64u config set "Drive A Settings" "Drive Type" "1581"
-c64u config set "drive a*" "*bus*" "9"
-
-# Set multiple settings from JSON file
-c64u config set-multiple settings.json
-
-# Persistence
-c64u config save-to-flash                # Save to non-volatile memory
-c64u config load-from-flash              # Load from flash (discards unsaved changes)
-c64u config reset-to-default             # Reset to factory defaults
-
-# Export/Import
-c64u config export config-backup.json    # Export all settings to JSON
-c64u config export                       # Print to stdout
+c64u config set-multiple settings.json         # Set multiple from JSON
+c64u config save-to-flash
+c64u config load-from-flash
+c64u config reset-to-default
+c64u config export [file]                      # Export all settings to JSON
 ```
 
-**JSON format for set-multiple:**
+## Project Structure
 
-```json
-{
-  "Drive A Settings": {
-    "Drive": "Enabled",
-    "Drive Type": "1581"
-  },
-  "Drive B Settings": {
-    "Drive": "Disabled"
-  }
-}
-```
-
-## Output Formats
-
-### Text Mode (Default)
-
-Human-readable output:
-
-```bash
-$ c64u about
-C64 Ultimate API version: 0.1
-```
-
-### JSON Mode
-
-Machine-readable output for scripting:
-
-```bash
-$ c64u --json about
-{
-  "version": "0.1"
-}
-```
-
-### Verbose Mode
-
-Shows HTTP requests and responses:
-
-```bash
-$ c64u --verbose about
-→ GET http://192.168.1.100:80/v1/version
-← 200 200 OK
-  Response: {
-  "version" : "0.1",
-  "errors" : [  ]
-}
-C64 Ultimate API version: 0.1
+```text
+tools/c64u/
+├── cmd/c64u/          # CLI entry point and command definitions
+├── internal/
+│   ├── api/           # REST API client
+│   ├── audio/         # Audio stream receiver and playback
+│   ├── config/        # Configuration handling
+│   ├── debug/         # Debug logging
+│   ├── diskimage/     # Local disk image creation
+│   ├── network/       # Local IP detection
+│   ├── output/        # Output formatting
+│   ├── tui/           # Interactive terminal UI (Bubble Tea)
+│   └── video/         # Video stream receiver and rendering (Ebitengine)
+├── go.mod
+├── Makefile
+└── README.md
 ```
 
 ## Integration
 
 ### With c64.nvim
 
-The c64u CLI integrates seamlessly with the [c64.nvim](../../README.md) plugin:
-
 ```lua
--- In your c64.nvim config
 require("c64").setup({
   c64u = {
     enabled = true,
@@ -446,123 +291,58 @@ require("c64").setup({
     port = 80,
   }
 })
-
--- Use <leader>ku to upload and run on C64 Ultimate
+-- <leader>ku to upload and run on C64 Ultimate
 ```
 
 ### With Shell Scripts
 
 ```bash
-#!/bin/bash
-# Assemble and run on C64 Ultimate
-
-# Assemble
 java -jar kickass.jar -o program.prg program.asm
-
-# Upload and run
 c64u runners run-prg-upload program.prg
 ```
 
-### With VSCode
-
-(Coming soon - VSCode extension in development)
-
-## Development
-
-### Project Structure
-
-```text
-c64u/
-├── cmd/c64u/          # Main application entry point
-├── internal/
-│   ├── api/           # REST API client
-│   ├── config/        # Configuration handling
-│   └── output/        # Output formatting
-├── go.mod             # Go module definition
-├── Makefile           # Build automation
-└── README.md          # This file
-```
-
-### Building
+## Building
 
 ```bash
-# Development build
-make dev
-
-# Run tests
-make test
-
-# Run with coverage
-make test-coverage
-
-# Format code
-make fmt
-
-# Run linter (requires golangci-lint)
-make lint
+make build          # Build for current platform
+make install        # Build and install to ~/.local/bin
+make dev            # Development build (verbose)
+make test           # Run tests
+make fmt            # Format code
+make lint           # Run linter (requires golangci-lint)
+make release        # Build for all platforms
+make release-manual # Build for all platforms without GoReleaser
 ```
-
-### Adding New Commands
-
-Commands are organized by API category. See the [implementation plan](../../.claude/plans/) for details.
 
 ## Releasing
 
-For maintainers: To create a new release:
-
 ```bash
-# Tag the release
-git tag -a v0.4.0 -m "Release v0.4.0"
-git push origin v0.4.0
+git tag v0.6.0
+git push origin v0.6.0
+# GitHub Action builds and publishes automatically
 
-# The GitHub Action will automatically:
-# 1. Build binaries for all platforms
-# 2. Create a GitHub release
-# 3. Upload all binaries and checksums
+# Or manually:
+export GITHUB_TOKEN=your_token
+make release-publish
 ```
 
-Or manually with GoReleaser:
+## Troubleshooting
 
 ```bash
-# Ensure GITHUB_TOKEN is set
-export GITHUB_TOKEN=your_github_token
+# Test connection
+c64u --verbose about
 
-# Create release
-make release-publish
+# Debug logging
+c64u -d about
+cat ~/.local/share/c64u/c64u.log
+
+# Check configuration
+c64u cli-config show
 ```
 
 ## API Reference
 
-The C64 Ultimate REST API documentation is available at:
 <https://1541u-documentation.readthedocs.io/en/latest/api/api_calls.html>
-
-## Troubleshooting
-
-### Connection Issues
-
-```bash
-# Test if C64 Ultimate is reachable
-ping 192.168.1.100
-
-# Test HTTP connection
-curl http://192.168.1.100/v1/version
-
-# Use verbose mode to see HTTP details
-c64u --verbose --host 192.168.1.100 api-version
-```
-
-### Configuration Issues
-
-```bash
-# Check current CLI configuration
-c64u cli-config show
-
-# Verify config file location
-ls -la ~/.config/c64u/config.toml
-
-# Override with environment variables
-C64U_HOST=192.168.1.100 c64u api-version
-```
 
 ## License
 
@@ -572,7 +352,7 @@ Apache 2.0
 
 - Built for the [Commodore C64 Ultimate](https://commodore.net)
 - Based on Gideon's Logic Architectures Ultimate64 FPGA board
-- Part of the [c64.nvim](../../README.md) project
+- Part of the [c64.nvim](https://github.com/cybersorcerer/c64.nvim) project
 
 ## Contributing
 

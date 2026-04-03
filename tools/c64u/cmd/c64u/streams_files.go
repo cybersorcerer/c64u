@@ -2,11 +2,17 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 
+	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/audio"
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/diskimage"
+	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/network"
+	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/video"
 	"github.com/spf13/cobra"
 )
 
@@ -451,10 +457,239 @@ func runPackD64(cmd *cobra.Command, args []string) {
 	}
 }
 
+const debugStreamPort = 11002
+
+var streamsListenDebugCmd = &cobra.Command{
+	Use:   "debug",
+	Short: "Listen to the debug stream",
+	Long: `Start the C64 Ultimate debug stream and print incoming data to stdout.
+
+The local IP address is detected automatically. Use --ip to override.
+Use --raw to get plain output suitable for piping to other tools.
+
+Examples:
+  c64u streams listen debug
+  c64u streams listen debug --ip 192.168.1.50
+  c64u streams listen debug --raw | grep SID`,
+	Run: func(cmd *cobra.Command, args []string) {
+		listenIP, _ := cmd.Flags().GetString("ip")
+		raw, _ := cmd.Flags().GetBool("raw")
+
+		// Determine local IP
+		if listenIP == "" {
+			detected, err := network.LocalIP(host)
+			if err != nil {
+				formatter.Error("Cannot detect local IP address", []string{
+					err.Error(),
+					"Use --ip to specify your IP manually",
+				})
+				return
+			}
+			listenIP = detected
+		}
+
+		listenAddr := fmt.Sprintf("%s:%d", listenIP, debugStreamPort)
+
+		// Update the "Stream Debug to" config so the C64 knows where to send data
+		if err := apiClient.SetConfigItem("Data Streams", "Stream Debug to", listenAddr); err != nil {
+			formatter.Error("Failed to set debug stream destination", []string{err.Error()})
+			return
+		}
+
+		// Start stream on C64 Ultimate (IP only, port comes from config)
+		resp, err := apiClient.StreamsStart("debug", listenIP)
+		if err != nil {
+			formatter.Error("Failed to start debug stream", []string{err.Error()})
+			return
+		}
+		if resp.HasErrors() {
+			formatter.Error("API returned errors", resp.Errors)
+			return
+		}
+
+		if !raw {
+			formatter.Success("Debug stream started", map[string]interface{}{
+				"listening_on": listenAddr,
+			})
+		}
+
+		// Open UDP socket
+		udpAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", debugStreamPort))
+		if err != nil {
+			formatter.Error("Failed to resolve UDP address", []string{err.Error()})
+			apiClient.StreamsStop("debug")
+			return
+		}
+		conn, err := net.ListenUDP("udp", udpAddr)
+		if err != nil {
+			formatter.Error("Failed to open UDP socket", []string{
+				err.Error(),
+				fmt.Sprintf("Make sure port %d is not already in use", debugStreamPort),
+			})
+			apiClient.StreamsStop("debug")
+			return
+		}
+
+		// Stop stream and close socket on Ctrl+C / SIGTERM
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+		go func() {
+			<-sig
+			conn.Close()
+		}()
+
+		if !raw {
+			fmt.Println("Receiving debug stream. Press Ctrl+C to stop.")
+			fmt.Println()
+		}
+
+		buf := make([]byte, 4096)
+		for {
+			n, _, err := conn.ReadFromUDP(buf)
+			if err != nil {
+				// Socket closed by signal handler — clean exit
+				break
+			}
+			if n > 0 {
+				os.Stdout.Write(buf[:n])
+			}
+		}
+
+		// Stop stream on C64 Ultimate
+		apiClient.StreamsStop("debug")
+		if !raw {
+			fmt.Println()
+			formatter.Success("Debug stream stopped", nil)
+		}
+	},
+}
+
+var streamsListenAudioCmd = &cobra.Command{
+	Use:   "audio",
+	Short: "Listen to the audio stream and play it back",
+	Long: `Start the C64 Ultimate audio stream and play it back via your speakers.
+
+The local IP address is detected automatically. Use --ip to override.
+Audio is 48kHz stereo 16-bit signed PCM from the C64 audio mixer.
+Press Ctrl+C to stop.
+
+Examples:
+  c64u streams listen audio
+  c64u streams listen audio --ip 192.168.1.50`,
+	Run: func(cmd *cobra.Command, args []string) {
+		listenIP, _ := cmd.Flags().GetString("ip")
+
+		if listenIP == "" {
+			detected, err := network.LocalIP(host)
+			if err != nil {
+				formatter.Error("Cannot detect local IP address", []string{
+					err.Error(),
+					"Use --ip to specify your IP manually",
+				})
+				return
+			}
+			listenIP = detected
+		}
+
+		if err := audio.Listen(
+			listenIP,
+			func(ip string) error {
+				if err := apiClient.SetConfigItem("Data Streams", "Stream Audio to", fmt.Sprintf("%s:%d", ip, audio.AudioPort)); err != nil {
+					return err
+				}
+				resp, err := apiClient.StreamsStart("audio", ip)
+				if err != nil {
+					return err
+				}
+				if resp.HasErrors() {
+					return fmt.Errorf("%s", resp.Errors[0])
+				}
+				formatter.Success("Audio stream started", map[string]interface{}{
+					"listening_on": fmt.Sprintf("%s:%d", ip, audio.AudioPort),
+				})
+				return nil
+			},
+			func() error {
+				apiClient.StreamsStop("audio")
+				formatter.Success("Audio stream stopped", nil)
+				return nil
+			},
+		); err != nil {
+			formatter.Error("Audio stream error", []string{err.Error()})
+		}
+	},
+}
+
+var streamsListenVideoCmd = &cobra.Command{
+	Use:   "video",
+	Short: "Listen to the video stream and display it in the terminal",
+	Long: `Start the C64 Ultimate video stream and render it in the terminal.
+
+The local IP address is detected automatically. Use --ip to override.
+The video is rendered using Unicode half-block characters with true VIC colors.
+Press Ctrl+C to stop.
+
+Examples:
+  c64u streams listen video
+  c64u streams listen video --ip 192.168.1.50`,
+	Run: func(cmd *cobra.Command, args []string) {
+		listenIP, _ := cmd.Flags().GetString("ip")
+
+		if listenIP == "" {
+			detected, err := network.LocalIP(host)
+			if err != nil {
+				formatter.Error("Cannot detect local IP address", []string{
+					err.Error(),
+					"Use --ip to specify your IP manually",
+				})
+				return
+			}
+			listenIP = detected
+		}
+
+		if err := video.Listen(
+			listenIP,
+			func(ip string) error {
+				resp, err := apiClient.StreamsStart("video", ip)
+				if err != nil {
+					return err
+				}
+				if resp.HasErrors() {
+					return fmt.Errorf("%s", resp.Errors[0])
+				}
+				return nil
+			},
+			func() error {
+				apiClient.StreamsStop("video")
+				return nil
+			},
+		); err != nil {
+			formatter.Error("Video stream error", []string{err.Error()})
+		}
+	},
+}
+
+// streamsListenCmd is the "listen" parent that holds sub-streams
+var streamsListenCmd = &cobra.Command{
+	Use:   "listen <stream>",
+	Short: "Listen to a data stream",
+	Long:  `Listen to a data stream from the C64 Ultimate. Currently supports: debug`,
+}
+
 func init() {
 	// Streams commands
 	streamsCmd.AddCommand(streamsStartCmd)
 	streamsCmd.AddCommand(streamsStopCmd)
+	streamsCmd.AddCommand(streamsListenCmd)
+
+	streamsListenCmd.AddCommand(streamsListenDebugCmd)
+	streamsListenCmd.AddCommand(streamsListenVideoCmd)
+	streamsListenCmd.AddCommand(streamsListenAudioCmd)
+
+	streamsListenDebugCmd.Flags().String("ip", "", "Local IP address to receive stream (auto-detected if omitted)")
+	streamsListenDebugCmd.Flags().Bool("raw", false, "Raw output, suitable for piping")
+	streamsListenVideoCmd.Flags().String("ip", "", "Local IP address to receive stream (auto-detected if omitted)")
+	streamsListenAudioCmd.Flags().String("ip", "", "Local IP address to receive stream (auto-detected if omitted)")
 
 	// Files commands
 	filesCmd.AddCommand(filesInfoCmd)

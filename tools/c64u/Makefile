@@ -29,21 +29,13 @@ $(BUILD_DIR)/$(BINARY_NAME): $(GO_FILES)
 	@test -d ./cmd/c64u || (echo "Error: ./cmd/c64u directory not found" && exit 1)
 	go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/c64u
 
-# Install to ~/bin or /usr/local/bin
+# Install to ~/.local/bin
 .PHONY: install
 install: build
 	@echo "Installing $(BINARY_NAME)..."
-	@if [ -d "$$HOME/bin" ]; then \
-		cp $(BUILD_DIR)/$(BINARY_NAME) $$HOME/bin/; \
-		echo "Installed to $$HOME/bin/$(BINARY_NAME)"; \
-	elif [ -w /usr/local/bin ]; then \
-		cp $(BUILD_DIR)/$(BINARY_NAME) /usr/local/bin/; \
-		echo "Installed to /usr/local/bin/$(BINARY_NAME)"; \
-	else \
-		echo "Error: Neither ~/bin nor /usr/local/bin is writable"; \
-		echo "Try: sudo make install"; \
-		exit 1; \
-	fi
+	@mkdir -p $$HOME/.local/bin
+	@cp $(BUILD_DIR)/$(BINARY_NAME) $$HOME/.local/bin/
+	@echo "Installed to $$HOME/.local/bin/$(BINARY_NAME)"
 
 # Run tests
 .PHONY: test
@@ -159,7 +151,7 @@ help:
 	@echo ""
 	@echo "Build Commands:"
 	@echo "  make build           - Build binary for current platform"
-	@echo "  make install         - Install binary to ~/bin or /usr/local/bin"
+	@echo "  make install         - Install binary to ~/.local/bin"
 	@echo "  make dev             - Build development version with verbose output"
 	@echo ""
 	@echo "Release Commands:"
