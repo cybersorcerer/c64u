@@ -9,29 +9,47 @@ before:
     - go mod tidy
 
 builds:
-  - id: c64u
+  # Linux and Windows: no CGO, no video/audio stream
+  - id: c64u-nocgo
     main: ./cmd/c64u
     binary: c64u
 
     env:
       - CGO_ENABLED=0
 
-    # Build for multiple platforms
     goos:
       - linux
-      - darwin
       - windows
 
     goarch:
       - amd64
       - arm64
 
-    # Skip combinations that don't make sense
     ignore:
       - goos: windows
         goarch: arm64
 
-    # Set version information via ldflags
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+  # macOS: CGO enabled for Ebitengine (video) and oto (audio)
+  - id: c64u-darwin
+    main: ./cmd/c64u
+    binary: c64u
+
+    env:
+      - CGO_ENABLED=1
+
+    goos:
+      - darwin
+
+    goarch:
+      - amd64
+      - arm64
+
     ldflags:
       - -s -w
       - -X main.version={{.Version}}
