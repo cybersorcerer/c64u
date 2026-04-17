@@ -76,7 +76,7 @@ func TestWatchListCheckHit(t *testing.T) {
 	wp, _ := ParseWatchpoint("D020")
 	wl.Add(wp)
 
-	hit := wl.Check(0xD020, 0x05, false)
+	hit, _ := wl.Check(0xD020, 0x05, false)
 	if !hit {
 		t.Error("expected hit on address D020")
 	}
@@ -91,18 +91,24 @@ func TestWatchListCheckCondition(t *testing.T) {
 	wl.Add(wp)
 
 	// Falscher Wert — kein Condition-Hit, aber normaler Hit
-	hit := wl.Check(0xD020, 0x03, true)
+	hit, cond := wl.Check(0xD020, 0x03, true)
 	if !hit {
 		t.Error("expected address hit")
+	}
+	if cond {
+		t.Error("condition should not be met for value 03")
 	}
 	if wl.All()[0].ConditionMet {
 		t.Error("condition should not be met for value 03")
 	}
 
 	// Richtiger Wert — Condition-Hit
-	hit = wl.Check(0xD020, 0x05, true)
+	hit, cond = wl.Check(0xD020, 0x05, true)
 	if !hit {
 		t.Error("expected address hit")
+	}
+	if !cond {
+		t.Error("conditionMet return value should be true for value 05")
 	}
 	if !wl.All()[0].ConditionMet {
 		t.Error("condition should be met for value 05")
@@ -138,5 +144,10 @@ func TestTrackerConditionTriggersPause(t *testing.T) {
 	tr.Feed(debug.Entry{PHI2: true, RW: false, Address: 0xD020, Data: 0x02, BA: true})
 	if !tr.WatchTriggered() {
 		t.Error("should trigger for value 02")
+	}
+
+	// Doppelter Aufruf — Flag ist bereits zurückgesetzt
+	if tr.WatchTriggered() {
+		t.Error("should not trigger on second call (flag must be reset)")
 	}
 }

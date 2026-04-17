@@ -76,9 +76,10 @@ func (wl *WatchList) All() []Watchpoint {
 }
 
 // Check prüft ob die Adresse/Wert-Kombination einen Watchpoint trifft.
-// Gibt true zurück wenn mindestens ein Watchpoint zutrifft.
-// write gibt an ob der Zugriff ein Schreibzugriff war (für zukünftige Read/Write-Filter).
-func (wl *WatchList) Check(addr uint16, data uint8, write bool) (hit bool) {
+// Gibt hit=true zurück wenn mindestens ein Watchpoint zutrifft,
+// conditionMet=true wenn zusätzlich eine Wert-Bedingung erfüllt ist.
+// TODO: filter by write direction once TUI exposes read/write mode selection
+func (wl *WatchList) Check(addr uint16, data uint8, write bool) (hit bool, conditionMet bool) {
 	wl.mu.Lock()
 	defer wl.mu.Unlock()
 	for i := range wl.wps {
@@ -90,8 +91,11 @@ func (wl *WatchList) Check(addr uint16, data uint8, write bool) (hit bool) {
 		wp.HitCount++
 		wp.LastValue = data
 		wp.ConditionMet = wp.HasCondition && wp.ConditionValue == data
+		if wp.ConditionMet {
+			conditionMet = true
+		}
 	}
-	return hit
+	return hit, conditionMet
 }
 
 // ConditionTriggered gibt true zurück wenn mindestens ein Watchpoint

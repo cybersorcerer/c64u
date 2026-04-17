@@ -110,10 +110,8 @@ func (t *Tracker) Feed(e debug.Entry) {
 	t.state.EntriesProcessed++
 
 	// Watchpoint-Prüfung auf jedem Bus-Zugriff (6510 und 1541)
-	if t.Watches.Check(e.Address, e.Data, !e.RW) {
-		if t.Watches.ConditionTriggered() {
-			t.watchTriggered = true
-		}
+	if hit, cond := t.Watches.Check(e.Address, e.Data, !e.RW); hit && cond {
+		t.watchTriggered = true
 	}
 
 	if e.Is1541 {
