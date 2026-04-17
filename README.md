@@ -176,6 +176,14 @@ The `--tui` flag opens a full-screen live disassembler that decodes the 6510 bus
 | `↑/k`, `↓/j` | Scroll (paused) |
 | `fn+↑/u`, `fn+↓/d` | Page up / down (paused) |
 | `q` / `Ctrl+C` | Quit |
+| `w` | Watchpoint hinzufügen (Eingabe: `D020` oder `D020=05`) |
+| `W` | Letzten Watchpoint entfernen |
+
+**Watchpoints** überwachen beliebig viele Speicheradressen live:
+
+- Adresse allein (`D020`): protokolliert jeden Zugriff mit Wert und Zähler
+- Mit Wertbedingung (`D020=05`): pausiert automatisch wenn genau dieser Wert geschrieben wird
+- Das Watchpoint-Panel zeigt Adresse, letzten Wert, Hit-Zähler und Condition-Status
 
 #### Runners — Media & Program Execution
 
