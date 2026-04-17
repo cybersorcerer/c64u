@@ -1,6 +1,10 @@
 package debugger
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/debug"
+)
 
 func TestWatchpointParse(t *testing.T) {
 	wp, err := ParseWatchpoint("D020")
@@ -102,5 +106,37 @@ func TestWatchListCheckCondition(t *testing.T) {
 	}
 	if !wl.All()[0].ConditionMet {
 		t.Error("condition should be met for value 05")
+	}
+}
+
+func TestTrackerWatchpointHit(t *testing.T) {
+	tr := NewTracker(200, 60)
+	wp, _ := ParseWatchpoint("D020")
+	tr.Watches.Add(wp)
+
+	// Simuliere einen Schreib-Zugriff auf $D020
+	tr.Feed(debug.Entry{PHI2: true, RW: false, Address: 0xD020, Data: 0x02, BA: true})
+
+	wps := tr.Watches.All()
+	if wps[0].HitCount != 1 {
+		t.Errorf("expected HitCount=1, got %d", wps[0].HitCount)
+	}
+}
+
+func TestTrackerConditionTriggersPause(t *testing.T) {
+	tr := NewTracker(200, 60)
+	wp, _ := ParseWatchpoint("D020=02")
+	tr.Watches.Add(wp)
+
+	// Falscher Wert — kein Pause
+	tr.Feed(debug.Entry{PHI2: true, RW: false, Address: 0xD020, Data: 0x05, BA: true})
+	if tr.WatchTriggered() {
+		t.Error("should not trigger for value 05")
+	}
+
+	// Richtiger Wert — Pause
+	tr.Feed(debug.Entry{PHI2: true, RW: false, Address: 0xD020, Data: 0x02, BA: true})
+	if !tr.WatchTriggered() {
+		t.Error("should trigger for value 02")
 	}
 }

@@ -65,6 +65,9 @@ type Tracker struct {
 	ioBuf []IOAccess
 	ioMax int
 
+	Watches        *WatchList
+	watchTriggered bool
+
 	// synced=true: the next PHI2+RW+BA=1 read is an opcode fetch
 	synced bool
 
@@ -94,7 +97,8 @@ func NewTracker(instrHistory, ioHistory int) *Tracker {
 		state:    CPUState{SP: 0xFF},
 		// Start unsynced: we don't know where we are in the instruction stream yet.
 		// We'll sync on the first write or BA=0 cycle.
-		synced: false,
+		synced:  false,
+		Watches: NewWatchList(),
 	}
 }
 
@@ -104,6 +108,13 @@ func (t *Tracker) Feed(e debug.Entry) {
 	defer t.mu.Unlock()
 
 	t.state.EntriesProcessed++
+
+	// Watchpoint-Prüfung auf jedem Bus-Zugriff (6510 und 1541)
+	if t.Watches.Check(e.Address, e.Data, !e.RW) {
+		if t.Watches.ConditionTriggered() {
+			t.watchTriggered = true
+		}
+	}
 
 	if e.Is1541 {
 		return
@@ -286,6 +297,17 @@ func (t *Tracker) IOAccesses() []IOAccess {
 	out := make([]IOAccess, len(t.ioBuf))
 	copy(out, t.ioBuf)
 	return out
+}
+
+// WatchTriggered gibt true zurück wenn eine Watchpoint-Bedingung ausgelöst hat.
+// Setzt das Flag danach zurück.
+func (t *Tracker) WatchTriggered() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	triggered := t.watchTriggered
+	t.watchTriggered = false
+	t.Watches.ClearConditions()
+	return triggered
 }
 
 func ioRegisterName(addr uint16) string {
