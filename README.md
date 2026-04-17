@@ -159,6 +159,24 @@ c64u streams stop <stream>
 
 **Debug Stream**: Streams raw 6510/VIC/1541 CPU bus data for clock-cycle-accurate program tracing (firmware ≥ 3.7 required).
 
+```bash
+c64u streams listen debug --tui                # Live disassembler TUI
+```
+
+The `--tui` flag opens a full-screen live disassembler that decodes the 6510 bus trace in real time:
+
+- **Live disassembly** of code running on the C64, including all illegal opcodes
+- **CPU registers**: PC, SP and reconstructed status flags (N V B D I Z C)
+- **I/O access log**: live VIC, SID and CIA register reads/writes
+- Kernal ROM ($E000–$FFFF) and BASIC ROM ($A000–$BFFF) are filtered out to keep the trace focused on user code
+
+| Key | Action |
+| --- | --- |
+| `Space` | Pause / resume |
+| `↑/k`, `↓/j` | Scroll (paused) |
+| `fn+↑/u`, `fn+↓/d` | Page up / down (paused) |
+| `q` / `Ctrl+C` | Quit |
+
 #### Runners — Media & Program Execution
 
 ```bash
@@ -257,6 +275,8 @@ tools/c64u/
 │   ├── audio/         # Audio stream receiver and playback
 │   ├── config/        # Configuration handling
 │   ├── debug/         # Debug logging
+│   ├── debugger/      # Live disassembler TUI (bus trace decoder)
+│   ├── disasm/        # 6502/6510 disassembler incl. illegal opcodes
 │   ├── diskimage/     # Local disk image creation
 │   ├── network/       # Local IP detection
 │   ├── output/        # Output formatting

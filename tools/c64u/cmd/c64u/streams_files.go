@@ -10,6 +10,8 @@ import (
 	"syscall"
 
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/audio"
+	dbg "github.com/cybersorcerer/c64.nvim/tools/c64u/internal/debug"
+	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/debugger"
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/diskimage"
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/network"
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/video"
@@ -474,6 +476,7 @@ Examples:
 	Run: func(cmd *cobra.Command, args []string) {
 		listenIP, _ := cmd.Flags().GetString("ip")
 		raw, _ := cmd.Flags().GetBool("raw")
+		tuiMode, _ := cmd.Flags().GetBool("tui")
 
 		// Determine local IP
 		if listenIP == "" {
@@ -507,12 +510,6 @@ Examples:
 			return
 		}
 
-		if !raw {
-			formatter.Success("Debug stream started", map[string]interface{}{
-				"listening_on": listenAddr,
-			})
-		}
-
 		// Open UDP socket
 		udpAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", debugStreamPort))
 		if err != nil {
@@ -528,6 +525,22 @@ Examples:
 			})
 			apiClient.StreamsStop("debug")
 			return
+		}
+
+		// ── TUI mode ──────────────────────────────────────────────────────────
+		if tuiMode {
+			if err := debugger.Run(conn); err != nil {
+				formatter.Error("Debugger TUI error", []string{err.Error()})
+			}
+			apiClient.StreamsStop("debug")
+			return
+		}
+
+		// ── Plain text mode ───────────────────────────────────────────────────
+		if !raw {
+			formatter.Success("Debug stream started", map[string]interface{}{
+				"listening_on": listenAddr,
+			})
 		}
 
 		// Stop stream and close socket on Ctrl+C / SIGTERM
@@ -551,7 +564,7 @@ Examples:
 				break
 			}
 			if n > 0 {
-				os.Stdout.Write(buf[:n])
+				dbg.DecodePacket(buf[:n], os.Stdout, raw)
 			}
 		}
 
@@ -688,6 +701,7 @@ func init() {
 
 	streamsListenDebugCmd.Flags().String("ip", "", "Local IP address to receive stream (auto-detected if omitted)")
 	streamsListenDebugCmd.Flags().Bool("raw", false, "Raw output, suitable for piping")
+	streamsListenDebugCmd.Flags().Bool("tui", false, "Start interactive TUI debugger")
 	streamsListenVideoCmd.Flags().String("ip", "", "Local IP address to receive stream (auto-detected if omitted)")
 	streamsListenAudioCmd.Flags().String("ip", "", "Local IP address to receive stream (auto-detected if omitted)")
 

@@ -27,7 +27,7 @@ $(BUILD_DIR)/$(BINARY_NAME): $(GO_FILES)
 	@echo "Building $(BINARY_NAME) $(VERSION)..."
 	@mkdir -p $(BUILD_DIR)
 	@test -d ./cmd/c64u || (echo "Error: ./cmd/c64u directory not found" && exit 1)
-	go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/c64u
+	go build -a $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/c64u
 
 # Install to ~/.local/bin
 .PHONY: install
