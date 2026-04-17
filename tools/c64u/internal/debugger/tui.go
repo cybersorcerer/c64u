@@ -128,6 +128,12 @@ type Model struct {
 	// Scroll offset — 0 = follow newest (only from UI goroutine)
 	scroll int
 
+	// Watchpoint-Eingabemodus
+	watchInput    bool   // true = Eingabefeld aktiv
+	watchInputBuf string // aktuell getippter Text
+	watchInputErr string // Fehlermeldung bei ungültigem Ausdruck
+	watchSelected int    // ausgewählter Watchpoint (für Löschen)
+
 	lastErr  string
 	pktCount atomic.Uint64
 }
@@ -163,6 +169,42 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 
 	case tea.KeyMsg:
+		// Watchpoint-Eingabemodus fängt alle Tasten ab
+		if m.watchInput {
+			switch msg.String() {
+			case "enter":
+				expr := strings.TrimSpace(m.watchInputBuf)
+				if expr != "" {
+					wp, err := ParseWatchpoint(expr)
+					if err != nil {
+						m.watchInputErr = err.Error()
+					} else {
+						m.tracker.Watches.Add(wp)
+						m.watchInput = false
+						m.watchInputBuf = ""
+						m.watchInputErr = ""
+					}
+				} else {
+					m.watchInput = false
+					m.watchInputErr = ""
+				}
+			case "esc":
+				m.watchInput = false
+				m.watchInputBuf = ""
+				m.watchInputErr = ""
+			case "backspace", "ctrl+h":
+				if len(m.watchInputBuf) > 0 {
+					m.watchInputBuf = m.watchInputBuf[:len(m.watchInputBuf)-1]
+				}
+			default:
+				// Nur druckbare ASCII-Zeichen annehmen
+				if len(msg.String()) == 1 {
+					m.watchInputBuf += strings.ToUpper(msg.String())
+				}
+			}
+			return m, nil
+		}
+
 		switch msg.String() {
 		case "ctrl+c", "q":
 			// Close socket first so UDP goroutine unblocks, then quit
@@ -211,6 +253,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "home", "g":
 			m.scroll = 0
+
+		case "w":
+			m.watchInput = true
+			m.watchInputBuf = ""
+			m.watchInputErr = ""
+
+		case "W":
+			wps := m.tracker.Watches.All()
+			if len(wps) > 0 {
+				// Letzten Watchpoint entfernen
+				m.tracker.Watches.Remove(len(wps) - 1)
+			}
 		}
 
 	case streamErrorMsg:
@@ -221,6 +275,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
+		if !m.isPaused() && m.tracker.WatchTriggered() {
+			m.frozenInstrs = m.tracker.Instructions()
+			m.frozenIO = m.tracker.IOAccesses()
+			m.frozenState = m.tracker.State()
+			m.scroll = 0
+			m.setPaused(true)
+		}
 		return m, tickEvery(refreshRate)
 	}
 
@@ -359,13 +420,16 @@ func (m *Model) View() string {
 		remaining = 5
 	}
 
-	disasmW := (m.width * 60 / 100) - 2
-	ioW := m.width - disasmW - 4
+	disasmW := (m.width * 55 / 100) - 2
+	rightW := m.width - disasmW - 4
+	ioH := remaining * 60 / 100
+	watchH := remaining - ioH
 
 	disasmPanel := m.renderDisasm(instrs, disasmW, remaining, paused)
-	ioPanel := m.renderIOLog(ioAccesses, ioW, remaining)
-
-	bottomRow := lipgloss.JoinHorizontal(lipgloss.Top, disasmPanel, ioPanel)
+	ioPanel := m.renderIOLog(ioAccesses, rightW, ioH)
+	watchPanel := m.renderWatchPanel(rightW, watchH)
+	rightCol := lipgloss.JoinVertical(lipgloss.Left, ioPanel, watchPanel)
+	bottomRow := lipgloss.JoinHorizontal(lipgloss.Top, disasmPanel, rightCol)
 
 	return lipgloss.JoinVertical(lipgloss.Left,
 		header,
@@ -537,12 +601,71 @@ func (m *Model) renderIOLog(accesses []IOAccess, width, height int) string {
 	return panelStyle.Width(width).Height(height).Render(title + "\n" + strings.Join(lines, "\n"))
 }
 
+func (m *Model) renderWatchPanel(width, height int) string {
+	wps := m.tracker.Watches.All()
+
+	labelStyle := lipgloss.NewStyle().Foreground(colorGray)
+	addrS := lipgloss.NewStyle().Foreground(lipgloss.Color("14")).Bold(true)
+	hitStyle := lipgloss.NewStyle().Foreground(colorWhite)
+	condStyle := lipgloss.NewStyle().Foreground(colorYellow).Bold(true)
+	trigStyle := lipgloss.NewStyle().Foreground(colorRed).Bold(true).Reverse(true)
+
+	innerH := height - 3
+	if innerH < 1 {
+		innerH = 1
+	}
+
+	lines := make([]string, 0, innerH)
+
+	if m.watchInput {
+		prompt := lipgloss.NewStyle().Foreground(colorHighlight).Bold(true).Render("Adresse> ")
+		input := m.watchInputBuf + "█"
+		lines = append(lines, prompt+input)
+		if m.watchInputErr != "" {
+			lines = append(lines, lipgloss.NewStyle().Foreground(colorRed).Render("  "+m.watchInputErr))
+		}
+		lines = append(lines, lipgloss.NewStyle().Foreground(colorGray).Render("  Format: D020  oder  D020=05"))
+		lines = append(lines, lipgloss.NewStyle().Foreground(colorGray).Render("  Enter: OK   Esc: Abbrechen"))
+	}
+
+	for i, wp := range wps {
+		addrPart := addrS.Render(fmt.Sprintf("$%04X", wp.Address))
+		var condPart string
+		if wp.HasCondition {
+			condPart = condStyle.Render(fmt.Sprintf("=%02X", wp.ConditionValue))
+		}
+		valPart := hitStyle.Render(fmt.Sprintf("→$%02X", wp.LastValue))
+		hitPart := labelStyle.Render(fmt.Sprintf(" ×%d", wp.HitCount))
+		idx := labelStyle.Render(fmt.Sprintf("%2d. ", i+1))
+		line := idx + addrPart + condPart + " " + valPart + hitPart
+		if wp.ConditionMet {
+			line = trigStyle.Render(fmt.Sprintf(" BREAK $%04X=%02X ", wp.Address, wp.LastValue))
+		}
+		lines = append(lines, line)
+	}
+
+	if len(wps) == 0 && !m.watchInput {
+		lines = append(lines, labelStyle.Render("  (keine Watchpoints)"))
+		lines = append(lines, labelStyle.Render("  w: Watchpoint hinzufügen"))
+	}
+
+	for len(lines) < innerH {
+		lines = append(lines, "")
+	}
+	if len(lines) > innerH {
+		lines = lines[:innerH]
+	}
+
+	title := headerStyle.Render(fmt.Sprintf(" Watchpoints (%d) ", len(wps)))
+	return panelStyle.Width(width).Height(height).Render(title + "\n" + strings.Join(lines, "\n"))
+}
+
 func (m *Model) renderStatusBar(paused bool) string {
 	var text string
 	if paused {
 		text = "PAUSIERT  ↑/k: zurück  ↓/j: vor  fn+↑/u: Seite zurück  fn+↓/d: Seite vor  Space: Fortsetzen  q: Beenden"
 	} else {
-		text = "Space: Pausieren  q/Ctrl+C: Beenden"
+		text = "Space: Pausieren  w: Watch hinzufügen  W: Watch entfernen  q/Ctrl+C: Beenden"
 	}
 	if m.lastErr != "" {
 		text = "FEHLER: " + m.lastErr
