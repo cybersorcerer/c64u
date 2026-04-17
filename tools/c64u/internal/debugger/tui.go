@@ -132,7 +132,6 @@ type Model struct {
 	watchInput    bool   // true = Eingabefeld aktiv
 	watchInputBuf string // aktuell getippter Text
 	watchInputErr string // Fehlermeldung bei ungültigem Ausdruck
-	watchSelected int    // ausgewählter Watchpoint (für Löschen)
 
 	lastErr  string
 	pktCount atomic.Uint64
@@ -605,10 +604,13 @@ func (m *Model) renderWatchPanel(width, height int) string {
 	wps := m.tracker.Watches.All()
 
 	labelStyle := lipgloss.NewStyle().Foreground(colorGray)
-	addrS := lipgloss.NewStyle().Foreground(lipgloss.Color("14")).Bold(true)
+	addrBoldStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("14")).Bold(true)
 	hitStyle := lipgloss.NewStyle().Foreground(colorWhite)
 	condStyle := lipgloss.NewStyle().Foreground(colorYellow).Bold(true)
 	trigStyle := lipgloss.NewStyle().Foreground(colorRed).Bold(true).Reverse(true)
+	promptStyle := lipgloss.NewStyle().Foreground(colorHighlight).Bold(true)
+	errStyle := lipgloss.NewStyle().Foreground(colorRed)
+	hintStyle := lipgloss.NewStyle().Foreground(colorGray)
 
 	innerH := height - 3
 	if innerH < 1 {
@@ -618,18 +620,18 @@ func (m *Model) renderWatchPanel(width, height int) string {
 	lines := make([]string, 0, innerH)
 
 	if m.watchInput {
-		prompt := lipgloss.NewStyle().Foreground(colorHighlight).Bold(true).Render("Adresse> ")
+		prompt := promptStyle.Render("Adresse> ")
 		input := m.watchInputBuf + "█"
 		lines = append(lines, prompt+input)
 		if m.watchInputErr != "" {
-			lines = append(lines, lipgloss.NewStyle().Foreground(colorRed).Render("  "+m.watchInputErr))
+			lines = append(lines, errStyle.Render("  "+m.watchInputErr))
 		}
-		lines = append(lines, lipgloss.NewStyle().Foreground(colorGray).Render("  Format: D020  oder  D020=05"))
-		lines = append(lines, lipgloss.NewStyle().Foreground(colorGray).Render("  Enter: OK   Esc: Abbrechen"))
+		lines = append(lines, hintStyle.Render("  Format: D020  oder  D020=05"))
+		lines = append(lines, hintStyle.Render("  Enter: OK   Esc: Abbrechen"))
 	}
 
 	for i, wp := range wps {
-		addrPart := addrS.Render(fmt.Sprintf("$%04X", wp.Address))
+		addrPart := addrBoldStyle.Render(fmt.Sprintf("$%04X", wp.Address))
 		var condPart string
 		if wp.HasCondition {
 			condPart = condStyle.Render(fmt.Sprintf("=%02X", wp.ConditionValue))
