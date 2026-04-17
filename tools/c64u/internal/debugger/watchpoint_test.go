@@ -51,6 +51,22 @@ func TestWatchListAddRemove(t *testing.T) {
 	}
 }
 
+func TestWatchListRemoveOutOfBounds(t *testing.T) {
+	wl := NewWatchList()
+	// Remove auf leerer Liste darf nicht paniken
+	wl.Remove(-1)
+	wl.Remove(0)
+	wl.Remove(5)
+
+	wp, _ := ParseWatchpoint("D020")
+	wl.Add(wp)
+	// Remove mit Index = len darf nicht paniken
+	wl.Remove(1)
+	if len(wl.All()) != 1 {
+		t.Errorf("expected list unchanged, got %d elements", len(wl.All()))
+	}
+}
+
 func TestWatchListCheckHit(t *testing.T) {
 	wl := NewWatchList()
 	wp, _ := ParseWatchpoint("D020")
