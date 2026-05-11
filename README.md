@@ -212,9 +212,12 @@ c64u machine menu-button                       # Simulate Menu button press
 c64u machine write-mem <addr> <data>           # Write hex data to memory
 c64u machine write-mem-file <addr> <file>      # Write file to memory
 c64u machine read-mem <addr> [--length N]      # Read memory (hex dump)
+c64u machine sendkey <string> [--delay <ms>]   # Send keystrokes to keyboard buffer
 c64u machine debug-reg                         # Read debug register (U64 only)
 c64u machine debug-reg-set <value>             # Write debug register (U64 only)
 ```
+
+**Keyboard injection** (`sendkey`) converts ASCII strings to PETSCII and injects them into the C64 keyboard buffer via DMA. Strings longer than 10 characters are sent in chunks (default 100ms delay). Escape sequences: `\n` (Return), `\f1`–`\f8` (F1–F8), `\clr`, `\del`, `\stop`, `\home`.
 
 #### Drive Operations
 
