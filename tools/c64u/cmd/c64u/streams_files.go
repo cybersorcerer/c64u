@@ -660,6 +660,16 @@ Examples:
 			listenIP = detected
 		}
 
+		sendFn := func(data []byte) error {
+			hexData := fmt.Sprintf("%X", data)
+			hexLen := fmt.Sprintf("%02X", len(data))
+			if _, err := apiClient.MachineWriteMem("0277", hexData); err != nil {
+				return err
+			}
+			_, err := apiClient.MachineWriteMem("00C6", hexLen)
+			return err
+		}
+
 		if err := video.Listen(
 			listenIP,
 			func(ip string) error {
@@ -675,6 +685,11 @@ Examples:
 			func() error {
 				apiClient.StreamsStop("video")
 				return nil
+			},
+			sendFn,
+			func() error {
+				_, err := apiClient.MachineReset()
+				return err
 			},
 		); err != nil {
 			formatter.Error("Video stream error", []string{err.Error()})

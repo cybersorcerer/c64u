@@ -6,7 +6,7 @@ import (
 )
 
 // Encode konvertiert einen ASCII+Escape-String zu PETSCII-Bytes.
-// Unterstützte Escape-Sequenzen: \n \f1-\f8 \clr \del \stop \home
+// Unterstützte Escape-Sequenzen: \n \f1-\f8 \clr \del \stop \home \cup \cdn \cleft \cright
 // Gibt Fehler zurück bei: leerem String, unbekannten Zeichen, unbekannten Escape-Sequenzen.
 func Encode(s string) ([]byte, error) {
 	if s == "" {
@@ -42,8 +42,16 @@ func Encode(s string) ([]byte, error) {
 				b, consumed = 0x8B, 2
 			case strings.HasPrefix(rest, "f8"):
 				b, consumed = 0x8C, 2
+			case strings.HasPrefix(rest, "cright"):
+				b, consumed = 0x1D, 6
+			case strings.HasPrefix(rest, "cleft"):
+				b, consumed = 0x9D, 5
 			case strings.HasPrefix(rest, "clr"):
 				b, consumed = 0x93, 3
+			case strings.HasPrefix(rest, "cdn"):
+				b, consumed = 0x11, 3
+			case strings.HasPrefix(rest, "cup"):
+				b, consumed = 0x91, 3
 			case strings.HasPrefix(rest, "del"):
 				b, consumed = 0x14, 3
 			case strings.HasPrefix(rest, "stop"):

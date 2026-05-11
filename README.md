@@ -155,6 +155,22 @@ c64u streams stop <stream>
 
 **Video Stream**: Opens a native 768×544 window (2× scaled) with accurate VIC colors. PAL (384×272) and NTSC (384×240) supported.
 
+While the video window is focused, all keystrokes are forwarded to the C64 keyboard buffer via DMA — the window acts as a keyboard input device for the real hardware.
+
+| Key                          | C64 action                                          |
+| ---------------------------- | --------------------------------------------------- |
+| Letters, digits, punctuation | Typed character (layout-aware, converted to PETSCII)|
+| Return                       | Return                                              |
+| Backspace / Delete           | DEL                                                 |
+| F1–F8                        | F1–F8                                               |
+| Cursor keys                  | Cursor Up / Down / Left / Right                     |
+| Left Alt + Shift             | CBM+Shift (toggle graphics/text charset)            |
+| Escape                       | — (see below)                                       |
+
+**Escape key — hardware limitation:** RUN/STOP on a real C64 works by the BASIC ROM reading the CIA1 hardware register at `$DC01` directly — it does not go through the keyboard buffer. DMA writes (which the Ultimate API uses) only reach RAM, not I/O-mapped CIA registers. Therefore RUN/STOP cannot be injected via the API while a program is running.
+
+As a workaround, pressing **Escape once** arms a reset confirmation — the window title changes to signal this state. Pressing **Escape a second time within 3 seconds** sends `machine:reset` to the C64. Any other key or waiting cancels the confirmation.
+
 **Audio Stream**: Plays 48 kHz stereo 16-bit PCM from the C64 audio mixer with automatic gap compensation.
 
 **Debug Stream**: Streams raw 6510/VIC/1541 CPU bus data for clock-cycle-accurate program tracing (firmware ≥ 3.7 required).
@@ -217,7 +233,9 @@ c64u machine debug-reg                         # Read debug register (U64 only)
 c64u machine debug-reg-set <value>             # Write debug register (U64 only)
 ```
 
-**Keyboard injection** (`sendkey`) converts ASCII strings to PETSCII and injects them into the C64 keyboard buffer via DMA. Strings longer than 10 characters are sent in chunks (default 100ms delay). Escape sequences: `\n` (Return), `\f1`–`\f8` (F1–F8), `\clr`, `\del`, `\stop`, `\home`.
+**Keyboard injection** (`sendkey`) converts ASCII strings to PETSCII and injects them into the C64 keyboard buffer via DMA. Strings longer than 10 characters are sent in chunks (default 100ms delay). Escape sequences: `\n` (Return), `\f1`–`\f8` (F1–F8), `\clr`, `\del`, `\home`, `\cup` (cursor up), `\cdn` (cursor down), `\cleft` (cursor left), `\cright` (cursor right).
+
+> **Note — `\stop` (RUN/STOP):** The sequence `\stop` writes PETSCII `$03` into the keyboard buffer. This only works when the C64 is idle (e.g. at the BASIC prompt or waiting for `INPUT`). While a BASIC program is running, the BASIC ROM reads the RUN/STOP state directly from the CIA1 hardware register at `$DC01` — not from the keyboard buffer. DMA writes cannot reach I/O-mapped CIA registers, so `\stop` has no effect on a running program.
 
 #### Drive Operations
 
