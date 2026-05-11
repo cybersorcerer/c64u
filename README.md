@@ -6,8 +6,8 @@ A command-line interface for controlling the [Commodore C64 Ultimate](https://co
 
 - **Complete REST API Coverage**: All C64 Ultimate API endpoints supported
 - **Interactive TUI**: Full-screen terminal UI for browsing, mounting, and controlling
-- **Live Video Stream**: Display C64 video output in a native window (U64 only)
-- **Live Audio Stream**: Play back C64 audio in real time (U64 only)
+- **Live Video Stream**: Display C64 video output in a native window with full keyboard forwarding — use your Mac keyboard to interact directly with the real C64 hardware
+- **Live Audio Stream**: Play back C64 audio in real time
 - **FTP Integration**: Access the C64 Ultimate filesystem
 - **Flexible Configuration**: Config file, environment variables, or CLI flags
 - **Multiple Output Formats**: Human-readable text or JSON for scripting
