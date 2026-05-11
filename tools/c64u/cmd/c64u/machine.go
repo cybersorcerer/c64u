@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/api"
+	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/petscii"
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -374,6 +376,77 @@ Example:
 	},
 }
 
+var machineSendKeyCmd = &cobra.Command{
+	Use:   "sendkey <string>",
+	Short: "Send keystrokes to the C64 keyboard buffer",
+	Long: `Convert a string to PETSCII and inject it into the C64 keyboard buffer via DMA.
+
+Escape sequences:
+  \n      Return
+  \f1-\f8 Function keys F1-F8
+  \clr    CLR/HOME
+  \del    DEL
+  \stop   RUN/STOP
+  \home   HOME
+
+Strings longer than 10 characters are sent in chunks with --delay ms between them.
+
+Examples:
+  c64u machine sendkey "A"
+  c64u machine sendkey 'LOAD"*",8,1\n'
+  c64u machine sendkey '\f1'
+  c64u machine sendkey 'HELLO\n' --delay 50`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		delay, _ := cmd.Flags().GetInt("delay")
+		input := args[0]
+
+		encoded, err := petscii.Encode(input)
+		if err != nil {
+			formatter.Error("Invalid input", []string{err.Error()})
+			return
+		}
+
+		const chunkSize = 10
+		for start := 0; start < len(encoded); start += chunkSize {
+			end := start + chunkSize
+			if end > len(encoded) {
+				end = len(encoded)
+			}
+			chunk := encoded[start:end]
+
+			hexData := fmt.Sprintf("%X", chunk)
+			hexLen := fmt.Sprintf("%02X", len(chunk))
+
+			resp, err := apiClient.MachineWriteMem("0277", hexData)
+			if err != nil {
+				formatter.Error("Failed to write keyboard buffer", []string{err.Error()})
+				return
+			}
+			if resp.HasErrors() {
+				formatter.Error("API error writing keyboard buffer", resp.Errors)
+				return
+			}
+
+			resp, err = apiClient.MachineWriteMem("00C6", hexLen)
+			if err != nil {
+				formatter.Error("Failed to write buffer length", []string{err.Error()})
+				return
+			}
+			if resp.HasErrors() {
+				formatter.Error("API error writing buffer length", resp.Errors)
+				return
+			}
+
+			if end < len(encoded) {
+				time.Sleep(time.Duration(delay) * time.Millisecond)
+			}
+		}
+
+		formatter.Success(fmt.Sprintf("Sent %d byte(s) to keyboard buffer", len(encoded)), nil)
+	},
+}
+
 func init() {
 	// Add control commands
 	machineCmd.AddCommand(machineResetCmd)
@@ -382,6 +455,8 @@ func init() {
 	machineCmd.AddCommand(machineResumeCmd)
 	machineCmd.AddCommand(machinePowerOffCmd)
 	machineCmd.AddCommand(machineMenuButtonCmd)
+	machineCmd.AddCommand(machineSendKeyCmd)
+	machineSendKeyCmd.Flags().Int("delay", 100, "Delay between chunks in milliseconds")
 
 	// Add memory operation commands
 	machineCmd.AddCommand(machineWriteMemCmd)
