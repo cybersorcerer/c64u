@@ -48,7 +48,11 @@ func Encode(s string) ([]byte, error) {
 			case strings.HasPrefix(rest, "home"):
 				b, consumed = 0x13, 4
 			default:
-				return nil, fmt.Errorf("unbekannte Escape-Sequenz: \\%s", rest)
+				short := rest
+				if len(short) > 4 {
+					short = short[:4]
+				}
+				return nil, fmt.Errorf("unbekannte Escape-Sequenz: \\%s", short)
 			}
 			result = append(result, b)
 			i += 1 + consumed

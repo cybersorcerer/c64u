@@ -150,3 +150,13 @@ func TestEncodePunctuation(t *testing.T) {
 		t.Errorf("got %X, want %X", got, want)
 	}
 }
+
+func TestEncodeQuote(t *testing.T) {
+	got, err := Encode(`"`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 1 || got[0] != 0x22 {
+		t.Errorf("got %X, want [22]", got)
+	}
+}
