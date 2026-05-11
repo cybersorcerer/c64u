@@ -176,14 +176,14 @@ The `--tui` flag opens a full-screen live disassembler that decodes the 6510 bus
 | `↑/k`, `↓/j` | Scroll (paused) |
 | `fn+↑/u`, `fn+↓/d` | Page up / down (paused) |
 | `q` / `Ctrl+C` | Quit |
-| `w` | Watchpoint hinzufügen (Eingabe: `D020` oder `D020=05`) |
-| `W` | Letzten Watchpoint entfernen |
+| `w` | Add watchpoint (enter: `D020` or `D020=05`) |
+| `W` | Remove last watchpoint |
 
-**Watchpoints** überwachen beliebig viele Speicheradressen live:
+**Watchpoints** monitor any number of memory addresses live:
 
-- Adresse allein (`D020`): protokolliert jeden Zugriff mit Wert und Zähler
-- Mit Wertbedingung (`D020=05`): pausiert automatisch wenn genau dieser Wert geschrieben wird
-- Das Watchpoint-Panel zeigt Adresse, letzten Wert, Hit-Zähler und Condition-Status
+- Address only (`D020`): logs every write with value and hit counter
+- With value condition (`D020=05`): auto-pauses when exactly that value is written
+- The watchpoint panel shows address, last value, hit counter, and condition status
 
 #### Runners — Media & Program Execution
 
