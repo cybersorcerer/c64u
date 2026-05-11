@@ -1,6 +1,7 @@
 package petscii
 
 import (
+	"bytes"
 	"testing"
 )
 
@@ -10,7 +11,7 @@ func TestEncodeSimpleString(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	want := []byte{0x48, 0x45, 0x4C, 0x4C, 0x4F}
-	if string(got) != string(want) {
+	if !bytes.Equal(got, want) {
 		t.Errorf("got %X, want %X", got, want)
 	}
 }
@@ -21,7 +22,7 @@ func TestEncodeLowercase(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	want := []byte{0x48, 0x45, 0x4C, 0x4C, 0x4F}
-	if string(got) != string(want) {
+	if !bytes.Equal(got, want) {
 		t.Errorf("got %X, want %X", got, want)
 	}
 }
@@ -32,7 +33,7 @@ func TestEncodeDigits(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	want := []byte{0x31, 0x32, 0x33}
-	if string(got) != string(want) {
+	if !bytes.Equal(got, want) {
 		t.Errorf("got %X, want %X", got, want)
 	}
 }
@@ -114,7 +115,7 @@ func TestEncodeMixed(t *testing.T) {
 	}
 	// L=4C O=4F A=41 D=44 "=22 *=2A "=22 ,=2C 8=38 ,=2C 1=31 Return=0D
 	want := []byte{0x4C, 0x4F, 0x41, 0x44, 0x22, 0x2A, 0x22, 0x2C, 0x38, 0x2C, 0x31, 0x0D}
-	if string(got) != string(want) {
+	if !bytes.Equal(got, want) {
 		t.Errorf("got %X, want %X", got, want)
 	}
 }
@@ -146,8 +147,15 @@ func TestEncodePunctuation(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	want := []byte{0x2E, 0x2C, 0x3B, 0x3A, 0x3F, 0x21, 0x2B, 0x2D, 0x2A, 0x2F, 0x3D, 0x28, 0x29}
-	if string(got) != string(want) {
+	if !bytes.Equal(got, want) {
 		t.Errorf("got %X, want %X", got, want)
+	}
+}
+
+func TestEncodeTrailingBackslash(t *testing.T) {
+	_, err := Encode(`\`)
+	if err == nil {
+		t.Error("expected error for trailing backslash")
 	}
 }
 

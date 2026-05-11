@@ -17,6 +17,9 @@ func Encode(s string) ([]byte, error) {
 	i := 0
 	for i < len(s) {
 		if s[i] == '\\' {
+			if i+1 >= len(s) {
+				return nil, fmt.Errorf("unvollständige Escape-Sequenz am Stringende")
+			}
 			rest := s[i+1:]
 			var b byte
 			var consumed int
