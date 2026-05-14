@@ -3,9 +3,6 @@
 
 version: 2
 
-partial:
-  by: target
-
 before:
   hooks:
     - go mod tidy
@@ -68,9 +65,6 @@ archives:
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
 
-    files:
-      - README.md
-      - LICENSE.md
 
 checksum:
   name_template: 'checksums.txt'

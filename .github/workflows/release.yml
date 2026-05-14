@@ -52,12 +52,15 @@ jobs:
       - name: Package (tar.gz)
         if: matrix.goos != 'windows'
         working-directory: tools/c64u
-        run: tar czf ${{ matrix.asset }} c64u ../../README.md
+        run: tar czf ${{ matrix.asset }} c64u -C ../.. README.md
 
       - name: Package (zip)
         if: matrix.goos == 'windows'
         working-directory: tools/c64u
-        run: zip ${{ matrix.asset }} c64u.exe ../../README.md
+        run: |
+          cp ../../README.md .
+          zip ${{ matrix.asset }} c64u.exe README.md
+          rm README.md
 
       - uses: actions/upload-artifact@v4
         with:
@@ -99,7 +102,7 @@ jobs:
 
       - name: Package
         working-directory: tools/c64u
-        run: tar czf ${{ matrix.asset }} c64u ../../README.md
+        run: tar czf ${{ matrix.asset }} c64u -C ../.. README.md
 
       - uses: actions/upload-artifact@v4
         with:
