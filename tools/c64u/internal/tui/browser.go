@@ -17,6 +17,7 @@ type BrowserState int
 const (
 	BrowserBrowsing BrowserState = iota
 	BrowserSelectingDrive
+	BrowserDeleting
 )
 
 // BrowserModel handles the file browser view
@@ -192,7 +193,8 @@ func (m *BrowserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case statusMsg:
 		m.message = string(msg)
-		return m, nil
+		m.loading = true
+		return m, m.fetchFilesCmd(m.currentDir)
 
 	case FilePickerRequestMsg:
 		DebugLog("BrowserModel: FilePickerRequestMsg received")
@@ -212,6 +214,21 @@ func (m *BrowserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		// Handle Delete Confirmation State
+		if m.state == BrowserDeleting {
+			switch msg.String() {
+			case "y", "Y":
+				file := m.files[m.cursor]
+				m.state = BrowserBrowsing
+				m.message = ""
+				return m, m.deleteFileCmd(file)
+			case "n", "N", "esc":
+				m.state = BrowserBrowsing
+				m.message = ""
+			}
+			return m, nil
+		}
+
 		// Handle Drive Selection State
 		if m.state == BrowserSelectingDrive {
 			if msg.String() == "esc" {
@@ -334,6 +351,14 @@ func (m *BrowserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.fetchFilesCmd(parent)
 			}
 
+		case "d":
+			if len(m.files) == 0 || m.files[m.cursor].Name == ".." {
+				return m, nil
+			}
+			m.state = BrowserDeleting
+			m.message = fmt.Sprintf("Delete %q? (y/n)", m.files[m.cursor].Name)
+			return m, nil
+
 		case "esc":
 			// Handled by parent
 		}
@@ -390,6 +415,25 @@ func (m *BrowserModel) mountFileCmd(file api.FileEntry, drive string) tea.Cmd {
 			return FileContentMsg{Filename: file.Name, Err: err}
 		}
 		return FileContentMsg{Filename: file.Name, Content: data}
+	}
+}
+
+func (m *BrowserModel) deleteFileCmd(file api.FileEntry) tea.Cmd {
+	return func() tea.Msg {
+		fullPath := m.currentDir + "/" + file.Name
+		if m.currentDir == "/" {
+			fullPath = "/" + file.Name
+		}
+		var err error
+		if file.IsDir {
+			err = m.client.FTPDeleteDir(fullPath)
+		} else {
+			err = m.client.FTPDelete(fullPath)
+		}
+		if err != nil {
+			return errMsg{fmt.Errorf("delete failed: %w", err)}
+		}
+		return statusMsg("Deleted " + file.Name)
 	}
 }
 
