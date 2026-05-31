@@ -353,6 +353,235 @@ func (d *D64) WriteFile(filename string) error {
 	return err
 }
 
+// Bytes returns the raw D64 image data.
+func (d *D64) Bytes() ([]byte, error) {
+	result := make([]byte, len(d.data))
+	copy(result, d.data)
+	return result, nil
+}
+
+// DirEntry represents a single directory entry in a D64 image.
+type DirEntry struct {
+	Name     string // PETSCII filename, spaces trimmed
+	FileType string // "PRG", "SEQ", "USR", "REL", "DEL"
+	Blocks   int
+}
+
+// ReadD64Directory parses directory entries from raw D64 image bytes.
+// Returns entries, disk name, blocks used, error.
+func ReadD64Directory(data []byte) ([]DirEntry, string, int, error) {
+	if len(data) < D64Size35Tracks {
+		return nil, "", 0, fmt.Errorf("invalid D64: size %d < minimum %d", len(data), D64Size35Tracks)
+	}
+
+	bamOffset, err := sectorOffset(BAMTrack, BAMSector)
+	if err != nil {
+		return nil, "", 0, err
+	}
+
+	diskName := petsciiToASCII(data[bamOffset+0x90 : bamOffset+0xA0])
+
+	totalFree := 0
+	for track := 1; track <= MaxTracks35; track++ {
+		if track == BAMTrack {
+			continue
+		}
+		bamEntry := bamOffset + 4 + (track-1)*4
+		if bamEntry+1 <= len(data) {
+			totalFree += int(data[bamEntry])
+		}
+	}
+	const totalSectors = 664
+	blocksUsed := totalSectors - totalFree
+
+	var entries []DirEntry
+	track, sector := DirTrack, DirStartSector
+	visited := map[[2]int]bool{}
+
+	for {
+		key := [2]int{track, sector}
+		if visited[key] {
+			break
+		}
+		visited[key] = true
+
+		off, err := sectorOffset(track, sector)
+		if err != nil || off+SectorSize > len(data) {
+			break
+		}
+		sec := data[off : off+SectorSize]
+
+		nextTrack := int(sec[0])
+		nextSector := int(sec[1])
+
+		for i := 0; i < EntriesPerSector; i++ {
+			entryStart := 2 + i*DirEntrySize
+			if entryStart+DirEntrySize > len(sec) {
+				break
+			}
+			entry := sec[entryStart : entryStart+DirEntrySize]
+			fileType := entry[0]
+			if fileType == 0x00 {
+				continue
+			}
+			name := petsciiToASCII(entry[3:19])
+			blocks := int(entry[28]) | int(entry[29])<<8
+			entries = append(entries, DirEntry{
+				Name:     name,
+				FileType: fileTypeName(fileType),
+				Blocks:   blocks,
+			})
+		}
+
+		if nextTrack == 0 {
+			break
+		}
+		track, sector = nextTrack, nextSector
+	}
+
+	return entries, diskName, blocksUsed, nil
+}
+
+// ExtractPRG extracts a PRG file by name from raw D64 data.
+func ExtractPRG(data []byte, name string) ([]byte, error) {
+	entries, _, _, err := ReadD64Directory(data)
+	if err != nil {
+		return nil, err
+	}
+	found := false
+	for i := range entries {
+		if strings.EqualFold(entries[i].Name, name) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil, fmt.Errorf("file %q not found in disk image", name)
+	}
+	return extractFileData(data, name)
+}
+
+// extractFileData walks the D64 directory to find and extract file data by name.
+func extractFileData(data []byte, name string) ([]byte, error) {
+	track, sector := DirTrack, DirStartSector
+	visited := map[[2]int]bool{}
+
+	for {
+		key := [2]int{track, sector}
+		if visited[key] {
+			break
+		}
+		visited[key] = true
+
+		off, err := sectorOffset(track, sector)
+		if err != nil || off+SectorSize > len(data) {
+			break
+		}
+		sec := data[off : off+SectorSize]
+
+		for i := 0; i < EntriesPerSector; i++ {
+			entryStart := 2 + i*DirEntrySize
+			if entryStart+DirEntrySize > len(sec) {
+				break
+			}
+			entry := sec[entryStart : entryStart+DirEntrySize]
+			if entry[0] == 0x00 {
+				continue
+			}
+			entryName := petsciiToASCII(entry[3:19])
+			if !strings.EqualFold(entryName, name) {
+				continue
+			}
+			fileTrack := int(entry[1])
+			fileSector := int(entry[2])
+			var fileData []byte
+			fileVisited := map[[2]int]bool{}
+			for {
+				fkey := [2]int{fileTrack, fileSector}
+				if fileVisited[fkey] {
+					break
+				}
+				fileVisited[fkey] = true
+				foff, err := sectorOffset(fileTrack, fileSector)
+				if err != nil || foff+SectorSize > len(data) {
+					break
+				}
+				fsec := data[foff : foff+SectorSize]
+				nextTrack := int(fsec[0])
+				nextSector := int(fsec[1])
+				if nextTrack == 0 {
+					fileData = append(fileData, fsec[2:nextSector+1]...)
+					break
+				}
+				fileData = append(fileData, fsec[2:]...)
+				fileTrack, fileSector = nextTrack, nextSector
+			}
+			return fileData, nil
+		}
+
+		nextTrack := int(sec[0])
+		nextSector := int(sec[1])
+		if nextTrack == 0 {
+			break
+		}
+		track, sector = nextTrack, nextSector
+	}
+	return nil, fmt.Errorf("file %q not found", name)
+}
+
+// sectorOffset returns the byte offset for a given track/sector in D64 data.
+func sectorOffset(track, sector int) (int, error) {
+	if track < 1 || track > MaxTracks40 {
+		return 0, fmt.Errorf("invalid track %d", track)
+	}
+	offset := 0
+	for t := 1; t < track; t++ {
+		if t < len(trackSectors) {
+			offset += trackSectors[t] * SectorSize
+		}
+	}
+	if track < len(trackSectors) && sector >= trackSectors[track] {
+		return 0, fmt.Errorf("invalid sector %d for track %d", sector, track)
+	}
+	return offset + sector*SectorSize, nil
+}
+
+// petsciiToASCII converts PETSCII bytes to a printable ASCII string, trimming padding.
+// PETSCII 0x41-0x5A are uppercase letters (same as ASCII), kept as-is.
+// PETSCII 0x61-0x7A are lowercase letters, mapped to uppercase (C64 convention).
+func petsciiToASCII(b []byte) string {
+	var result []byte
+	for _, c := range b {
+		if c == PETSCIIPadding {
+			break
+		}
+		if c >= 0x61 && c <= 0x7A {
+			result = append(result, c-0x20) // PETSCII lowercase → ASCII uppercase
+		} else if c >= 0x20 && c < 0x80 {
+			result = append(result, c)
+		} else {
+			result = append(result, '?')
+		}
+	}
+	return strings.TrimRight(string(result), " ")
+}
+
+// fileTypeName converts a raw file type byte to a display string.
+func fileTypeName(t byte) string {
+	switch t & 0x0F {
+	case 0x01:
+		return "SEQ"
+	case 0x02:
+		return "PRG"
+	case 0x03:
+		return "USR"
+	case 0x04:
+		return "REL"
+	default:
+		return "DEL"
+	}
+}
+
 // AddFile adds a file to the disk image
 func (d *D64) AddFile(localPath string, diskFilename string, fileType byte) error {
 	// Read the local file
