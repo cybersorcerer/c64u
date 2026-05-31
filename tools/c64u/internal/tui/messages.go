@@ -1,5 +1,7 @@
 package tui
 
+import "github.com/cybersorcerer/c64.nvim/tools/c64u/internal/diskimage"
+
 // BackMsg is sent when a component wants to navigate back
 // BackMsg is sent when a component wants to navigate back
 type BackMsg struct{}
@@ -40,4 +42,19 @@ type FileContentMsg struct {
 	Filename string
 	Content  []byte
 	Err      error
+}
+
+// deviceInfoMsg carries device info fetched from GetInfo()
+type deviceInfoMsg struct {
+	Hostname string
+	Firmware string
+}
+
+// diskDirMsg carries parsed D64 directory entries
+type diskDirMsg struct {
+	DiskName   string
+	DiskPath   string
+	Entries    []diskimage.DirEntry
+	BlocksUsed int
+	Err        error
 }
