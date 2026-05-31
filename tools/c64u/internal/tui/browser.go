@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/api"
+	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/diskimage"
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/output"
 )
 
@@ -23,6 +24,7 @@ const (
 	BrowserMkdir
 	BrowserNewDisk
 	BrowserNewDiskNaming
+	BrowserViewingDisk
 )
 
 // BrowserModel handles the file browser view
@@ -47,6 +49,14 @@ type BrowserModel struct {
 	// New Disk
 	newDiskFormat   string
 	newDiskSelector *Selector
+
+	// Disk Image Viewer
+	diskEntries    []diskimage.DirEntry
+	diskName       string
+	diskPath       string
+	diskBlocksUsed int
+	diskCursor     int
+	diskAction     *Selector
 
 	// File Picking Mode
 	pickingMode  bool
@@ -197,6 +207,20 @@ func (m *BrowserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.driveSelector.PreventQuit = true
 		m.state = BrowserSelectingDrive
 		m.message = ""
+		return m, nil
+
+	case diskDirMsg:
+		m.loading = false
+		if msg.Err != nil {
+			m.err = msg.Err
+			return m, nil
+		}
+		m.state = BrowserViewingDisk
+		m.diskEntries = msg.Entries
+		m.diskName = msg.DiskName
+		m.diskPath = msg.DiskPath
+		m.diskBlocksUsed = msg.BlocksUsed
+		m.diskCursor = 0
 		return m, nil
 
 	case errMsg:
@@ -361,6 +385,58 @@ func (m *BrowserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
+		// Handle Disk Viewer State
+		if m.state == BrowserViewingDisk {
+			if m.diskAction != nil {
+				if msg.String() == "esc" {
+					m.diskAction = nil
+					return m, nil
+				}
+				_, cmd := m.diskAction.Update(msg)
+				if m.diskAction.cancelled {
+					m.diskAction = nil
+					return m, nil
+				}
+				if m.diskAction.confirmed {
+					action := m.diskAction.Items[m.diskAction.selected].Value
+					m.diskAction = nil
+					return m, m.diskActionCmd(action)
+				}
+				return m, cmd
+			}
+
+			switch msg.String() {
+			case "up", "k":
+				if m.diskCursor > 0 {
+					m.diskCursor--
+				}
+			case "down", "j":
+				if m.diskCursor < len(m.diskEntries)-1 {
+					m.diskCursor++
+				}
+			case "enter":
+				items := []SelectorItem{
+					{Label: "Mount to Drive A", Value: "mount-a", Description: "Mount disk image on Drive A (8)"},
+					{Label: "Mount to Drive B", Value: "mount-b", Description: "Mount disk image on Drive B (9)"},
+					{Label: "Unmount Drive A", Value: "unmount-a", Description: "Eject Drive A"},
+					{Label: "Unmount Drive B", Value: "unmount-b", Description: "Eject Drive B"},
+				}
+				if len(m.diskEntries) > 0 && m.diskEntries[m.diskCursor].FileType == "PRG" {
+					items = append([]SelectorItem{
+						{Label: "Run PRG", Value: "run-prg", Description: "Extract and run this program"},
+					}, items...)
+				}
+				m.diskAction = NewSelector("Disk Action", items)
+				return m, nil
+			case "esc":
+				m.state = BrowserBrowsing
+				m.diskEntries = nil
+				m.diskAction = nil
+				return m, nil
+			}
+			return m, nil
+		}
+
 		// Handle Browsing State
 		switch msg.String() {
 		case "up", "k":
@@ -438,9 +514,12 @@ func (m *BrowserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					ext = strings.ToLower(file.Name[dotIdx:])
 				}
 				if ext == ".d64" || ext == ".g64" || ext == ".d81" || ext == ".d71" || ext == ".g71" {
-					m.mountingFile = file
-					m.message = "Fetching drives..."
-					return m, m.fetchDrivesCmd()
+					fullPath := m.currentDir + "/" + file.Name
+					if m.currentDir == "/" {
+						fullPath = "/" + file.Name
+					}
+					m.loading = true
+					return m, m.loadDiskDirCmd(fullPath)
 				}
 				// Default to simple run for others
 				return m, m.mountFileCmd(file, "")
@@ -618,7 +697,118 @@ func (m *BrowserModel) createDiskCmd(format, name string) tea.Cmd {
 	}
 }
 
+func (m *BrowserModel) loadDiskDirCmd(path string) tea.Cmd {
+	return func() tea.Msg {
+		data, err := m.client.FTPReadFile(path)
+		if err != nil {
+			return diskDirMsg{Err: fmt.Errorf("cannot read disk image: %w", err)}
+		}
+		entries, name, blocksUsed, err := diskimage.ReadD64Directory(data)
+		if err != nil {
+			return diskDirMsg{Err: fmt.Errorf("cannot parse disk image: %w", err)}
+		}
+		return diskDirMsg{
+			DiskName:   name,
+			DiskPath:   path,
+			Entries:    entries,
+			BlocksUsed: blocksUsed,
+		}
+	}
+}
+
+func (m *BrowserModel) diskActionCmd(action string) tea.Cmd {
+	return func() tea.Msg {
+		switch action {
+		case "mount-a":
+			_, err := m.client.DrivesMount("a", m.diskPath, "", "")
+			if err != nil {
+				return errMsg{fmt.Errorf("mount failed: %w", err)}
+			}
+			return statusMsg("Mounted to Drive A")
+		case "mount-b":
+			_, err := m.client.DrivesMount("b", m.diskPath, "", "")
+			if err != nil {
+				return errMsg{fmt.Errorf("mount failed: %w", err)}
+			}
+			return statusMsg("Mounted to Drive B")
+		case "unmount-a":
+			_, err := m.client.DrivesRemove("a")
+			if err != nil {
+				return errMsg{fmt.Errorf("unmount failed: %w", err)}
+			}
+			return statusMsg("Drive A unmounted")
+		case "unmount-b":
+			_, err := m.client.DrivesRemove("b")
+			if err != nil {
+				return errMsg{fmt.Errorf("unmount failed: %w", err)}
+			}
+			return statusMsg("Drive B unmounted")
+		case "run-prg":
+			if len(m.diskEntries) == 0 {
+				return statusMsg("No entry selected")
+			}
+			entry := m.diskEntries[m.diskCursor]
+			return m.runPRGFromDisk(entry)
+		}
+		return statusMsg("Unknown action")
+	}
+}
+
+func (m *BrowserModel) runPRGFromDisk(entry diskimage.DirEntry) tea.Msg {
+	data, err := m.client.FTPReadFile(m.diskPath)
+	if err != nil {
+		return errMsg{fmt.Errorf("cannot read disk: %w", err)}
+	}
+	prgData, err := diskimage.ExtractPRG(data, entry.Name)
+	if err != nil {
+		return errMsg{fmt.Errorf("cannot extract PRG: %w", err)}
+	}
+	tmpName := "_tmp_" + strings.ReplaceAll(entry.Name, " ", "_") + ".prg"
+	tmpPath := m.currentDir + "/" + tmpName
+	if m.currentDir == "/" {
+		tmpPath = "/" + tmpName
+	}
+	if err := m.client.FTPUploadBytes(tmpPath, prgData); err != nil {
+		return errMsg{fmt.Errorf("upload failed: %w", err)}
+	}
+	_, runErr := m.client.RunPRG(tmpPath)
+	m.client.FTPDelete(tmpPath) //nolint:errcheck
+	if runErr != nil {
+		return errMsg{fmt.Errorf("run failed: %w", runErr)}
+	}
+	return statusMsg("Running " + entry.Name)
+}
+
+func (m *BrowserModel) diskDirView() string {
+	if m.diskAction != nil {
+		return m.diskAction.View()
+	}
+
+	var b strings.Builder
+	b.WriteString(HeaderStyle.Render(fmt.Sprintf("DISK: %s — %s", strings.ToUpper(m.diskName), m.diskPath)))
+	b.WriteString("\n\n")
+
+	for i, e := range m.diskEntries {
+		line := fmt.Sprintf("%-4d %-18q %-3s  %d", i+1, e.Name, e.FileType, e.Blocks)
+		if i == m.diskCursor {
+			b.WriteString(SelectedItemStyle.Render("▶ "+line) + "\n")
+		} else {
+			b.WriteString(ItemStyle.Render("  "+line) + "\n")
+		}
+	}
+
+	b.WriteString("\n")
+	b.WriteString(fmt.Sprintf("%d BLOCKS USED.\n", m.diskBlocksUsed))
+	b.WriteString("\n")
+	b.WriteString(StatusBarStyle.Render("↑/↓: navigate • Enter: action • Esc: back"))
+	return b.String()
+}
+
 func (m *BrowserModel) View() string {
+	if m.state == BrowserViewingDisk {
+		return m.diskDirView()
+	}
+
 	if m.state == BrowserNewDisk && m.newDiskSelector != nil {
 		return m.newDiskSelector.View()
 	}

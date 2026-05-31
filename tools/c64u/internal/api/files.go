@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -304,4 +305,14 @@ func (c *Client) FTPRename(oldPath, newPath string) error {
 	}
 
 	return nil
+}
+
+// FTPUploadBytes uploads raw bytes to a remote path via FTP.
+func (c *Client) FTPUploadBytes(remotePath string, data []byte) error {
+	conn, err := c.getFTPConn()
+	if err != nil {
+		return err
+	}
+	defer conn.Quit()
+	return conn.Stor(remotePath, bytes.NewReader(data))
 }
