@@ -22,6 +22,21 @@ const (
 	ViewFileViewer
 )
 
+type deviceInfo struct {
+	Hostname string
+	Firmware string
+}
+
+var tabs = []struct {
+	Label string
+	State ViewState
+}{
+	{"Files", ViewFileBrowser},
+	{"Drives", ViewDrives},
+	{"Machine", ViewMachineControl},
+	{"Config", ViewSettings},
+}
+
 // MainModel is the top-level bubble tea model
 type MainModel struct {
 	client    *api.Client
@@ -36,7 +51,9 @@ type MainModel struct {
 	config  *ConfigModel
 	viewer  *ViewerModel
 
-	selector *Selector // Main menu selector
+	selector  *Selector // Main menu selector
+	activeTab int
+	device    deviceInfo
 
 	// Help overlay
 	showHelp bool
@@ -51,33 +68,51 @@ type MainModel struct {
 func NewMainModel(client *api.Client) *MainModel {
 	m := &MainModel{
 		client:    client,
-		viewState: ViewMainMenu,
+		viewState: ViewFileBrowser,
+		activeTab: 0,
 		browser:   NewBrowserModel(client),
 		drives:    NewDrivesModel(client),
 		machine:   NewMachineModel(client),
 		config:    NewConfigModel(client),
 		viewer:    NewViewerModel(),
 	}
-
-	// Initialize Main Menu
-	m.selector = NewSelector("C64 Ultimate Control", []SelectorItem{
-		{Label: "File Browser", Value: "files", Description: "Browse and mount images"},
-		{Label: "Drive Management", Value: "drives", Description: "Control drives, mount/unmount"},
-		{Label: "Machine Control", Value: "machine", Description: "Reset, Reboot, Pause, etc."},
-		{Label: "Configuration", Value: "settings", Description: "Configure device settings"},
-		{Label: "Quit", Value: "quit", Description: "Exit TUI"},
-	})
-	m.selector.PreventQuit = true
-
 	return m
 }
 
 func (m *MainModel) Init() tea.Cmd {
+	return tea.Batch(
+		m.browser.Init(),
+		m.fetchDeviceInfoCmd(),
+	)
+}
+
+func (m *MainModel) fetchDeviceInfoCmd() tea.Cmd {
+	return func() tea.Msg {
+		resp, err := m.client.GetInfo()
+		if err != nil {
+			return deviceInfoMsg{}
+		}
+		hostname, _ := resp.Data["hostname"].(string)
+		firmware, _ := resp.Data["firmware"].(string)
+		return deviceInfoMsg{Hostname: hostname, Firmware: firmware}
+	}
+}
+
+func (m *MainModel) initActiveView() tea.Cmd {
+	switch m.viewState {
+	case ViewFileBrowser:
+		return m.browser.Init()
+	case ViewDrives:
+		return m.drives.Init()
+	case ViewMachineControl:
+		return m.machine.Init()
+	case ViewSettings:
+		return m.config.Init()
+	}
 	return nil
 }
 
 func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
 	var cmds []tea.Cmd
 
 	// Global key handlers
@@ -101,6 +136,18 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// If help is open, consume all other keys
 		if m.showHelp {
 			return m, nil
+		}
+
+		// Tab navigation
+		switch msg.String() {
+		case "tab":
+			m.activeTab = (m.activeTab + 1) % len(tabs)
+			m.viewState = tabs[m.activeTab].State
+			return m, m.initActiveView()
+		case "shift+tab":
+			m.activeTab = (m.activeTab - 1 + len(tabs)) % len(tabs)
+			m.viewState = tabs[m.activeTab].State
+			return m, m.initActiveView()
 		}
 
 	// Global status messages
@@ -184,57 +231,25 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewState = ViewFileViewer
 		return m, nil
 
+	case deviceInfoMsg:
+		m.device = deviceInfo{Hostname: msg.Hostname, Firmware: msg.Firmware}
+		return m, nil
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.browser.width = msg.Width - 4 // Account for padding
-		m.browser.height = msg.Height - 4
+		m.browser.width = msg.Width - 4
+		m.browser.height = msg.Height - 6
 		m.drives.width = msg.Width - 4
-		m.drives.height = msg.Height - 4
+		m.drives.height = msg.Height - 6
 		m.config.width = msg.Width - 4
-		m.config.height = msg.Height - 4
-
-		// Propagate size to children if they need it
+		m.config.height = msg.Height - 6
+		return m, nil
 	}
 
 	// Handle views
 	switch m.viewState {
-	case ViewMainMenu:
-		_, cmd = m.selector.Update(msg)
-		cmds = append(cmds, cmd)
-
-		// Handle cancellation (ESC) to quit app
-		if m.selector.cancelled {
-			return m, tea.Quit
-		}
-
-		if m.selector.confirmed {
-			m.selector.confirmed = false
-			selected := m.selector.Items[m.selector.selected]
-
-			switch selected.Value {
-			case "files":
-				m.viewState = ViewFileBrowser
-				cmds = append(cmds, m.browser.Init())
-			case "drives":
-				m.viewState = ViewDrives
-				cmds = append(cmds, m.drives.Init())
-			case "machine":
-				m.viewState = ViewMachineControl
-			case "settings":
-				m.viewState = ViewSettings
-				cmds = append(cmds, m.config.Init())
-			case "quit":
-				return m, tea.Quit
-			}
-		}
-
 	case ViewFileBrowser:
-		if msg, ok := msg.(tea.KeyMsg); ok && msg.String() == "esc" {
-			m.viewState = ViewMainMenu
-			return m, nil
-		}
-
 		newBrowser, cmd := m.browser.Update(msg)
 		m.browser = newBrowser.(*BrowserModel)
 		cmds = append(cmds, cmd)
@@ -244,17 +259,7 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.drives = newDrives.(*DrivesModel)
 		cmds = append(cmds, cmd)
 
-		// Check for BackMsg from child
-		if _, ok := msg.(BackMsg); ok {
-			m.viewState = ViewMainMenu
-		}
-
 	case ViewMachineControl:
-		if msg, ok := msg.(tea.KeyMsg); ok && (msg.String() == "esc" || msg.String() == "q") {
-			m.viewState = ViewMainMenu
-			return m, nil
-		}
-
 		newMachine, cmd := m.machine.Update(msg)
 		m.machine = newMachine.(*MachineModel)
 		cmds = append(cmds, cmd)
@@ -263,10 +268,6 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		newConfig, cmd := m.config.Update(msg)
 		m.config = newConfig.(*ConfigModel)
 		cmds = append(cmds, cmd)
-
-		if _, ok := msg.(BackMsg); ok {
-			m.viewState = ViewMainMenu
-		}
 
 	case ViewFileViewer:
 		if msg, ok := msg.(tea.KeyMsg); ok && (msg.String() == "esc" || msg.String() == "q") {
@@ -283,14 +284,47 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *MainModel) View() string {
-	var content string
+	if m.width == 0 {
+		return "Loading..."
+	}
 
+	// Header
+	title := "C64 Ultimate"
+	if m.device.Hostname != "" {
+		title += " — " + m.device.Hostname
+	}
+	if m.device.Firmware != "" {
+		title += "  fw: " + m.device.Firmware
+	}
+	header := HeaderStyle.Width(m.width - 2).Render(title)
+
+	// Tab bar
+	var tabParts []string
+	for i, t := range tabs {
+		if i == m.activeTab {
+			tabParts = append(tabParts, TabActiveStyle.Render(t.Label))
+		} else {
+			tabParts = append(tabParts, TabStyle.Render(t.Label))
+		}
+	}
+	tabsW := 0
+	for _, p := range tabParts {
+		tabsW += lipgloss.Width(p)
+	}
+	padding := m.width - 2 - tabsW
+	if padding < 0 {
+		padding = 0
+	}
+	tabBar := TabBarStyle.Width(m.width - 2).Render(
+		strings.Join(tabParts, "") + strings.Repeat(" ", padding),
+	)
+
+	// Content
+	var content string
 	if m.showHelp {
 		content = m.helpView()
 	} else {
 		switch m.viewState {
-		case ViewMainMenu:
-			content = m.selector.View()
 		case ViewFileBrowser:
 			content = m.browser.View()
 		case ViewDrives:
@@ -304,24 +338,24 @@ func (m *MainModel) View() string {
 		}
 	}
 
-	// Append status line as part of content (inside the box)
+	// Status bar
+	statusMsg := " Tab/S-Tab: switch view • ?: help • Ctrl+C: quit"
 	if m.statusMessage != "" {
-		// Measure the widest line in content to match status width
-		contentWidth := lipgloss.Width(content)
-		msg := " " + m.statusMessage + " "
-		if len(msg) < contentWidth {
-			msg += strings.Repeat(" ", contentWidth-len(msg))
-		}
-		content += "\n"
-		if m.statusIsError {
-			content += StatusErrorStyle.Render(msg)
-		} else {
-			content += StatusSuccessStyle.Render(msg)
-		}
+		statusMsg = " " + m.statusMessage + " "
+	}
+	statusW := m.width - 2
+	if len(statusMsg) < statusW {
+		statusMsg += strings.Repeat(" ", statusW-len(statusMsg))
+	}
+	var statusBar string
+	if m.statusIsError {
+		statusBar = StatusErrorStyle.Width(m.width - 2).Render(statusMsg)
+	} else {
+		statusBar = StatusBarStyle.Width(m.width - 2).Render(statusMsg)
 	}
 
-	// Apply box style
-	return BoxStyle.Render(content)
+	inner := lipgloss.JoinVertical(lipgloss.Left, header, tabBar, content, statusBar)
+	return BoxStyle.Width(m.width).Render(inner)
 }
 
 // helpView renders the context-dependent help overlay
