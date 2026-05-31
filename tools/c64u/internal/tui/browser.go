@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/api"
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/output"
@@ -18,6 +19,8 @@ const (
 	BrowserBrowsing BrowserState = iota
 	BrowserSelectingDrive
 	BrowserDeleting
+	BrowserRenaming
+	BrowserMkdir
 )
 
 // BrowserModel handles the file browser view
@@ -33,6 +36,7 @@ type BrowserModel struct {
 	loading    bool
 	err        error
 	message    string // status message
+	ti         textinput.Model
 
 	// Drive Selection
 	driveSelector *Selector
@@ -46,6 +50,8 @@ type BrowserModel struct {
 
 // NewBrowserModel creates a new browser
 func NewBrowserModel(client *api.Client) *BrowserModel {
+	ti := textinput.New()
+	ti.CharLimit = 40
 	return &BrowserModel{
 		client:     client,
 		state:      BrowserBrowsing,
@@ -53,6 +59,7 @@ func NewBrowserModel(client *api.Client) *BrowserModel {
 		cursor:     0,
 		offset:     0,
 		loading:    true,
+		ti:         ti,
 	}
 }
 
@@ -229,6 +236,45 @@ func (m *BrowserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Handle Rename / Mkdir State
+		if m.state == BrowserRenaming || m.state == BrowserMkdir {
+			switch msg.String() {
+			case "enter":
+				value := strings.TrimSpace(m.ti.Value())
+				if value == "" {
+					m.state = BrowserBrowsing
+					m.message = ""
+					return m, nil
+				}
+				if m.state == BrowserRenaming {
+					file := m.files[m.cursor]
+					m.state = BrowserBrowsing
+					m.message = ""
+					return m, m.renameCmd(file.Name, value)
+				}
+				if m.state == BrowserMkdir {
+					m.state = BrowserBrowsing
+					m.message = ""
+					return m, m.mkdirCmd(value)
+				}
+			case "esc":
+				m.state = BrowserBrowsing
+				m.message = ""
+				m.ti.Blur()
+				return m, nil
+			default:
+				var tiCmd tea.Cmd
+				m.ti, tiCmd = m.ti.Update(msg)
+				if m.state == BrowserMkdir {
+					m.message = "New folder name: " + m.ti.Value()
+				} else {
+					m.message = "Rename to: " + m.ti.Value()
+				}
+				return m, tiCmd
+			}
+			return m, nil
+		}
+
 		// Handle Drive Selection State
 		if m.state == BrowserSelectingDrive {
 			if msg.String() == "esc" {
@@ -359,6 +405,23 @@ func (m *BrowserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.message = fmt.Sprintf("Delete %q? (y/n)", m.files[m.cursor].Name)
 			return m, nil
 
+		case "r":
+			if len(m.files) == 0 || m.files[m.cursor].Name == ".." {
+				return m, nil
+			}
+			m.state = BrowserRenaming
+			m.ti.SetValue(m.files[m.cursor].Name)
+			m.ti.Focus()
+			m.message = "Rename to: (Enter to confirm, Esc to cancel)"
+			return m, textinput.Blink
+
+		case "m":
+			m.state = BrowserMkdir
+			m.ti.SetValue("")
+			m.ti.Focus()
+			m.message = "New folder name: (Enter to confirm, Esc to cancel)"
+			return m, textinput.Blink
+
 		case "esc":
 			// Handled by parent
 		}
@@ -434,6 +497,34 @@ func (m *BrowserModel) deleteFileCmd(file api.FileEntry) tea.Cmd {
 			return errMsg{fmt.Errorf("delete failed: %w", err)}
 		}
 		return statusMsg("Deleted " + file.Name)
+	}
+}
+
+func (m *BrowserModel) renameCmd(oldName, newName string) tea.Cmd {
+	return func() tea.Msg {
+		oldPath := m.currentDir + "/" + oldName
+		newPath := m.currentDir + "/" + newName
+		if m.currentDir == "/" {
+			oldPath = "/" + oldName
+			newPath = "/" + newName
+		}
+		if err := m.client.FTPRename(oldPath, newPath); err != nil {
+			return errMsg{fmt.Errorf("rename failed: %w", err)}
+		}
+		return statusMsg("Renamed to " + newName)
+	}
+}
+
+func (m *BrowserModel) mkdirCmd(name string) tea.Cmd {
+	return func() tea.Msg {
+		path := m.currentDir + "/" + name
+		if m.currentDir == "/" {
+			path = "/" + name
+		}
+		if err := m.client.FTPMkdir(path); err != nil {
+			return errMsg{fmt.Errorf("mkdir failed: %w", err)}
+		}
+		return statusMsg("Created folder " + name)
 	}
 }
 
