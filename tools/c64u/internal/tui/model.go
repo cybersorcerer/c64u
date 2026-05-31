@@ -372,6 +372,7 @@ func (m *MainModel) helpView() string {
 
 	// Common keys
 	common := []helpEntry{
+		{"Tab / Shift+Tab", "Switch view"},
 		{"↑ / k", "Move up"},
 		{"↓ / j", "Move down"},
 		{"Enter", "Select / Confirm"},
@@ -393,15 +394,13 @@ func (m *MainModel) helpView() string {
 	case ViewFileBrowser:
 		viewName = "File Browser"
 		specific = []helpEntry{
-			{"Enter", "Open directory / Mount or run file"},
+			{"Enter", "Open dir / View disk / Mount or run file"},
 			{"← / Backspace / h", "Go to parent directory"},
-			{"Esc", "Back to main menu"},
-		}
-		actions = []helpEntry{
-			{".d64 / .g64 / .d81", "Mount disk image (select target drive)"},
-			{".prg", "Run program"},
-			{".crt", "Run cartridge"},
-			{".sid", "Play SID music"},
+			{"d", "Delete file or directory (with confirmation)"},
+			{"r", "Rename file or directory"},
+			{"m", "Create new directory"},
+			{"n", "Create new disk image (D64/D71/D81)"},
+			{"Esc", "Back to previous view"},
 		}
 	case ViewDrives:
 		viewName = "Drive Management"
