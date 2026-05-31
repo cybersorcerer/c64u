@@ -391,7 +391,7 @@ func ReadD64Directory(data []byte) ([]DirEntry, string, int, error) {
 			totalFree += int(data[bamEntry])
 		}
 	}
-	const totalSectors = 664
+	const totalSectors = 664 // standard 35-track D64: 664 user-accessible sectors (excl. track 18)
 	blocksUsed := totalSectors - totalFree
 
 	var entries []DirEntry
@@ -494,6 +494,9 @@ func extractFileData(data []byte, name string) ([]byte, error) {
 			}
 			fileTrack := int(entry[1])
 			fileSector := int(entry[2])
+			if fileTrack < 1 {
+				return nil, fmt.Errorf("corrupt dir entry %q: invalid start track %d", name, fileTrack)
+			}
 			var fileData []byte
 			fileVisited := map[[2]int]bool{}
 			for {
@@ -510,7 +513,11 @@ func extractFileData(data []byte, name string) ([]byte, error) {
 				nextTrack := int(fsec[0])
 				nextSector := int(fsec[1])
 				if nextTrack == 0 {
-					fileData = append(fileData, fsec[2:nextSector+1]...)
+					end := nextSector + 1
+					if end < 2 {
+						end = 2
+					}
+					fileData = append(fileData, fsec[2:end]...)
 					break
 				}
 				fileData = append(fileData, fsec[2:]...)
