@@ -63,4 +63,20 @@ var (
 
 	HelpDescStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("7"))
+
+	// Tab bar styles
+	TabBarStyle = lipgloss.NewStyle().
+			Background(themePrimary).
+			Foreground(lipgloss.Color("7")).
+			Padding(0, 0)
+
+	TabStyle = lipgloss.NewStyle().
+			Padding(0, 2).
+			Foreground(lipgloss.Color("7"))
+
+	TabActiveStyle = lipgloss.NewStyle().
+			Padding(0, 2).
+			Bold(true).
+			Reverse(true).
+			Foreground(themeSecondary)
 )
