@@ -21,6 +21,8 @@ const (
 	BrowserDeleting
 	BrowserRenaming
 	BrowserMkdir
+	BrowserNewDisk
+	BrowserNewDiskNaming
 )
 
 // BrowserModel handles the file browser view
@@ -41,6 +43,10 @@ type BrowserModel struct {
 	// Drive Selection
 	driveSelector *Selector
 	mountingFile  api.FileEntry
+
+	// New Disk
+	newDiskFormat   string
+	newDiskSelector *Selector
 
 	// File Picking Mode
 	pickingMode  bool
@@ -275,6 +281,59 @@ func (m *BrowserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Handle New Disk Format Selection State
+		if m.state == BrowserNewDisk && m.newDiskSelector != nil {
+			if msg.String() == "esc" {
+				m.state = BrowserBrowsing
+				m.newDiskSelector = nil
+				return m, nil
+			}
+			_, cmd := m.newDiskSelector.Update(msg)
+			if m.newDiskSelector.cancelled {
+				m.state = BrowserBrowsing
+				m.newDiskSelector = nil
+				return m, nil
+			}
+			if m.newDiskSelector.confirmed {
+				m.newDiskFormat = m.newDiskSelector.Items[m.newDiskSelector.selected].Value
+				m.newDiskSelector = nil
+				m.state = BrowserNewDiskNaming
+				m.ti.SetValue("disk." + m.newDiskFormat)
+				m.ti.Focus()
+				m.message = "Filename: (Enter to confirm, Esc to cancel)"
+				return m, textinput.Blink
+			}
+			return m, cmd
+		}
+
+		// Handle New Disk Naming State
+		if m.state == BrowserNewDiskNaming {
+			switch msg.String() {
+			case "enter":
+				name := strings.TrimSpace(m.ti.Value())
+				if name == "" {
+					m.state = BrowserBrowsing
+					m.message = ""
+					return m, nil
+				}
+				format := m.newDiskFormat
+				m.state = BrowserBrowsing
+				m.message = ""
+				m.ti.Blur()
+				return m, m.createDiskCmd(format, name)
+			case "esc":
+				m.state = BrowserBrowsing
+				m.message = ""
+				m.ti.Blur()
+				return m, nil
+			default:
+				var tiCmd tea.Cmd
+				m.ti, tiCmd = m.ti.Update(msg)
+				m.message = "Filename: " + m.ti.Value()
+				return m, tiCmd
+			}
+		}
+
 		// Handle Drive Selection State
 		if m.state == BrowserSelectingDrive {
 			if msg.String() == "esc" {
@@ -422,6 +481,15 @@ func (m *BrowserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.message = "New folder name: (Enter to confirm, Esc to cancel)"
 			return m, textinput.Blink
 
+		case "n":
+			m.state = BrowserNewDisk
+			m.newDiskSelector = NewSelector("New Disk Image", []SelectorItem{
+				{Label: "D64 (1541)", Value: "d64", Description: "Standard 170KB, 35 tracks"},
+				{Label: "D71 (1571)", Value: "d71", Description: "Double-sided 340KB, 70 tracks"},
+				{Label: "D81 (1581)", Value: "d81", Description: "High-density 800KB, 80 tracks"},
+			})
+			return m, nil
+
 		case "esc":
 			// Handled by parent
 		}
@@ -528,7 +596,33 @@ func (m *BrowserModel) mkdirCmd(name string) tea.Cmd {
 	}
 }
 
+func (m *BrowserModel) createDiskCmd(format, name string) tea.Cmd {
+	return func() tea.Msg {
+		path := m.currentDir + "/" + name
+		if m.currentDir == "/" {
+			path = "/" + name
+		}
+		var err error
+		switch format {
+		case "d64":
+			_, err = m.client.FilesCreateD64(path, 35, "")
+		case "d71":
+			_, err = m.client.FilesCreateD71(path, "")
+		case "d81":
+			_, err = m.client.FilesCreateD81(path, "")
+		}
+		if err != nil {
+			return errMsg{fmt.Errorf("create disk failed: %w", err)}
+		}
+		return statusMsg("Created " + name)
+	}
+}
+
 func (m *BrowserModel) View() string {
+	if m.state == BrowserNewDisk && m.newDiskSelector != nil {
+		return m.newDiskSelector.View()
+	}
+
 	if m.state == BrowserSelectingDrive && m.driveSelector != nil {
 		return m.driveSelector.View()
 	}
