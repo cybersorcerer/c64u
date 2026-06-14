@@ -440,10 +440,12 @@ func (m *MainModel) helpView() string {
 
 	// Common keys
 	common := []helpEntry{
-		{"Tab / Shift+Tab", "Switch view"},
-		{"↑ / k", "Move up"},
-		{"↓ / j", "Move down"},
-		{"Enter", "Select / Confirm"},
+		{"1-5", "Jump to view"},
+		{"Ctrl+h / Ctrl+l", "Previous / next view"},
+		{"j / k", "Move down / up"},
+		{"g / G", "Top / bottom"},
+		{"Ctrl+d / Ctrl+u", "Half page down / up"},
+		{"Enter", "Select / open"},
 		{"Ctrl+C", "Quit application"},
 		{"?", "Toggle this help"},
 	}
@@ -460,15 +462,16 @@ func (m *MainModel) helpView() string {
 			{"q / Esc", "Quit"},
 		}
 	case ViewFileBrowser:
-		viewName = "File Browser"
+		viewName = "File Browser (dual-pane)"
 		specific = []helpEntry{
-			{"Enter", "Open dir / View disk / Mount or run file"},
-			{"← / Backspace / h", "Go to parent directory"},
-			{"d", "Delete file or directory (with confirmation)"},
-			{"r", "Rename file or directory"},
-			{"m", "Create new directory"},
-			{"n", "Create new disk image (D64/D71/D81)"},
-			{"Esc", "Back to previous view"},
+			{"Tab / h / l", "Switch active pane (local/remote)"},
+			{"Enter", "Open dir / mount disk / run PRG"},
+			{"Backspace", "Parent directory"},
+			{"Space", "Mark file (batch)"},
+			{"F5 / c", "Copy to other pane"},
+			{"d / r / m", "Delete / rename / mkdir"},
+			{"n", "New disk image (remote pane)"},
+			{"p", "Toggle preview column"},
 		}
 	case ViewDrives:
 		viewName = "Drive Management"
