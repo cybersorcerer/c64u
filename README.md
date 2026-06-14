@@ -6,7 +6,7 @@ A command-line interface for controlling the [Commodore C64 Ultimate](https://co
 
 - **Complete REST API Coverage**: All C64 Ultimate API endpoints supported
 - **Interactive TUI**: Full-screen terminal UI for browsing, mounting, and controlling
-- **Live Video Stream**: Display C64 video output in a native window with full keyboard forwarding — use your Mac keyboard to interact directly with the real C64 hardware
+- **Live Video Stream**: Display C64 video output in a native window with keyboard forwarding — type into BASIC, load and run programs from your Mac keyboard (BASIC/KERNAL input only; games that poll the keyboard matrix directly are not supported)
 - **Live Audio Stream**: Play back C64 audio in real time
 - **FTP Integration**: Access the C64 Ultimate filesystem
 - **Flexible Configuration**: Config file, environment variables, or CLI flags
@@ -155,7 +155,9 @@ c64u streams stop <stream>
 
 **Video Stream**: Opens a native 768×544 window (2× scaled) with accurate VIC colors. PAL (384×272) and NTSC (384×240) supported.
 
-While the video window is focused, all keystrokes are forwarded to the C64 keyboard buffer via DMA — the window acts as a keyboard input device for the real hardware.
+While the video window is focused, keystrokes are forwarded to the C64 keyboard buffer via DMA — the window acts as a keyboard input device for the real hardware.
+
+> **Important — BASIC only, not games:** Keyboard forwarding works only for input that the C64 KERNAL/BASIC reads from the keyboard buffer at `$0277` (the BASIC prompt, `INPUT`, `GET`, typing/loading programs). It writes to RAM via DMA. Most **games and demos poll the keyboard matrix hardware directly** (CIA registers `$DC00`/`$DC01`) — for example a "press SPACE to start" title screen. DMA cannot reach those I/O registers, so such keypresses have no effect. This is a hardware limitation of the Ultimate REST API, not a bug.
 
 | Key                          | C64 action                                          |
 | ---------------------------- | --------------------------------------------------- |
