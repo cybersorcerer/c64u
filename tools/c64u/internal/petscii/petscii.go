@@ -84,41 +84,20 @@ func Encode(s string) ([]byte, error) {
 func asciiToPetscii(c byte) (byte, error) {
 	switch {
 	case c >= 'a' && c <= 'z':
+		// Lowercase ASCII maps to PETSCII 0x41-0x5A (unshifted letters).
 		return c - 'a' + 0x41, nil
 	case c >= 'A' && c <= 'Z':
 		return c - 'A' + 0x41, nil
-	case c >= '0' && c <= '9':
+	// Printable ASCII 0x20-0x3F (space, digits, common punctuation) is
+	// identical in PETSCII: ! " # $ % & ' ( ) * + , - . / 0-9 : ; < = > ?
+	case c >= 0x20 && c <= 0x3F:
 		return c, nil
-	case c == ' ':
-		return 0x20, nil
-	case c == '.':
-		return 0x2E, nil
-	case c == ',':
-		return 0x2C, nil
-	case c == ';':
-		return 0x3B, nil
-	case c == ':':
-		return 0x3A, nil
-	case c == '?':
-		return 0x3F, nil
-	case c == '!':
-		return 0x21, nil
-	case c == '"':
-		return 0x22, nil
-	case c == '+':
-		return 0x2B, nil
-	case c == '-':
-		return 0x2D, nil
-	case c == '*':
-		return 0x2A, nil
-	case c == '/':
-		return 0x2F, nil
-	case c == '=':
-		return 0x3D, nil
-	case c == '(':
-		return 0x28, nil
-	case c == ')':
-		return 0x29, nil
+	case c == '@':
+		return 0x40, nil
+	case c == '[':
+		return 0x5B, nil
+	case c == ']':
+		return 0x5D, nil
 	}
 	return 0, fmt.Errorf("unbekanntes Zeichen: %q", c)
 }
