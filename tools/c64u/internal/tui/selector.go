@@ -66,15 +66,8 @@ func (s *Selector) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return s, tea.Quit
 
-		case "up", "k":
-			if s.cursor > 0 {
-				s.cursor--
-			}
-
-		case "down", "j":
-			if s.cursor < len(s.Items)-1 {
-				s.cursor++
-			}
+		case "up", "k", "down", "j", "g", "G", "ctrl+d", "ctrl+u":
+			s.cursor = applyListNav(msg.String(), s.cursor, len(s.Items), s.height-6)
 		}
 
 	case tea.WindowSizeMsg:
@@ -94,8 +87,8 @@ func (s *Selector) View() string {
 	var b strings.Builder
 
 	// Title
-	b.WriteString(HeaderStyle.Render(s.Title))
-	b.WriteString("\n\n")
+	b.WriteString(ItemStyle.Render(s.Title))
+	b.WriteString("\n")
 
 	// Calculate visible range
 	maxVisible := s.height - 6
@@ -123,16 +116,16 @@ func (s *Selector) View() string {
 		}
 
 		if i == s.cursor {
-			b.WriteString(SelectedItemStyle.Render(line))
+			b.WriteString(SelectedItemStyle.Render("▶ " + line))
 		} else {
-			b.WriteString(ItemStyle.Render(line))
+			b.WriteString(ItemStyle.Render("  " + line))
 		}
 		b.WriteString("\n")
 	}
 
 	// Help text
 	b.WriteString("\n")
-	b.WriteString(StatusBarStyle.Render("↑/k: up • ↓/j: down • enter: select • q/esc: cancel"))
+	b.WriteString(StatusBarStyle.Width(s.width).Render("↑/↓: nav  Enter: select  Esc: cancel"))
 
 	return b.String()
 }

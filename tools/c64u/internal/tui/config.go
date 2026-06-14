@@ -409,22 +409,20 @@ func (m *ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Selection Mode (Categories or Items)
 		switch msg.String() {
-		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
-			} else if m.offset > 0 {
-				m.offset--
-			}
-		case "down", "j":
+		case "up", "k", "down", "j", "g", "G", "ctrl+d", "ctrl+u":
 			listLen := len(m.categories)
 			if m.state == ConfigItems {
 				listLen = len(m.items)
 			}
-			if m.cursor < listLen-1 {
-				m.cursor++
-				if m.cursor >= m.offset+m.height-5 {
-					m.offset++
-				}
+			m.cursor = applyListNav(msg.String(), m.cursor, listLen, m.height-3)
+			if m.cursor >= m.offset+m.height-5 {
+				m.offset = m.cursor - (m.height - 5) + 1
+			}
+			if m.cursor < m.offset {
+				m.offset = m.cursor
+			}
+			if m.offset < 0 {
+				m.offset = 0
 			}
 
 		case "enter":
@@ -516,9 +514,10 @@ func (m *ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *ConfigModel) View() string {
 	if m.state == ConfigMenu {
+		m.menuSelector.width = m.width
 		base := m.menuSelector.View()
 		if m.message != "" {
-			return base + "\n" + StatusBarStyle.Render(m.message)
+			return base + "\n" + StatusBarStyle.Width(m.width).Render(m.message)
 		}
 		return base
 	}
@@ -533,21 +532,23 @@ func (m *ConfigModel) View() string {
 	var b strings.Builder
 
 	if m.state == ConfigEditing {
-		b.WriteString(HeaderStyle.Render("Edit Setting: " + m.editItem.Key))
-		b.WriteString("\n\n")
+		m.textInput.Width = m.width - 4
+		b.WriteString(ItemStyle.Render("Edit: " + m.editItem.Key))
+		b.WriteString("\n")
 		b.WriteString(m.textInput.View())
-		b.WriteString("\n\n")
-		b.WriteString(StatusBarStyle.Render("Enter: Save • Esc: Cancel"))
+		b.WriteString("\n")
+		b.WriteString(StatusBarStyle.Width(m.width).Render("Enter: Save  Esc: Cancel"))
 		return b.String()
 	}
 
 	if m.state == ConfigFileNaming {
-		b.WriteString(HeaderStyle.Render("Save Configuration"))
-		b.WriteString("\n\nDirectory: " + m.saveDir + "\n")
+		m.textInput.Width = m.width - 4
+		b.WriteString(ItemStyle.Render("Save Configuration"))
+		b.WriteString("\nDirectory: " + m.saveDir + "\n")
 		b.WriteString("Filename:\n")
 		b.WriteString(m.textInput.View())
-		b.WriteString("\n\n")
-		b.WriteString(StatusBarStyle.Render("Enter: Save • Esc: Cancel"))
+		b.WriteString("\n")
+		b.WriteString(StatusBarStyle.Width(m.width).Render("Enter: Save  Esc: Cancel"))
 		return b.String()
 	}
 
@@ -555,11 +556,11 @@ func (m *ConfigModel) View() string {
 	if m.state == ConfigItems {
 		title = "Settings: " + m.currentCategory
 	}
-	b.WriteString(HeaderStyle.Render(title))
-	b.WriteString("\n\n")
+	b.WriteString(ItemStyle.Render(title))
+	b.WriteString("\n")
 
 	start := m.offset
-	end := start + m.height - 5
+	end := start + m.height - 3
 
 	listLen := len(m.categories)
 	if m.state == ConfigItems {
@@ -611,16 +612,15 @@ func (m *ConfigModel) View() string {
 		b.WriteString(line + "\n")
 	}
 
-	b.WriteString("\n")
-	if m.message != "" {
-		b.WriteString(StatusBarStyle.Render(m.message))
-	} else {
-		help := "Select category"
+	footer := m.message
+	if footer == "" {
 		if m.state == ConfigItems {
-			help = "Select item to edit (Enter toggles bools)"
+			footer = "Enter: edit/toggle  Esc: back  ?: help"
+		} else {
+			footer = "Enter: open  Esc: back  ?: help"
 		}
-		b.WriteString(StatusBarStyle.Render(help))
 	}
+	b.WriteString("\n" + StatusBarStyle.Width(m.width).Render(footer))
 
 	return b.String()
 }

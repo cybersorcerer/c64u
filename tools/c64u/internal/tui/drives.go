@@ -152,14 +152,8 @@ func (m *DrivesModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
-			}
-		case "down", "j":
-			if m.cursor < len(m.drives)-1 {
-				m.cursor++
-			}
+		case "up", "k", "down", "j", "g", "G", "ctrl+d", "ctrl+u":
+			m.cursor = applyListNav(msg.String(), m.cursor, len(m.drives), m.height-3)
 		case "enter":
 			if len(m.drives) > 0 {
 				m.selectedDrive = m.drives[m.cursor].Letter
@@ -257,9 +251,8 @@ func (m *DrivesModel) View() string {
 
 	var b strings.Builder
 
-	// Use Header Style consistent with other views
-	b.WriteString(HeaderStyle.Render("Drive Management"))
-	b.WriteString("\n\n")
+	b.WriteString(ItemStyle.Render("Drives"))
+	b.WriteString("\n")
 
 	for i, drive := range m.drives {
 		// Build line content
@@ -300,12 +293,11 @@ func (m *DrivesModel) View() string {
 		}
 	}
 
-	b.WriteString("\n")
-	if m.message != "" {
-		b.WriteString(StatusBarStyle.Render(m.message))
-	} else {
-		b.WriteString(StatusBarStyle.Render("↑/↓: select • Enter: actions"))
+	footer := m.message
+	if footer == "" {
+		footer = "↑/↓: select  Enter: actions  ?: help"
 	}
+	b.WriteString("\n" + StatusBarStyle.Width(m.width).Render(footer))
 
 	return b.String()
 }
