@@ -2,6 +2,12 @@ package tui
 
 import "github.com/cybersorcerer/c64.nvim/tools/c64u/internal/diskimage"
 
+// statusMsg is a short-lived status string shown in the global status bar.
+type statusMsg string
+
+// errMsg carries an error to be shown in the global status bar.
+type errMsg struct{ err error }
+
 // BackMsg is sent when a component wants to navigate back
 // BackMsg is sent when a component wants to navigate back
 type BackMsg struct{}

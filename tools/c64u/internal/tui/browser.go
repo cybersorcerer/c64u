@@ -2,880 +2,394 @@ package tui
 
 import (
 	"fmt"
-	"sort"
+	"os"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/lipgloss"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/api"
-	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/diskimage"
-	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/output"
 )
 
-// BrowserState represents the state of the browser
-type BrowserState int
+type browserState int
 
 const (
-	BrowserBrowsing BrowserState = iota
-	BrowserSelectingDrive
-	BrowserDeleting
-	BrowserRenaming
-	BrowserMkdir
-	BrowserNewDisk
-	BrowserNewDiskNaming
-	BrowserViewingDisk
+	browserBrowsing browserState = iota
+	browserDeleting
+	browserRenaming
+	browserMkdir
+	browserNewDisk
+	browserNewDiskNaming
+	browserDiskAction
 )
 
-// BrowserModel handles the file browser view
+// BrowserModel is the dual-pane file browser (local | remote | preview).
 type BrowserModel struct {
-	client     *api.Client
-	state      BrowserState
-	currentDir string
-	files      []api.FileEntry
-	cursor     int
-	offset     int
-	width      int
-	height     int
-	loading    bool
-	err        error
-	message    string // status message
-	ti         textinput.Model
+	client  *api.Client
+	local   *PaneModel
+	remote  *PaneModel
+	activeP *PaneModel
+	width   int
+	height  int
 
-	// Drive Selection
-	driveSelector *Selector
-	mountingFile  api.FileEntry
+	showPreview bool
+	previewData []byte
+	previewName string
 
-	// New Disk
+	state   browserState
+	ti      textinput.Model
+	message string
+
 	newDiskFormat   string
 	newDiskSelector *Selector
 
-	// Disk Image Viewer
-	diskEntries    []diskimage.DirEntry
-	diskName       string
-	diskPath       string
-	diskBlocksUsed int
-	diskCursor     int
-	diskAction     *Selector
-
-	// File Picking Mode
-	pickingMode  bool
-	pickingDir   bool
-	pickingDrive string
+	diskSelector *Selector
+	diskPath     string
 }
 
-// NewBrowserModel creates a new browser
 func NewBrowserModel(client *api.Client) *BrowserModel {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		home = "/"
+	}
+	local := newPaneModel(&localSource{}, "LOCAL", home)
+	remote := newPaneModel(&remoteSource{client: client}, "REMOTE", "/")
+
 	ti := textinput.New()
-	ti.CharLimit = 40
-	return &BrowserModel{
-		client:     client,
-		state:      BrowserBrowsing,
-		currentDir: "/",
-		cursor:     0,
-		offset:     0,
-		loading:    true,
-		ti:         ti,
+	ti.CharLimit = 64
+
+	m := &BrowserModel{
+		client:      client,
+		local:       local,
+		remote:      remote,
+		showPreview: true,
+		state:       browserBrowsing,
+		ti:          ti,
 	}
+	local.active = true
+	m.activeP = local
+	return m
 }
 
-// Init loads the initial directory
 func (m *BrowserModel) Init() tea.Cmd {
-	return m.fetchFilesCmd(m.currentDir)
-}
-
-// fetchFilesCmd returns a command to fetch files
-func (m *BrowserModel) fetchFilesCmd(path string) tea.Cmd {
 	return func() tea.Msg {
-		DebugLog("BrowserModel: fetching files for %s", path)
-		if !strings.HasPrefix(path, "/") {
-			path = "/" + path
-		}
-
-		files, err := m.client.FTPList(path)
-		if err != nil {
-			return errMsg{err}
-		}
-
-		// Sort files: Directories first, then alphabetical
-		sort.Slice(files, func(i, j int) bool {
-			if files[i].IsDir && !files[j].IsDir {
-				return true
-			}
-			if !files[i].IsDir && files[j].IsDir {
-				return false
-			}
-			return strings.ToLower(files[i].Name) < strings.ToLower(files[j].Name)
-		})
-
-		// Add ".." if not root
-		if path != "/" {
-			parent := api.FileEntry{
-				Name:  "..",
-				IsDir: true,
-				Type:  "dir",
-			}
-			files = append([]api.FileEntry{parent}, files...)
-		}
-
-		return fileListMsg{path: path, files: files}
+		m.local.reload()  //nolint:errcheck
+		m.remote.reload() //nolint:errcheck
+		return paneReloadMsg{side: "both"}
 	}
 }
 
-// fetchDrivesCmd queries enabled drives
-func (m *BrowserModel) fetchDrivesCmd() tea.Cmd {
-	return func() tea.Msg {
-		resp, err := m.client.DrivesList()
-		if err != nil {
-			return errMsg{err}
-		}
-		if resp.HasErrors() {
-			return errMsg{fmt.Errorf("API errors: %v", resp.Errors)}
-		}
-
-		drives, ok := resp.Data["drives"].([]interface{})
-		if !ok || len(drives) == 0 {
-			return statusMsg("No drives found")
-		}
-
-		var items []SelectorItem
-		for _, driveData := range drives {
-			driveMap, ok := driveData.(map[string]interface{})
-			if !ok {
-				continue
-			}
-
-			for driveName, driveInfo := range driveMap {
-				info, ok := driveInfo.(map[string]interface{})
-				if !ok {
-					continue
-				}
-
-				if enabled, ok := info["enabled"].(bool); !ok || !enabled {
-					continue
-				}
-
-				// Copy logic from CLI: "Drive A" -> "a"
-				driveLetter := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(driveName, "Drive")))
-
-				desc := ""
-				if img, ok := info["image_file"].(string); ok && img != "" {
-					desc = "Mounted: " + img
-				}
-
-				items = append(items, SelectorItem{
-					Label:       driveName,
-					Value:       driveLetter,
-					Description: desc,
-				})
-			}
-		}
-
-		if len(items) == 0 {
-			return statusMsg("No enabled drives found")
-		}
-
-		return driveListMsg(items)
+func (m *BrowserModel) other() *PaneModel {
+	if m.activeP == m.local {
+		return m.remote
 	}
+	return m.local
 }
 
-// Messages
-type fileListMsg struct {
-	path  string
-	files []api.FileEntry
+func (m *BrowserModel) setActive(p *PaneModel) {
+	m.local.active = false
+	m.remote.active = false
+	p.active = true
+	m.activeP = p
+	m.previewName = ""
 }
 
-type driveListMsg []SelectorItem
+func (m *BrowserModel) layoutPanes() {
+	paneH := m.height - 1
+	if paneH < 3 {
+		paneH = 3
+	}
+	cols := 2
+	if m.showPreview {
+		cols = 3
+	}
+	colW := (m.width - (cols - 1)) / cols
+	if colW < 10 {
+		colW = 10
+	}
+	m.local.width, m.local.height = colW, paneH
+	m.remote.width, m.remote.height = colW, paneH
+}
 
-type errMsg struct{ err error }
-
-type statusMsg string
-
-// Update handles browser events
 func (m *BrowserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case fileListMsg:
-		m.loading = false
-		m.currentDir = msg.path
-		m.files = msg.files
-		m.cursor = 0
-		m.offset = 0
+	case paneReloadMsg:
+		if msg.err != nil {
+			m.message = "error: " + msg.err.Error()
+		}
+		return m, m.refreshPreviewCmd()
+
+	case transferDoneMsg:
+		if msg.err != nil {
+			m.message = "transfer failed: " + msg.err.Error()
+		} else {
+			m.message = fmt.Sprintf("Copied %d item(s)", msg.count)
+		}
+		m.activeP.clearMarks()
+		m.other().reload() //nolint:errcheck
 		return m, nil
 
-	case driveListMsg:
-		m.driveSelector = NewSelector("Select Target Drive", []SelectorItem(msg))
-		m.driveSelector.PreventQuit = true
-		m.state = BrowserSelectingDrive
-		m.message = ""
+	case previewLoadedMsg:
+		m.previewData = msg.data
+		m.previewName = msg.name
 		return m, nil
 
-	case diskDirMsg:
-		m.loading = false
-		if msg.Err != nil {
-			m.err = msg.Err
+	case diskDirLoadedMsg:
+		if msg.err != nil {
+			m.message = "cannot read disk: " + msg.err.Error()
+			m.state = browserBrowsing
 			return m, nil
 		}
-		m.state = BrowserViewingDisk
-		m.diskEntries = msg.Entries
-		m.diskName = msg.DiskName
-		m.diskPath = msg.DiskPath
-		m.diskBlocksUsed = msg.BlocksUsed
-		m.diskCursor = 0
-		return m, nil
-
-	case errMsg:
-		m.loading = false
-		m.err = msg.err
-		return m, nil
-
-	case statusMsg:
-		m.message = string(msg)
-		m.loading = true
-		return m, m.fetchFilesCmd(m.currentDir)
-
-	case FilePickerRequestMsg:
-		DebugLog("BrowserModel: FilePickerRequestMsg received")
-		m.pickingMode = true
-		m.pickingDrive = msg.Drive
-		m.loading = true
-		m.files = nil
-		m.cursor = 0
-		m.message = "Select a file for Drive " + strings.ToUpper(msg.Drive)
-		return m, nil
-
-	case DirPickerRequestMsg:
-		m.pickingDir = true
-		m.loading = true
-		m.cursor = 0
-		m.message = "Navigate to folder and press 's' to select"
+		m.diskPath = msg.path
+		m.diskSelector = NewSelector("Disk: "+msg.name, diskActionItems(msg.hasPRG))
+		m.state = browserDiskAction
 		return m, nil
 
 	case tea.KeyMsg:
-		// Handle Delete Confirmation State
-		if m.state == BrowserDeleting {
-			switch msg.String() {
-			case "y", "Y":
-				file := m.files[m.cursor]
-				m.state = BrowserBrowsing
-				m.message = ""
-				return m, m.deleteFileCmd(file)
-			case "n", "N", "esc":
-				m.state = BrowserBrowsing
-				m.message = ""
+		return m.handleKey(msg)
+	}
+	return m, nil
+}
+
+func (m *BrowserModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+
+	switch m.state {
+	case browserDeleting:
+		switch key {
+		case "y", "Y":
+			cur, ok := m.activeP.currentItem()
+			m.state = browserBrowsing
+			m.message = ""
+			if ok {
+				return m, m.deleteCmd(cur)
 			}
-			return m, nil
+		case "n", "N", "esc":
+			m.state = browserBrowsing
+			m.message = ""
 		}
+		return m, nil
 
-		// Handle Rename / Mkdir State
-		if m.state == BrowserRenaming || m.state == BrowserMkdir {
-			switch msg.String() {
-			case "enter":
-				value := strings.TrimSpace(m.ti.Value())
-				if value == "" {
-					m.state = BrowserBrowsing
-					m.message = ""
-					return m, nil
-				}
-				if m.state == BrowserRenaming {
-					file := m.files[m.cursor]
-					m.state = BrowserBrowsing
-					m.message = ""
-					return m, m.renameCmd(file.Name, value)
-				}
-				if m.state == BrowserMkdir {
-					m.state = BrowserBrowsing
-					m.message = ""
-					return m, m.mkdirCmd(value)
-				}
-			case "esc":
-				m.state = BrowserBrowsing
-				m.message = ""
-				m.ti.Blur()
-				return m, nil
-			default:
-				var tiCmd tea.Cmd
-				m.ti, tiCmd = m.ti.Update(msg)
-				if m.state == BrowserMkdir {
-					m.message = "New folder name: " + m.ti.Value()
-				} else {
-					m.message = "Rename to: " + m.ti.Value()
-				}
-				return m, tiCmd
-			}
-			return m, nil
+	case browserRenaming, browserMkdir, browserNewDiskNaming:
+		return m.handleTextInput(msg)
+
+	case browserNewDisk:
+		return m.handleNewDiskSelect(msg)
+
+	case browserDiskAction:
+		return m.handleDiskAction(msg)
+	}
+
+	switch key {
+	case "tab":
+		m.setActive(m.other())
+		return m, m.refreshPreviewCmd()
+	case "h", "left":
+		m.setActive(m.local)
+		return m, m.refreshPreviewCmd()
+	case "l":
+		m.setActive(m.remote)
+		return m, m.refreshPreviewCmd()
+	case "p":
+		m.showPreview = !m.showPreview
+		return m, nil
+	case "j", "k", "down", "up", "g", "G", "ctrl+d", "ctrl+u":
+		m.activeP.handleNav(key)
+		return m, m.refreshPreviewCmd()
+	case "enter":
+		return m.handleEnter()
+	case "backspace":
+		m.activeP.goParent() //nolint:errcheck
+		return m, m.refreshPreviewCmd()
+	case " ":
+		m.activeP.toggleMark()
+		m.activeP.handleNav("j")
+		return m, nil
+	case "f5", "c":
+		return m, m.copyCmd()
+	case "d":
+		cur, ok := m.activeP.currentItem()
+		if ok {
+			m.state = browserDeleting
+			m.message = fmt.Sprintf("Delete %q? (y/n)", cur.Name)
 		}
-
-		// Handle New Disk Format Selection State
-		if m.state == BrowserNewDisk && m.newDiskSelector != nil {
-			if msg.String() == "esc" {
-				m.state = BrowserBrowsing
-				m.newDiskSelector = nil
-				return m, nil
-			}
-			_, cmd := m.newDiskSelector.Update(msg)
-			if m.newDiskSelector.cancelled {
-				m.state = BrowserBrowsing
-				m.newDiskSelector = nil
-				return m, nil
-			}
-			if m.newDiskSelector.confirmed {
-				m.newDiskFormat = m.newDiskSelector.Items[m.newDiskSelector.selected].Value
-				m.newDiskSelector = nil
-				m.state = BrowserNewDiskNaming
-				m.ti.SetValue("disk." + m.newDiskFormat)
-				m.ti.Focus()
-				m.message = "Filename: (Enter to confirm, Esc to cancel)"
-				return m, textinput.Blink
-			}
-			return m, cmd
-		}
-
-		// Handle New Disk Naming State
-		if m.state == BrowserNewDiskNaming {
-			switch msg.String() {
-			case "enter":
-				name := strings.TrimSpace(m.ti.Value())
-				if name == "" {
-					m.state = BrowserBrowsing
-					m.message = ""
-					return m, nil
-				}
-				format := m.newDiskFormat
-				m.state = BrowserBrowsing
-				m.message = ""
-				m.ti.Blur()
-				return m, m.createDiskCmd(format, name)
-			case "esc":
-				m.state = BrowserBrowsing
-				m.message = ""
-				m.ti.Blur()
-				return m, nil
-			default:
-				var tiCmd tea.Cmd
-				m.ti, tiCmd = m.ti.Update(msg)
-				m.message = "Filename: " + m.ti.Value()
-				return m, tiCmd
-			}
-		}
-
-		// Handle Drive Selection State
-		if m.state == BrowserSelectingDrive {
-			if msg.String() == "esc" {
-				m.state = BrowserBrowsing
-				m.message = "Mount cancelled"
-				return m, nil
-			}
-
-			// Delegate
-			_, cmd := m.driveSelector.Update(msg)
-
-			if m.driveSelector.cancelled {
-				m.driveSelector = nil
-				m.state = BrowserBrowsing
-				m.message = "Mount cancelled"
-				return m, nil
-			}
-
-			if m.driveSelector.confirmed {
-				m.driveSelector.confirmed = false
-				selected := m.driveSelector.Items[m.driveSelector.selected]
-				m.state = BrowserBrowsing
-				return m, m.mountFileCmd(m.mountingFile, selected.Value)
-			}
-			return m, cmd
-		}
-
-		// Handle Disk Viewer State
-		if m.state == BrowserViewingDisk {
-			if m.diskAction != nil {
-				if msg.String() == "esc" {
-					m.diskAction = nil
-					return m, nil
-				}
-				_, cmd := m.diskAction.Update(msg)
-				if m.diskAction.cancelled {
-					m.diskAction = nil
-					return m, nil
-				}
-				if m.diskAction.confirmed {
-					action := m.diskAction.Items[m.diskAction.selected].Value
-					m.diskAction = nil
-					return m, m.diskActionCmd(action)
-				}
-				return m, cmd
-			}
-
-			switch msg.String() {
-			case "up", "k":
-				if m.diskCursor > 0 {
-					m.diskCursor--
-				}
-			case "down", "j":
-				if m.diskCursor < len(m.diskEntries)-1 {
-					m.diskCursor++
-				}
-			case "enter":
-				items := []SelectorItem{
-					{Label: "Mount to Drive A", Value: "mount-a", Description: "Mount disk image on Drive A (8)"},
-					{Label: "Mount to Drive B", Value: "mount-b", Description: "Mount disk image on Drive B (9)"},
-					{Label: "Unmount Drive A", Value: "unmount-a", Description: "Eject Drive A"},
-					{Label: "Unmount Drive B", Value: "unmount-b", Description: "Eject Drive B"},
-				}
-				if len(m.diskEntries) > 0 && m.diskEntries[m.diskCursor].FileType == "PRG" {
-					items = append([]SelectorItem{
-						{Label: "Run PRG", Value: "run-prg", Description: "Extract and run this program"},
-					}, items...)
-				}
-				m.diskAction = NewSelector("Disk Action", items)
-				return m, nil
-			case "esc":
-				m.state = BrowserBrowsing
-				m.diskEntries = nil
-				m.diskAction = nil
-				return m, nil
-			}
-			return m, nil
-		}
-
-		// Handle Browsing State
-		switch msg.String() {
-		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
-			} else if m.offset > 0 {
-				m.offset--
-			}
-		case "down", "j":
-			if m.cursor < len(m.files)-1 {
-				m.cursor++
-				if m.cursor >= m.offset+m.height-5 {
-					m.offset++
-				}
-			}
-
-		case "s":
-			if m.pickingDir {
-				// Pick current directory
-				dir := m.currentDir
-				m.pickingDir = false
-				return m, func() tea.Msg { return FileDirPickedMsg{Path: dir} }
-			}
-
-		case "enter":
-			DebugLog("BrowserModel: Enter key pressed. Files: %d, Picker: %v", len(m.files), m.pickingMode)
-			if len(m.files) == 0 {
-				return m, nil
-			}
-			file := m.files[m.cursor]
-
-			if file.Name == ".." {
-				// Go Up
-				parent := m.currentDir[:strings.LastIndex(m.currentDir, "/")]
-				if parent == "" {
-					parent = "/"
-				}
-				m.loading = true
-				return m, m.fetchFilesCmd(parent)
-			}
-
-			if file.IsDir {
-				newPath := m.currentDir + "/" + file.Name
-				if m.currentDir == "/" {
-					newPath = "/" + file.Name
-				}
-
-				m.loading = true
-				return m, m.fetchFilesCmd(newPath)
-			} else {
-				// Handle Picking Mode
-				if m.pickingMode {
-					fullPath := m.currentDir + "/" + file.Name
-					if m.currentDir == "/" {
-						fullPath = "/" + file.Name
-					}
-
-					// Return Picked Message
-					msg := FilePickedMsg{
-						Drive:    m.pickingDrive,
-						File:     fullPath,
-						Filename: file.Name,
-					}
-
-					// Reset mode
-					m.pickingMode = false
-					m.pickingDrive = ""
-
-					return m, func() tea.Msg { return msg }
-				}
-
-				// Attempt mount/run
-				var ext string
-				if dotIdx := strings.LastIndex(file.Name, "."); dotIdx >= 0 {
-					ext = strings.ToLower(file.Name[dotIdx:])
-				}
-				if ext == ".d64" || ext == ".g64" || ext == ".d81" || ext == ".d71" || ext == ".g71" {
-					fullPath := m.currentDir + "/" + file.Name
-					if m.currentDir == "/" {
-						fullPath = "/" + file.Name
-					}
-					m.loading = true
-					return m, m.loadDiskDirCmd(fullPath)
-				}
-				// Default to simple run for others
-				return m, m.mountFileCmd(file, "")
-			}
-
-		case "backspace", "left", "h":
-			if m.currentDir != "/" {
-				parent := m.currentDir[:strings.LastIndex(m.currentDir, "/")]
-				if parent == "" {
-					parent = "/"
-				}
-				m.loading = true
-				return m, m.fetchFilesCmd(parent)
-			}
-
-		case "d":
-			if len(m.files) == 0 || m.files[m.cursor].Name == ".." {
-				return m, nil
-			}
-			m.state = BrowserDeleting
-			m.message = fmt.Sprintf("Delete %q? (y/n)", m.files[m.cursor].Name)
-			return m, nil
-
-		case "r":
-			if len(m.files) == 0 || m.files[m.cursor].Name == ".." {
-				return m, nil
-			}
-			m.state = BrowserRenaming
-			m.ti.SetValue(m.files[m.cursor].Name)
+		return m, nil
+	case "r":
+		cur, ok := m.activeP.currentItem()
+		if ok {
+			m.state = browserRenaming
+			m.ti.SetValue(cur.Name)
 			m.ti.Focus()
-			m.message = "Rename to: (Enter to confirm, Esc to cancel)"
+			m.message = "Rename to:"
 			return m, textinput.Blink
-
-		case "m":
-			m.state = BrowserMkdir
-			m.ti.SetValue("")
-			m.ti.Focus()
-			m.message = "New folder name: (Enter to confirm, Esc to cancel)"
-			return m, textinput.Blink
-
-		case "n":
-			m.state = BrowserNewDisk
+		}
+		return m, nil
+	case "m":
+		m.state = browserMkdir
+		m.ti.SetValue("")
+		m.ti.Focus()
+		m.message = "New folder:"
+		return m, textinput.Blink
+	case "n":
+		if !m.activeP.src.IsLocal() {
+			m.state = browserNewDisk
 			m.newDiskSelector = NewSelector("New Disk Image", []SelectorItem{
-				{Label: "D64 (1541)", Value: "d64", Description: "Standard 170KB, 35 tracks"},
-				{Label: "D71 (1571)", Value: "d71", Description: "Double-sided 340KB, 70 tracks"},
-				{Label: "D81 (1581)", Value: "d81", Description: "High-density 800KB, 80 tracks"},
+				{Label: "D64 (1541)", Value: "d64", Description: "170KB, 35 tracks"},
+				{Label: "D71 (1571)", Value: "d71", Description: "340KB, 70 tracks"},
+				{Label: "D81 (1581)", Value: "d81", Description: "800KB, 80 tracks"},
 			})
-			return m, nil
+		} else {
+			m.message = "New disk only on remote pane"
+		}
+		return m, nil
+	}
+	return m, nil
+}
 
-		case "esc":
-			// Handled by parent
+func (m *BrowserModel) handleEnter() (tea.Model, tea.Cmd) {
+	cur, ok := m.activeP.currentItem()
+	if !ok {
+		return m, nil
+	}
+	if cur.IsDir {
+		m.activeP.enterDir(cur.Name) //nolint:errcheck
+		return m, m.refreshPreviewCmd()
+	}
+	if !m.activeP.src.IsLocal() {
+		ext := strings.ToLower(extOf(cur.Name))
+		switch ext {
+		case ".d64", ".d71", ".d81", ".g64", ".g71":
+			return m, m.loadDiskDirCmd(m.activeP.join(cur.Name))
+		case ".prg":
+			return m, m.runPRGCmd(m.activeP.join(cur.Name))
 		}
 	}
 	return m, nil
 }
 
-func (m *BrowserModel) mountFileCmd(file api.FileEntry, drive string) tea.Cmd {
-	return func() tea.Msg {
-		var ext string
-		if dotIdx := strings.LastIndex(file.Name, "."); dotIdx >= 0 {
-			ext = strings.ToLower(file.Name[dotIdx:])
+func (m *BrowserModel) handleTextInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
+		val := strings.TrimSpace(m.ti.Value())
+		st := m.state
+		m.state = browserBrowsing
+		m.message = ""
+		m.ti.Blur()
+		if val == "" {
+			return m, nil
 		}
-		fullPath := m.currentDir + "/" + file.Name
-		if m.currentDir == "/" {
-			fullPath = "/" + file.Name
-		}
-
-		if ext == ".d64" || ext == ".g64" || ext == ".d81" || ext == ".d71" || ext == ".g71" {
-			if drive == "" {
-				return statusMsg("No drive selected")
+		switch st {
+		case browserRenaming:
+			cur, ok := m.activeP.currentItem()
+			if ok {
+				return m, m.renameCmd(cur.Name, val)
 			}
-			_, err := m.client.DrivesMount(drive, fullPath, "", "")
-			if err != nil {
-				return statusMsg(fmt.Sprintf("Error mounting: %v", err))
-			}
-			return statusMsg("Mounted " + file.Name + " to Drive " + strings.ToUpper(drive))
+		case browserMkdir:
+			return m, m.mkdirCmd(val)
+		case browserNewDiskNaming:
+			return m, m.createDiskCmd(m.newDiskFormat, val)
 		}
-		if ext == ".prg" {
-			_, err := m.client.RunPRG(fullPath)
-			if err != nil {
-				return statusMsg(fmt.Sprintf("Error running: %v", err))
-			}
-			return statusMsg("Running " + file.Name)
-		}
-		if ext == ".crt" {
-			_, err := m.client.RunCRT(fullPath)
-			if err != nil {
-				return statusMsg(fmt.Sprintf("Error running: %v", err))
-			}
-			return statusMsg("Running " + file.Name)
-		}
-		if ext == ".sid" {
-			_, err := m.client.SidPlay(fullPath, 0)
-			if err != nil {
-				return statusMsg(fmt.Sprintf("Error playing SID: %v", err))
-			}
-			return statusMsg("Playing " + file.Name)
-		}
-
-		// Unknown file type: read via FTP and show in viewer
-		data, err := m.client.FTPReadFile(fullPath)
-		if err != nil {
-			return FileContentMsg{Filename: file.Name, Err: err}
-		}
-		return FileContentMsg{Filename: file.Name, Content: data}
+		return m, nil
+	case "esc":
+		m.state = browserBrowsing
+		m.message = ""
+		m.ti.Blur()
+		return m, nil
+	default:
+		var cmd tea.Cmd
+		m.ti, cmd = m.ti.Update(msg)
+		return m, cmd
 	}
 }
 
-func (m *BrowserModel) deleteFileCmd(file api.FileEntry) tea.Cmd {
-	return func() tea.Msg {
-		fullPath := m.currentDir + "/" + file.Name
-		if m.currentDir == "/" {
-			fullPath = "/" + file.Name
-		}
-		var err error
-		if file.IsDir {
-			err = m.client.FTPDeleteDir(fullPath)
-		} else {
-			err = m.client.FTPDelete(fullPath)
-		}
-		if err != nil {
-			return errMsg{fmt.Errorf("delete failed: %w", err)}
-		}
-		return statusMsg("Deleted " + file.Name)
+func (m *BrowserModel) handleNewDiskSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if msg.String() == "esc" {
+		m.state = browserBrowsing
+		m.newDiskSelector = nil
+		return m, nil
 	}
+	m.newDiskSelector.Update(msg) //nolint:errcheck
+	if m.newDiskSelector.cancelled {
+		m.state = browserBrowsing
+		m.newDiskSelector = nil
+		return m, nil
+	}
+	if m.newDiskSelector.confirmed {
+		m.newDiskFormat = m.newDiskSelector.Items[m.newDiskSelector.selected].Value
+		m.newDiskSelector = nil
+		m.state = browserNewDiskNaming
+		m.ti.SetValue("disk." + m.newDiskFormat)
+		m.ti.Focus()
+		m.message = "Filename:"
+		return m, textinput.Blink
+	}
+	return m, nil
 }
 
-func (m *BrowserModel) renameCmd(oldName, newName string) tea.Cmd {
-	return func() tea.Msg {
-		oldPath := m.currentDir + "/" + oldName
-		newPath := m.currentDir + "/" + newName
-		if m.currentDir == "/" {
-			oldPath = "/" + oldName
-			newPath = "/" + newName
-		}
-		if err := m.client.FTPRename(oldPath, newPath); err != nil {
-			return errMsg{fmt.Errorf("rename failed: %w", err)}
-		}
-		return statusMsg("Renamed to " + newName)
+func (m *BrowserModel) handleDiskAction(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if msg.String() == "esc" {
+		m.state = browserBrowsing
+		m.diskSelector = nil
+		return m, nil
 	}
-}
-
-func (m *BrowserModel) mkdirCmd(name string) tea.Cmd {
-	return func() tea.Msg {
-		path := m.currentDir + "/" + name
-		if m.currentDir == "/" {
-			path = "/" + name
-		}
-		if err := m.client.FTPMkdir(path); err != nil {
-			return errMsg{fmt.Errorf("mkdir failed: %w", err)}
-		}
-		return statusMsg("Created folder " + name)
+	m.diskSelector.Update(msg) //nolint:errcheck
+	if m.diskSelector.cancelled {
+		m.state = browserBrowsing
+		m.diskSelector = nil
+		return m, nil
 	}
-}
-
-func (m *BrowserModel) createDiskCmd(format, name string) tea.Cmd {
-	return func() tea.Msg {
-		path := m.currentDir + "/" + name
-		if m.currentDir == "/" {
-			path = "/" + name
-		}
-		var err error
-		switch format {
-		case "d64":
-			_, err = m.client.FilesCreateD64(path, 35, "")
-		case "d71":
-			_, err = m.client.FilesCreateD71(path, "")
-		case "d81":
-			_, err = m.client.FilesCreateD81(path, "")
-		}
-		if err != nil {
-			return errMsg{fmt.Errorf("create disk failed: %w", err)}
-		}
-		return statusMsg("Created " + name)
+	if m.diskSelector.confirmed {
+		action := m.diskSelector.Items[m.diskSelector.selected].Value
+		m.diskSelector = nil
+		m.state = browserBrowsing
+		return m, m.diskActionCmd(action)
 	}
-}
-
-func (m *BrowserModel) loadDiskDirCmd(path string) tea.Cmd {
-	return func() tea.Msg {
-		data, err := m.client.FTPReadFile(path)
-		if err != nil {
-			return diskDirMsg{Err: fmt.Errorf("cannot read disk image: %w", err)}
-		}
-		entries, name, blocksUsed, err := diskimage.ReadD64Directory(data)
-		if err != nil {
-			return diskDirMsg{Err: fmt.Errorf("cannot parse disk image: %w", err)}
-		}
-		return diskDirMsg{
-			DiskName:   name,
-			DiskPath:   path,
-			Entries:    entries,
-			BlocksUsed: blocksUsed,
-		}
-	}
-}
-
-func (m *BrowserModel) diskActionCmd(action string) tea.Cmd {
-	return func() tea.Msg {
-		switch action {
-		case "mount-a":
-			_, err := m.client.DrivesMount("a", m.diskPath, "", "")
-			if err != nil {
-				return errMsg{fmt.Errorf("mount failed: %w", err)}
-			}
-			return statusMsg("Mounted to Drive A")
-		case "mount-b":
-			_, err := m.client.DrivesMount("b", m.diskPath, "", "")
-			if err != nil {
-				return errMsg{fmt.Errorf("mount failed: %w", err)}
-			}
-			return statusMsg("Mounted to Drive B")
-		case "unmount-a":
-			_, err := m.client.DrivesRemove("a")
-			if err != nil {
-				return errMsg{fmt.Errorf("unmount failed: %w", err)}
-			}
-			return statusMsg("Drive A unmounted")
-		case "unmount-b":
-			_, err := m.client.DrivesRemove("b")
-			if err != nil {
-				return errMsg{fmt.Errorf("unmount failed: %w", err)}
-			}
-			return statusMsg("Drive B unmounted")
-		case "run-prg":
-			if len(m.diskEntries) == 0 {
-				return statusMsg("No entry selected")
-			}
-			entry := m.diskEntries[m.diskCursor]
-			return m.runPRGFromDisk(entry)
-		}
-		return statusMsg("Unknown action")
-	}
-}
-
-func (m *BrowserModel) runPRGFromDisk(entry diskimage.DirEntry) tea.Msg {
-	data, err := m.client.FTPReadFile(m.diskPath)
-	if err != nil {
-		return errMsg{fmt.Errorf("cannot read disk: %w", err)}
-	}
-	prgData, err := diskimage.ExtractPRG(data, entry.Name)
-	if err != nil {
-		return errMsg{fmt.Errorf("cannot extract PRG: %w", err)}
-	}
-	tmpName := "_tmp_" + strings.ReplaceAll(entry.Name, " ", "_") + ".prg"
-	tmpPath := m.currentDir + "/" + tmpName
-	if m.currentDir == "/" {
-		tmpPath = "/" + tmpName
-	}
-	if err := m.client.FTPUploadBytes(tmpPath, prgData); err != nil {
-		return errMsg{fmt.Errorf("upload failed: %w", err)}
-	}
-	_, runErr := m.client.RunPRG(tmpPath)
-	m.client.FTPDelete(tmpPath) //nolint:errcheck
-	if runErr != nil {
-		return errMsg{fmt.Errorf("run failed: %w", runErr)}
-	}
-	return statusMsg("Running " + entry.Name)
-}
-
-func (m *BrowserModel) diskDirView() string {
-	if m.diskAction != nil {
-		return m.diskAction.View()
-	}
-
-	var b strings.Builder
-	b.WriteString(HeaderStyle.Render(fmt.Sprintf("DISK: %s — %s", strings.ToUpper(m.diskName), m.diskPath)))
-	b.WriteString("\n\n")
-
-	for i, e := range m.diskEntries {
-		line := fmt.Sprintf("%-4d %-18q %-3s  %d", i+1, e.Name, e.FileType, e.Blocks)
-		if i == m.diskCursor {
-			b.WriteString(SelectedItemStyle.Render("▶ "+line) + "\n")
-		} else {
-			b.WriteString(ItemStyle.Render("  "+line) + "\n")
-		}
-	}
-
-	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("%d BLOCKS USED.\n", m.diskBlocksUsed))
-	b.WriteString("\n")
-	b.WriteString(StatusBarStyle.Render("↑/↓: navigate • Enter: action • Esc: back"))
-	return b.String()
+	return m, nil
 }
 
 func (m *BrowserModel) View() string {
-	if m.state == BrowserViewingDisk {
-		return m.diskDirView()
-	}
+	m.layoutPanes()
 
-	if m.state == BrowserNewDisk && m.newDiskSelector != nil {
-		return m.newDiskSelector.View()
-	}
-
-	if m.state == BrowserSelectingDrive && m.driveSelector != nil {
-		return m.driveSelector.View()
-	}
-
-	if m.loading {
-		return "Loading..."
-	}
-	if m.err != nil {
-		return fmt.Sprintf("Error: %v", m.err)
-	}
-
-	var b strings.Builder
-
-	// Use Header Style for Directory
-	b.WriteString(HeaderStyle.Render("DIR: " + m.currentDir))
-	b.WriteString("\n\n")
-
-	start := m.offset
-	end := start + m.height - 5 // Ensure space for status bar
-	if end > len(m.files) {
-		end = len(m.files)
-	}
-
-	for i := start; i < end; i++ {
-		file := m.files[i]
-
-		// Icon logic
-		icon := output.GetFileIcon(file.Name, file.IsDir)
-
-		displayName := file.Name
-		if file.IsDir {
-			displayName += "/"
+	switch m.state {
+	case browserNewDisk:
+		if m.newDiskSelector != nil {
+			return m.newDiskSelector.View()
 		}
-
-		// Special styling for ".."
-		if file.Name == ".." {
-			icon = "⬆"
-		}
-
-		if i == m.cursor {
-			// Selected Item: Use Unified SelectedItemStyle which is Reverse video
-			// We construct the content and render it all together for full line highlight effect
-			lineContent := fmt.Sprintf("▶ %s %s", icon, displayName)
-			b.WriteString(SelectedItemStyle.Render(lineContent) + "\n")
-		} else {
-			// Regular item
-			style := ItemStyle
-			// Apply specific color to ".." if not selected
-			if file.Name == ".." {
-				style = style.Copy().Foreground(lipgloss.Color("12"))
-			}
-
-			lineContent := fmt.Sprintf("  %s %s", icon, displayName)
-			b.WriteString(style.Render(lineContent) + "\n")
+	case browserDiskAction:
+		if m.diskSelector != nil {
+			return m.diskSelector.View()
 		}
 	}
 
-	if m.message != "" {
-		b.WriteString("\n" + StatusBarStyle.Render(m.message))
+	leftView := m.local.View()
+	rightView := m.remote.View()
+
+	var cols string
+	if m.showPreview {
+		cols = joinColumns(leftView, rightView, m.previewView())
 	} else {
-		helpText := fmt.Sprintf("%d items • ↑/↓/j/k: nav • Enter: select • ←/Back: up • ESC: menu", len(m.files))
-		b.WriteString("\n" + StatusBarStyle.Render(helpText))
+		cols = joinColumns(leftView, rightView)
 	}
 
-	return b.String()
+	footer := m.message
+	if footer == "" {
+		if m.state == browserRenaming || m.state == browserMkdir || m.state == browserNewDiskNaming {
+			footer = m.ti.View()
+		} else {
+			n := len(m.activeP.selected())
+			footer = fmt.Sprintf("%d sel  Tab/h/l: pane  F5: copy  d/r/m/n  p: preview  ?: help", n)
+		}
+	} else if m.state == browserRenaming || m.state == browserMkdir || m.state == browserNewDiskNaming {
+		footer = m.message + " " + m.ti.View()
+	}
+
+	return cols + "\n" + StatusBarStyle.Width(m.width).Render(footer)
+}
+
+func (m *BrowserModel) previewView() string {
+	cur, ok := m.activeP.currentItem()
+	if !ok {
+		return ""
+	}
+	colW := (m.width - 2) / 3
+	return renderPreview(cur, m.previewData, colW, m.height-1)
 }
