@@ -58,3 +58,37 @@ type diskDirMsg struct {
 	BlocksUsed int
 	Err        error
 }
+
+// paneReloadMsg requests a pane to reload its current directory.
+// side identifies which pane: "local", "remote", "active", or "both".
+type paneReloadMsg struct {
+	side string
+	err  error
+}
+
+// transferProgressMsg reports copy progress.
+type transferProgressMsg struct {
+	current int
+	total   int
+	name    string
+}
+
+// transferDoneMsg signals a transfer batch finished.
+type transferDoneMsg struct {
+	count int
+	err   error
+}
+
+// previewLoadedMsg carries content loaded for the preview column.
+type previewLoadedMsg struct {
+	name string
+	data []byte
+}
+
+// diskDirLoadedMsg carries a remote disk image's parsed directory for the action dialog.
+type diskDirLoadedMsg struct {
+	path   string
+	name   string
+	hasPRG bool
+	err    error
+}
