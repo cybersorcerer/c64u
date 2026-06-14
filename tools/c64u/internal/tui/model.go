@@ -20,6 +20,7 @@ const (
 	ViewMachineControl
 	ViewSettings
 	ViewFileViewer
+	ViewStreams
 )
 
 type deviceInfo struct {
@@ -35,11 +36,13 @@ var tabs = []struct {
 	{"Drives", ViewDrives},
 	{"Machine", ViewMachineControl},
 	{"Config", ViewSettings},
+	{"Streams", ViewStreams},
 }
 
 // MainModel is the top-level bubble tea model
 type MainModel struct {
 	client    *api.Client
+	host      string
 	viewState ViewState
 	width     int
 	height    int
@@ -50,6 +53,7 @@ type MainModel struct {
 	machine *MachineModel
 	config  *ConfigModel
 	viewer  *ViewerModel
+	streams *StreamsModel
 
 	selector  *Selector // Main menu selector
 	activeTab int
@@ -62,12 +66,16 @@ type MainModel struct {
 	statusMessage string
 	statusIsError bool
 	statusID      int // incremented per message, used for auto-clear
+
+	// Set before tea.Quit to signal ui.go to launch a blocking stream
+	PendingStream string
 }
 
 // NewMainModel creates the initial model
-func NewMainModel(client *api.Client) *MainModel {
+func NewMainModel(client *api.Client, host string) *MainModel {
 	m := &MainModel{
 		client:    client,
+		host:      host,
 		viewState: ViewFileBrowser,
 		activeTab: 0,
 		browser:   NewBrowserModel(client),
@@ -75,6 +83,7 @@ func NewMainModel(client *api.Client) *MainModel {
 		machine:   NewMachineModel(client),
 		config:    NewConfigModel(client),
 		viewer:    NewViewerModel(),
+		streams:   NewStreamsModel(client, host),
 	}
 	return m
 }
@@ -108,8 +117,28 @@ func (m *MainModel) initActiveView() tea.Cmd {
 		return m.machine.Init()
 	case ViewSettings:
 		return m.config.Init()
+	case ViewStreams:
+		return m.streams.Init()
 	}
 	return nil
+}
+
+// inTextInput reports whether the active view is capturing free text, so global
+// single-key shortcuts (1-5) must be suppressed.
+func (m *MainModel) inTextInput() bool {
+	switch m.viewState {
+	case ViewFileBrowser:
+		switch m.browser.state {
+		case browserRenaming, browserMkdir, browserNewDiskNaming:
+			return true
+		}
+	case ViewSettings:
+		switch m.config.state {
+		case ConfigEditing, ConfigFileNaming:
+			return true
+		}
+	}
+	return false
 }
 
 func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -138,13 +167,24 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// Tab navigation
+		// View navigation: number keys jump directly, Ctrl+h/l step.
+		// Suppressed while a text input is active (rename/mkdir/config edit).
 		switch msg.String() {
-		case "tab":
+		case "1", "2", "3", "4", "5":
+			if m.inTextInput() {
+				break
+			}
+			idx := int(msg.String()[0] - '1')
+			if idx >= 0 && idx < len(tabs) {
+				m.activeTab = idx
+				m.viewState = tabs[idx].State
+				return m, m.initActiveView()
+			}
+		case "ctrl+l":
 			m.activeTab = (m.activeTab + 1) % len(tabs)
 			m.viewState = tabs[m.activeTab].State
 			return m, m.initActiveView()
-		case "shift+tab":
+		case "ctrl+h":
 			m.activeTab = (m.activeTab - 1 + len(tabs)) % len(tabs)
 			m.viewState = tabs[m.activeTab].State
 			return m, m.initActiveView()
@@ -238,12 +278,19 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.browser.width = msg.Width - 4
-		m.browser.height = msg.Height - 6
-		m.drives.width = msg.Width - 4
-		m.drives.height = msg.Height - 6
-		m.config.width = msg.Width - 4
-		m.config.height = msg.Height - 6
+		contentH := msg.Height - 2 // header + tabbar
+		m.browser.width = msg.Width
+		m.browser.height = contentH
+		m.drives.width = msg.Width
+		m.drives.height = contentH
+
+		m.machine.width = msg.Width
+		m.streams.width = msg.Width
+		m.streams.height = contentH
+		m.viewer.width = msg.Width
+		m.viewer.height = contentH
+		m.config.width = msg.Width
+		m.config.height = contentH
 		return m, nil
 	}
 
@@ -278,6 +325,25 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		newViewer, cmd := m.viewer.Update(msg)
 		m.viewer = newViewer.(*ViewerModel)
 		cmds = append(cmds, cmd)
+
+	case ViewStreams:
+		newStreams, cmd := m.streams.Update(msg)
+		m.streams = newStreams.(*StreamsModel)
+		cmds = append(cmds, cmd)
+	}
+
+	// Route stream messages regardless of active view
+	switch msg.(type) {
+	case streamStartedMsg, streamStoppedMsg, streamErrMsg:
+		newStreams, cmd := m.streams.Update(msg)
+		m.streams = newStreams.(*StreamsModel)
+		cmds = append(cmds, cmd)
+	}
+
+	// Blocking stream request: quit TUI, let ui.go take over
+	if req, ok := msg.(requestStreamMsg); ok {
+		m.PendingStream = req.id
+		return m, tea.Quit
 	}
 
 	return m, tea.Batch(cmds...)
@@ -296,7 +362,7 @@ func (m *MainModel) View() string {
 	if m.device.Firmware != "" {
 		title += "  fw: " + m.device.Firmware
 	}
-	header := HeaderStyle.Width(m.width - 2).Render(title)
+	header := HeaderStyle.Width(m.width).Render(title)
 
 	// Tab bar
 	var tabParts []string
@@ -311,11 +377,11 @@ func (m *MainModel) View() string {
 	for _, p := range tabParts {
 		tabsW += lipgloss.Width(p)
 	}
-	padding := m.width - 2 - tabsW
+	padding := m.width - tabsW
 	if padding < 0 {
 		padding = 0
 	}
-	tabBar := TabBarStyle.Width(m.width - 2).Render(
+	tabBar := TabBarStyle.Width(m.width).Render(
 		strings.Join(tabParts, "") + strings.Repeat(" ", padding),
 	)
 
@@ -335,27 +401,29 @@ func (m *MainModel) View() string {
 			content = m.config.View()
 		case ViewFileViewer:
 			content = m.viewer.View()
+		case ViewStreams:
+			content = m.streams.View()
 		}
 	}
 
-	// Status bar
-	statusMsg := " Tab/S-Tab: switch view • ?: help • Ctrl+C: quit"
+	// Global status message (e.g. after an action): render as overlay above content footer.
+	// Child views render their own footers — MainModel only adds a bar for global messages.
 	if m.statusMessage != "" {
-		statusMsg = " " + m.statusMessage + " "
-	}
-	statusW := m.width - 2
-	if len(statusMsg) < statusW {
-		statusMsg += strings.Repeat(" ", statusW-len(statusMsg))
-	}
-	var statusBar string
-	if m.statusIsError {
-		statusBar = StatusErrorStyle.Width(m.width - 2).Render(statusMsg)
-	} else {
-		statusBar = StatusBarStyle.Width(m.width - 2).Render(statusMsg)
+		msg := " " + m.statusMessage + " "
+		statusW := m.width
+		if len(msg) < statusW {
+			msg += strings.Repeat(" ", statusW-len(msg))
+		}
+		var statusBar string
+		if m.statusIsError {
+			statusBar = StatusErrorStyle.Width(m.width).Render(msg)
+		} else {
+			statusBar = StatusSuccessStyle.Width(m.width).Render(msg)
+		}
+		return lipgloss.JoinVertical(lipgloss.Left, header, tabBar, content, statusBar)
 	}
 
-	inner := lipgloss.JoinVertical(lipgloss.Left, header, tabBar, content, statusBar)
-	return BoxStyle.Width(m.width).Render(inner)
+	return lipgloss.JoinVertical(lipgloss.Left, header, tabBar, content)
 }
 
 // helpView renders the context-dependent help overlay
@@ -478,7 +546,7 @@ func (m *MainModel) helpView() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(StatusBarStyle.Render("Press Esc or ? to close"))
+	b.WriteString(StatusBarStyle.Width(m.width).Render("Press Esc or ? to close"))
 
 	return b.String()
 }
@@ -495,4 +563,12 @@ func (m *MainModel) Run() error {
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	_, err := p.Run()
 	return err
+}
+
+// RequestStream signals the TUI to quit and hand control to a blocking stream.
+func (m *MainModel) requestStream(id string) tea.Cmd {
+	return func() tea.Msg {
+		m.PendingStream = id
+		return tea.Quit()
+	}
 }
