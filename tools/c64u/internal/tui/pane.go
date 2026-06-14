@@ -28,11 +28,15 @@ func newPaneModel(src fileSource, label, startDir string) *PaneModel {
 	}
 }
 
-// reload re-reads the current directory.
+// reload re-reads the current directory. A ".." entry is prepended unless
+// curDir is the root, so the parent is always reachable via Enter.
 func (p *PaneModel) reload() error {
 	items, err := p.src.List(p.curDir)
 	if err != nil {
 		return err
+	}
+	if !p.atRoot() {
+		items = append([]fileItem{{Name: "..", IsDir: true}}, items...)
 	}
 	p.items = items
 	if p.cursor >= len(p.items) {
@@ -42,6 +46,14 @@ func (p *PaneModel) reload() error {
 		p.cursor = 0
 	}
 	return nil
+}
+
+// atRoot reports whether the current directory is the filesystem root.
+func (p *PaneModel) atRoot() bool {
+	if p.src.IsLocal() {
+		return p.parentDir() == p.curDir
+	}
+	return p.curDir == "/" || p.curDir == ""
 }
 
 // join builds a child path using the source's path style.

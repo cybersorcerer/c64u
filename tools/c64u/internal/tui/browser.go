@@ -201,21 +201,23 @@ func (m *BrowserModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.activeP.goParent() //nolint:errcheck
 		return m, m.refreshPreviewCmd()
 	case " ":
-		m.activeP.toggleMark()
+		if cur, ok := m.activeP.currentItem(); ok && cur.Name != ".." {
+			m.activeP.toggleMark()
+		}
 		m.activeP.handleNav("j")
 		return m, nil
 	case "f5", "c":
 		return m, m.copyCmd()
 	case "d":
 		cur, ok := m.activeP.currentItem()
-		if ok {
+		if ok && cur.Name != ".." {
 			m.state = browserDeleting
 			m.message = fmt.Sprintf("Delete %q? (y/n)", cur.Name)
 		}
 		return m, nil
 	case "r":
 		cur, ok := m.activeP.currentItem()
-		if ok {
+		if ok && cur.Name != ".." {
 			m.state = browserRenaming
 			m.ti.SetValue(cur.Name)
 			m.ti.Focus()
@@ -249,6 +251,10 @@ func (m *BrowserModel) handleEnter() (tea.Model, tea.Cmd) {
 	cur, ok := m.activeP.currentItem()
 	if !ok {
 		return m, nil
+	}
+	if cur.Name == ".." {
+		m.activeP.goParent() //nolint:errcheck
+		return m, m.refreshPreviewCmd()
 	}
 	if cur.IsDir {
 		m.activeP.enterDir(cur.Name) //nolint:errcheck
