@@ -75,6 +75,9 @@ func (m *StreamsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "up", "k", "down", "j", "g", "G", "ctrl+d", "ctrl+u":
 			m.cursor = applyListNav(msg.String(), m.cursor, len(m.streams), m.height-3)
 		case "enter", " ":
+			if m.cursor < 0 || m.cursor >= len(m.streams) {
+				return m, nil
+			}
 			sel := m.streams[m.cursor]
 			if sel.state == streamRunning {
 				return m, m.stopCmd(sel)

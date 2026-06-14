@@ -65,18 +65,13 @@ type diskDirMsg struct {
 	Err        error
 }
 
-// paneReloadMsg requests a pane to reload its current directory.
-// side identifies which pane: "local", "remote", "active", or "both".
+// paneReloadMsg signals that a command-side pane reload completed (or failed).
+// The reload itself happens inside the command goroutine before this is sent;
+// the handler only refreshes the preview. side is a descriptive label
+// ("local", "remote", "active", "both") for clarity at the call sites.
 type paneReloadMsg struct {
 	side string
 	err  error
-}
-
-// transferProgressMsg reports copy progress.
-type transferProgressMsg struct {
-	current int
-	total   int
-	name    string
 }
 
 // transferDoneMsg signals a transfer batch finished.

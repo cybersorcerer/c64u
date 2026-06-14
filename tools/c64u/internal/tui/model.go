@@ -123,13 +123,15 @@ func (m *MainModel) initActiveView() tea.Cmd {
 	return nil
 }
 
-// inTextInput reports whether the active view is capturing free text, so global
-// single-key shortcuts (1-5) must be suppressed.
-func (m *MainModel) inTextInput() bool {
+// inModalState reports whether the active view is in a modal sub-state
+// (text input or selector dialog), so global navigation shortcuts
+// (1-5, Ctrl+h/l) must be suppressed and routed to the view instead.
+func (m *MainModel) inModalState() bool {
 	switch m.viewState {
 	case ViewFileBrowser:
 		switch m.browser.state {
-		case browserRenaming, browserMkdir, browserNewDiskNaming:
+		case browserDeleting, browserRenaming, browserMkdir,
+			browserNewDisk, browserNewDiskNaming, browserDiskAction:
 			return true
 		}
 	case ViewSettings:
@@ -168,26 +170,26 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// View navigation: number keys jump directly, Ctrl+h/l step.
-		// Suppressed while a text input is active (rename/mkdir/config edit).
-		switch msg.String() {
-		case "1", "2", "3", "4", "5":
-			if m.inTextInput() {
-				break
-			}
-			idx := int(msg.String()[0] - '1')
-			if idx >= 0 && idx < len(tabs) {
-				m.activeTab = idx
-				m.viewState = tabs[idx].State
+		// Suppressed while a modal sub-state (text input / selector) is active,
+		// so those keys reach the view instead of switching tabs.
+		if !m.inModalState() {
+			switch msg.String() {
+			case "1", "2", "3", "4", "5":
+				idx := int(msg.String()[0] - '1')
+				if idx >= 0 && idx < len(tabs) {
+					m.activeTab = idx
+					m.viewState = tabs[idx].State
+					return m, m.initActiveView()
+				}
+			case "ctrl+l":
+				m.activeTab = (m.activeTab + 1) % len(tabs)
+				m.viewState = tabs[m.activeTab].State
+				return m, m.initActiveView()
+			case "ctrl+h":
+				m.activeTab = (m.activeTab - 1 + len(tabs)) % len(tabs)
+				m.viewState = tabs[m.activeTab].State
 				return m, m.initActiveView()
 			}
-		case "ctrl+l":
-			m.activeTab = (m.activeTab + 1) % len(tabs)
-			m.viewState = tabs[m.activeTab].State
-			return m, m.initActiveView()
-		case "ctrl+h":
-			m.activeTab = (m.activeTab - 1 + len(tabs)) % len(tabs)
-			m.viewState = tabs[m.activeTab].State
-			return m, m.initActiveView()
 		}
 
 	// Global status messages
