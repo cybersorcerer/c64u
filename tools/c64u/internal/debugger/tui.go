@@ -419,8 +419,10 @@ func (m *Model) View() string {
 		remaining = 5
 	}
 
-	disasmW := (m.width * 55 / 100) - 2
-	rightW := m.width - disasmW - 4
+	// Each bordered panel renders 2 columns wider than its set width, so the two
+	// columns' set widths must sum to m.width-4 to fit exactly side by side.
+	disasmW := (m.width - 4) * 55 / 100
+	rightW := (m.width - 4) - disasmW
 	ioH := remaining * 60 / 100
 	watchH := remaining - ioH
 
