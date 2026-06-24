@@ -414,7 +414,7 @@ func (m *Model) View() string {
 	headerH := lipgloss.Height(header)
 	regH := lipgloss.Height(regPanel)
 	statusH := lipgloss.Height(statusBar)
-	remaining := m.height - headerH - regH - statusH - 2
+	remaining := m.height - headerH - regH - statusH
 	if remaining < 5 {
 		remaining = 5
 	}
@@ -499,7 +499,7 @@ func (m *Model) renderDisasm(instrs []DisasmLine, width, height int, paused bool
 	n := len(instrs)
 	if n == 0 {
 		title := headerStyle.Render(" Disassembly — warte auf Daten... ")
-		return panelStyle.Width(width).Height(height).Render(title)
+		return panelStyle.Width(width).Height(panelInnerH(height)).Render(title)
 	}
 
 	// currentPos: Position des aktuellen Eintrags im virtuellen Gesamtstrom.
@@ -564,7 +564,17 @@ func (m *Model) renderDisasm(instrs []DisasmLine, width, height int, paused bool
 	if paused {
 		title = pausedHeaderStyle.Render(fmt.Sprintf(" Disassembly  -%d ", m.scroll))
 	}
-	return panelStyle.Width(width).Height(height).Render(title + "\n" + strings.Join(lines, "\n"))
+	return panelStyle.Width(width).Height(panelInnerH(height)).Render(title + "\n" + strings.Join(lines, "\n"))
+}
+
+// panelInnerH returns the content height to pass to a bordered panelStyle so the
+// rendered panel (including its top+bottom border) occupies exactly `height` rows.
+func panelInnerH(height int) int {
+	h := height - 2
+	if h < 1 {
+		h = 1
+	}
+	return h
 }
 
 func (m *Model) renderIOLog(accesses []IOAccess, width, height int) string {
@@ -597,7 +607,7 @@ func (m *Model) renderIOLog(accesses []IOAccess, width, height int) string {
 	}
 
 	title := headerStyle.Render(" I/O Zugriffe ")
-	return panelStyle.Width(width).Height(height).Render(title + "\n" + strings.Join(lines, "\n"))
+	return panelStyle.Width(width).Height(panelInnerH(height)).Render(title + "\n" + strings.Join(lines, "\n"))
 }
 
 func (m *Model) renderWatchPanel(width, height int) string {
@@ -659,7 +669,7 @@ func (m *Model) renderWatchPanel(width, height int) string {
 	}
 
 	title := headerStyle.Render(fmt.Sprintf(" Watchpoints (%d) ", len(wps)))
-	return panelStyle.Width(width).Height(height).Render(title + "\n" + strings.Join(lines, "\n"))
+	return panelStyle.Width(width).Height(panelInnerH(height)).Render(title + "\n" + strings.Join(lines, "\n"))
 }
 
 func (m *Model) renderStatusBar(paused bool) string {
