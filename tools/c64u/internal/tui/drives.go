@@ -19,7 +19,6 @@ type DrivesModel struct {
 	height  int
 	loading bool
 	err     error
-	message string
 
 	// Action Menu State
 	actionSelector *Selector
@@ -146,8 +145,8 @@ func (m *DrivesModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case statusMsg:
-		m.message = string(msg)
-		// Refresh list after action implies state change
+		// An action changed the device state — reload so the list reflects it.
+		// The message itself is rendered by MainModel's status bar.
 		return m, m.fetchDrivesCmd()
 
 	case tea.KeyMsg:
@@ -193,48 +192,54 @@ func (m *DrivesModel) openActionMenu(drive DriveItem) {
 
 func (m *DrivesModel) performActionCmd(action string) tea.Cmd {
 	return func() tea.Msg {
-		var err error
 		drive := m.selectedDrive
 
-		if strings.HasPrefix(action, "mode_") {
-			mode := strings.TrimPrefix(action, "mode_")
-			_, err = m.client.DrivesSetMode(drive, mode)
-			if err == nil {
-				return statusMsg(fmt.Sprintf("Drive %s set to %s", strings.ToUpper(drive), mode))
-			}
+		if action == "loadrom" {
+			DebugLog("DrivesModel: Emit FilePickerRequestMsg for %s", drive)
+			return FilePickerRequestMsg{Drive: drive}
+		}
+
+		var resp *api.Response
+		var err error
+		var okMsg string
+
+		if mode := strings.TrimPrefix(action, "mode_"); mode != action {
+			resp, err = m.client.DrivesSetMode(drive, mode)
+			okMsg = fmt.Sprintf("Drive %s set to %s", strings.ToUpper(drive), mode)
 		} else {
 			switch action {
 			case "unmount":
-				_, err = m.client.DrivesRemove(drive)
-				if err == nil {
-					return statusMsg(fmt.Sprintf("Drive %s unmounted", strings.ToUpper(drive)))
-				}
+				resp, err = m.client.DrivesRemove(drive)
+				okMsg = fmt.Sprintf("Drive %s unmounted", strings.ToUpper(drive))
 			case "reset":
-				_, err = m.client.DrivesReset(drive)
-				if err == nil {
-					return statusMsg(fmt.Sprintf("Drive %s reset", strings.ToUpper(drive)))
-				}
+				resp, err = m.client.DrivesReset(drive)
+				okMsg = fmt.Sprintf("Drive %s reset", strings.ToUpper(drive))
 			case "off":
-				_, err = m.client.DrivesOff(drive)
-				if err == nil {
-					return statusMsg(fmt.Sprintf("Drive %s disabled", strings.ToUpper(drive)))
-				}
+				resp, err = m.client.DrivesOff(drive)
+				okMsg = fmt.Sprintf("Drive %s disabled", strings.ToUpper(drive))
 			case "on":
-				_, err = m.client.DrivesOn(drive)
-				if err == nil {
-					return statusMsg(fmt.Sprintf("Drive %s enabled", strings.ToUpper(drive)))
-				}
-			case "loadrom":
-				DebugLog("DrivesModel: Emit FilePickerRequestMsg for %s", drive)
-				return FilePickerRequestMsg{Drive: drive}
+				resp, err = m.client.DrivesOn(drive)
+				okMsg = fmt.Sprintf("Drive %s enabled", strings.ToUpper(drive))
+			default:
+				return statusMsg(fmt.Sprintf("Error: unknown drive action %q", action))
 			}
 		}
 
-		if err != nil {
-			return statusMsg(fmt.Sprintf("Error: %v", err))
-		}
-		return statusMsg("Action executed")
+		return statusMsg(driveActionResult(resp, err, okMsg))
 	}
+}
+
+// driveActionResult turns an API call's outcome into a status line. The device
+// reports a rejected request in the response body rather than as a transport
+// error, so claiming success requires checking both.
+func driveActionResult(resp *api.Response, err error, okMsg string) string {
+	if err != nil {
+		return "Error: " + err.Error()
+	}
+	if resp != nil && resp.HasErrors() {
+		return "Error: " + strings.Join(resp.Errors, "; ")
+	}
+	return okMsg
 }
 
 func (m *DrivesModel) View() string {
@@ -294,11 +299,7 @@ func (m *DrivesModel) View() string {
 		}
 	}
 
-	footer := m.message
-	if footer == "" {
-		footer = "↑/↓: select  Enter: actions  ?: help"
-	}
-	b.WriteString("\n" + StatusBarStyle.Width(m.width).Render(footer))
+	b.WriteString("\n" + StatusBarStyle.Width(m.width).Render("↑/↓: select  Enter: actions  ?: help"))
 
 	return b.String()
 }

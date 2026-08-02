@@ -216,7 +216,9 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.statusIsError {
 			duration = 8 * time.Second
 		}
-		return m, m.clearStatusAfter(m.statusID, duration)
+		// Deliberately no early return: the active view has to see the message
+		// too, so it can refresh state the action just changed on the device.
+		cmds = append(cmds, m.clearStatusAfter(m.statusID, duration))
 
 	case errMsg:
 		m.statusID++
@@ -417,24 +419,41 @@ func (m *MainModel) View() string {
 		}
 	}
 
-	// Global status message (e.g. after an action): render as overlay above content footer.
-	// Child views render their own footers — MainModel only adds a bar for global messages.
-	if m.statusMessage != "" {
-		msg := " " + m.statusMessage + " "
-		statusW := m.width
-		if len(msg) < statusW {
-			msg += strings.Repeat(" ", statusW-len(msg))
-		}
-		var statusBar string
-		if m.statusIsError {
-			statusBar = StatusErrorStyle.Width(m.width).Render(msg)
-		} else {
-			statusBar = StatusSuccessStyle.Width(m.width).Render(msg)
-		}
-		return lipgloss.JoinVertical(lipgloss.Left, header, tabBar, content, statusBar)
+	// Before the first WindowSizeMsg there is no height to fit into.
+	if m.height <= 2 {
+		return lipgloss.JoinVertical(lipgloss.Left, header, tabBar, content)
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, header, tabBar, content)
+	// The frame is always exactly m.height rows. A frame that shrinks — which is
+	// what happened when a status message auto-cleared — leaves the previous
+	// frame's trailing rows behind, so the view's own footer appeared to vanish.
+	lines := fitLines(content, m.height-2)
+
+	// Global status message (e.g. after an action): pinned to the bottom row.
+	// Child views render their own footers; MainModel only owns this one line.
+	if m.statusMessage != "" {
+		msg := " " + m.statusMessage + " "
+		if m.statusIsError {
+			lines[len(lines)-1] = StatusErrorStyle.Width(m.width).Render(msg)
+		} else {
+			lines[len(lines)-1] = StatusSuccessStyle.Width(m.width).Render(msg)
+		}
+	}
+
+	return strings.Join(append([]string{header, tabBar}, lines...), "\n")
+}
+
+// fitLines pads s with blank lines, or truncates it, so the result is exactly
+// n lines.
+func fitLines(s string, n int) []string {
+	lines := strings.Split(s, "\n")
+	if len(lines) > n {
+		return lines[:n]
+	}
+	for len(lines) < n {
+		lines = append(lines, "")
+	}
+	return lines
 }
 
 // helpView renders the context-dependent help overlay
