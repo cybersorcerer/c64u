@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/api"
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/diskimage"
 )
 
@@ -21,11 +22,16 @@ func joinColumns(cols ...string) string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, withGaps...)
 }
 
-// diskActionItems builds the selector items for a remote disk image.
-func diskActionItems(hasPRG bool) []SelectorItem {
+// diskActionItems builds the selector items for a disk image. A local image is
+// mounted by uploading it, so its mount entries are labelled accordingly.
+func diskActionItems(hasPRG, isLocal bool) []SelectorItem {
+	mountA, mountB := "Drive A (8)", "Drive B (9)"
+	if isLocal {
+		mountA, mountB = "Upload and mount to Drive A (8)", "Upload and mount to Drive B (9)"
+	}
 	items := []SelectorItem{
-		{Label: "Mount to Drive A", Value: "mount-a", Description: "Drive A (8)"},
-		{Label: "Mount to Drive B", Value: "mount-b", Description: "Drive B (9)"},
+		{Label: "Mount to Drive A", Value: "mount-a", Description: mountA},
+		{Label: "Mount to Drive B", Value: "mount-b", Description: mountB},
 		{Label: "Unmount Drive A", Value: "unmount-a", Description: "Eject A"},
 		{Label: "Unmount Drive B", Value: "unmount-b", Description: "Eject B"},
 	}
@@ -180,15 +186,16 @@ func (m *BrowserModel) createDiskCmd(format, name string) tea.Cmd {
 }
 
 func (m *BrowserModel) loadDiskDirCmd(path string) tea.Cmd {
-	client := m.client
+	src := m.activeP.src
+	isLocal := src.IsLocal()
 	return func() tea.Msg {
-		data, err := client.FTPReadFile(path)
+		data, err := src.ReadFile(path)
 		if err != nil {
-			return diskDirLoadedMsg{path: path, err: err}
+			return diskDirLoadedMsg{path: path, isLocal: isLocal, err: err}
 		}
 		entries, name, _, err := diskimage.ReadD64Directory(data)
 		if err != nil {
-			return diskDirLoadedMsg{path: path, err: err}
+			return diskDirLoadedMsg{path: path, isLocal: isLocal, err: err}
 		}
 		hasPRG := false
 		for _, e := range entries {
@@ -197,37 +204,33 @@ func (m *BrowserModel) loadDiskDirCmd(path string) tea.Cmd {
 				break
 			}
 		}
-		return diskDirLoadedMsg{path: path, name: name, hasPRG: hasPRG}
-	}
-}
-
-func (m *BrowserModel) runPRGCmd(path string) tea.Cmd {
-	client := m.client
-	return func() tea.Msg {
-		_, err := client.RunPRG(path)
-		if err != nil {
-			return paneReloadMsg{side: "remote", err: err}
-		}
-		return paneReloadMsg{side: "remote"}
+		return diskDirLoadedMsg{path: path, name: name, hasPRG: hasPRG, isLocal: isLocal}
 	}
 }
 
 func (m *BrowserModel) diskActionCmd(action string) tea.Cmd {
 	client := m.client
+	src := m.diskSrc
+	isLocal := m.diskIsLocal
 	diskPath := m.diskPath
 	curDir := m.remote.curDir
 	return func() tea.Msg {
 		switch action {
-		case "mount-a":
-			client.DrivesMount("a", diskPath, "", "") //nolint:errcheck
-		case "mount-b":
-			client.DrivesMount("b", diskPath, "", "") //nolint:errcheck
+		case "mount-a", "mount-b":
+			drive := strings.TrimPrefix(action, "mount-")
+			if isLocal {
+				client.DrivesMountUpload(drive, diskPath, "", "readwrite") //nolint:errcheck
+			} else {
+				client.DrivesMount(drive, diskPath, "", "") //nolint:errcheck
+			}
 		case "unmount-a":
 			client.DrivesRemove("a") //nolint:errcheck
 		case "unmount-b":
 			client.DrivesRemove("b") //nolint:errcheck
 		case "run-prg":
-			data, err := client.FTPReadFile(diskPath)
+			// The PRG is extracted from the image and staged on the C64U before
+			// running, regardless of which pane the image came from.
+			data, err := src.ReadFile(diskPath)
 			if err != nil {
 				return paneReloadMsg{side: "remote", err: err}
 			}
@@ -255,4 +258,96 @@ func (m *BrowserModel) diskActionCmd(action string) tea.Cmd {
 		}
 		return paneReloadMsg{side: "remote"}
 	}
+}
+
+// uploadCmd applies a file to a drive. A local disk image goes via mount-upload
+// (readwrite); a ROM goes via load-rom-upload from the local pane, or via
+// load-rom by path when it already lives on the C64U.
+func (m *BrowserModel) uploadCmd(drive, path string, isROM, isRemote bool) tea.Cmd {
+	client := m.client
+	return func() tea.Msg {
+		var resp *api.Response
+		var err error
+		switch {
+		case isROM && isRemote:
+			resp, err = client.DrivesLoadROM(drive, path)
+		case isROM:
+			resp, err = client.DrivesLoadROMUpload(drive, path)
+		default:
+			resp, err = client.DrivesMountUpload(drive, path, "", "readwrite")
+		}
+		if err != nil {
+			return transferDoneMsg{err: err}
+		}
+		if resp.HasErrors() {
+			return transferDoneMsg{err: fmt.Errorf("%s", resp.Errors[0])}
+		}
+		action := "Mounted"
+		if isROM {
+			action = "Loaded ROM"
+		}
+		return transferDoneMsg{count: 1, name: action + " to Drive " + strings.ToUpper(drive)}
+	}
+}
+
+// runnerCmd executes a media/program runner. action selects the API call;
+// path is a remote path for the non-upload variants, or a local path for the
+// "-upload" variants. Status is reported via transferDoneMsg.
+func (m *BrowserModel) runnerCmd(action, path string) tea.Cmd {
+	client := m.client
+	return func() tea.Msg {
+		var resp *api.Response
+		var err error
+		var label string
+		switch action {
+		case "run-prg":
+			resp, err = client.RunPRG(path)
+			label = "Running"
+		case "load-prg":
+			resp, err = client.LoadPRG(path)
+			label = "Loaded"
+		case "run-prg-upload":
+			resp, err = client.RunPRGUpload(path)
+			label = "Running"
+		case "load-prg-upload":
+			resp, err = client.LoadPRGUpload(path)
+			label = "Loaded"
+		case "run-crt":
+			resp, err = client.RunCRT(path)
+			label = "Running cartridge"
+		case "run-crt-upload":
+			resp, err = client.RunCRTUpload(path)
+			label = "Running cartridge"
+		case "sid":
+			resp, err = client.SidPlay(path, 0)
+			label = "Playing SID"
+		case "sid-upload":
+			resp, err = client.SidPlayUpload(path, 0)
+			label = "Playing SID"
+		case "mod":
+			resp, err = client.ModPlay(path)
+			label = "Playing MOD"
+		case "mod-upload":
+			resp, err = client.ModPlayUpload(path)
+			label = "Playing MOD"
+		default:
+			return transferDoneMsg{err: fmt.Errorf("unknown runner %q", action)}
+		}
+		if err != nil {
+			return transferDoneMsg{err: err}
+		}
+		if resp != nil && resp.HasErrors() {
+			return transferDoneMsg{err: fmt.Errorf("%s", resp.Errors[0])}
+		}
+		return transferDoneMsg{count: 1, name: label + ": " + baseName(path)}
+	}
+}
+
+// baseName returns the last path component (forward-slash or OS separator).
+func baseName(path string) string {
+	p := strings.TrimRight(path, "/")
+	if i := strings.LastIndexAny(p, "/\\"); i >= 0 {
+		return p[i+1:]
+	}
+	return p
 }

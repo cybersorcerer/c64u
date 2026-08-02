@@ -467,12 +467,13 @@ func (m *MainModel) helpView() string {
 		viewName = "File Browser (dual-pane)"
 		specific = []helpEntry{
 			{"Tab / h / l", "Switch active pane (local/remote)"},
-			{"Enter", "Open dir / mount disk / run PRG"},
+			{"Enter", "Open dir / disk actions / run PRG·CRT·SID·MOD"},
 			{"Backspace", "Parent directory"},
 			{"Space", "Mark file (batch)"},
 			{"F5 / c", "Copy to other pane"},
 			{"d / r / m", "Delete / rename / mkdir"},
 			{"n", "New disk image (remote pane)"},
+			{"u", "Apply to drive: mount disk / load ROM"},
 			{"p", "Toggle preview column"},
 		}
 	case ViewDrives:

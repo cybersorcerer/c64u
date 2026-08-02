@@ -77,6 +77,7 @@ type paneReloadMsg struct {
 // transferDoneMsg signals a transfer batch finished.
 type transferDoneMsg struct {
 	count int
+	name  string // optional custom status text (overrides default "Copied N")
 	err   error
 }
 
@@ -86,10 +87,13 @@ type previewLoadedMsg struct {
 	data []byte
 }
 
-// diskDirLoadedMsg carries a remote disk image's parsed directory for the action dialog.
+// diskDirLoadedMsg carries a disk image's parsed directory for the action dialog.
+// isLocal records which pane the image came from, since local images are mounted
+// via upload while remote ones are mounted by path.
 type diskDirLoadedMsg struct {
-	path   string
-	name   string
-	hasPRG bool
-	err    error
+	path    string
+	name    string
+	hasPRG  bool
+	isLocal bool
+	err     error
 }
