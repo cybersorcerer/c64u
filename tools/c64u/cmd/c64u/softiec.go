@@ -9,6 +9,7 @@ import (
 
 var softiecCmd = &cobra.Command{
 	Use:   "softiec",
+	Args:  cobra.NoArgs,
 	Short: "Control the SoftIEC (DOS emulation) drive",
 	Long: `Control the SoftIEC drive, which serves a directory of the C64 Ultimate
 filesystem over the IEC bus.

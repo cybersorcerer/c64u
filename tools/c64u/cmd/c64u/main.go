@@ -102,6 +102,7 @@ Configuration Priority:
 // versionCmd represents the version command
 var versionCmd = &cobra.Command{
 	Use:   "version",
+	Args:  cobra.NoArgs,
 	Short: "Show version information",
 	Long:  `Display the version, build commit, and build date of the c64u CLI tool.`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -123,6 +124,7 @@ var versionCmd = &cobra.Command{
 // aboutCmd gets the API version from the C64 Ultimate
 var aboutCmd = &cobra.Command{
 	Use:   "about",
+	Args:  cobra.NoArgs,
 	Short: "Get C64 Ultimate API version",
 	Long:  `Query the C64 Ultimate to retrieve its REST API version (calls /v1/version).`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -153,6 +155,7 @@ var aboutCmd = &cobra.Command{
 // infoCmd gets device information from the C64 Ultimate
 var infoCmd = &cobra.Command{
 	Use:   "info",
+	Args:  cobra.NoArgs,
 	Short: "Get C64 Ultimate device information",
 	Long:  `Query the C64 Ultimate to retrieve device information including product name, firmware versions, and hostname (calls /v1/info).`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -204,13 +207,18 @@ var infoCmd = &cobra.Command{
 // cliConfigCmd represents the CLI config command group
 var cliConfigCmd = &cobra.Command{
 	Use:   "cli-config",
+	Args:  cobra.NoArgs,
 	Short: "Manage c64u CLI configuration",
 	Long:  `View and manage the c64u CLI configuration file (not C64 Ultimate hardware config).`,
+	Run: func(cmd *cobra.Command, args []string) {
+		cmd.Help() //nolint:errcheck
+	},
 }
 
 // configInitCmd creates a default config file
 var configInitCmd = &cobra.Command{
 	Use:   "init",
+	Args:  cobra.NoArgs,
 	Short: "Create default configuration file",
 	Long:  `Create a default configuration file at ~/.config/c64u/config.toml`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -229,6 +237,7 @@ var configInitCmd = &cobra.Command{
 // cliConfigShowCmd shows the current CLI configuration
 var cliConfigShowCmd = &cobra.Command{
 	Use:   "show",
+	Args:  cobra.NoArgs,
 	Short: "Show current CLI configuration",
 	Long:  `Display the current c64u CLI configuration settings being used.`,
 	Run: func(cmd *cobra.Command, args []string) {

@@ -24,6 +24,7 @@ import (
 
 var streamsCmd = &cobra.Command{
 	Use:   "streams",
+	Args:  cobra.NoArgs,
 	Short: "Data streams control (U64 only)",
 	Long: `Start and stop video, audio, and debug streams on Ultimate 64.
 
@@ -33,6 +34,9 @@ Streams are sent to the specified IP address on default ports:
 - debug: port 11002
 
 This feature is only available on Ultimate 64 hardware.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		cmd.Help() //nolint:errcheck
+	},
 }
 
 var streamsStartCmd = &cobra.Command{
@@ -124,10 +128,14 @@ Example:
 
 var filesCmd = &cobra.Command{
 	Use:   "files",
+	Args:  cobra.NoArgs,
 	Short: "File operations",
 	Long: `File manipulation on the C64 Ultimate filesystem.
 
 Commands include getting file info and creating disk images (D64, D71, D81, DNP).`,
+	Run: func(cmd *cobra.Command, args []string) {
+		cmd.Help() //nolint:errcheck
+	},
 }
 
 var filesInfoCmd = &cobra.Command{
@@ -463,6 +471,7 @@ const debugStreamPort = 11002
 
 var streamsListenDebugCmd = &cobra.Command{
 	Use:   "debug",
+	Args:  cobra.NoArgs,
 	Short: "Listen to the debug stream",
 	Long: `Start the C64 Ultimate debug stream and print incoming data to stdout.
 
@@ -579,6 +588,7 @@ Examples:
 
 var streamsListenAudioCmd = &cobra.Command{
 	Use:   "audio",
+	Args:  cobra.NoArgs,
 	Short: "Listen to the audio stream and play it back",
 	Long: `Start the C64 Ultimate audio stream and play it back via your speakers.
 
@@ -635,6 +645,7 @@ Examples:
 
 var streamsListenVideoCmd = &cobra.Command{
 	Use:   "video",
+	Args:  cobra.NoArgs,
 	Short: "Listen to the video stream and display it in a window",
 	Long: `Start the C64 Ultimate video stream and render it in a native window.
 
@@ -694,9 +705,20 @@ Examples:
 
 // streamsListenCmd is the "listen" parent that holds sub-streams
 var streamsListenCmd = &cobra.Command{
-	Use:   "listen <stream>",
+	Use:   "listen",
 	Short: "Listen to a data stream",
-	Long:  `Listen to a data stream from the C64 Ultimate. Currently supports: debug`,
+	Long: `Listen to a data stream from the C64 Ultimate: video, audio or debug.
+
+The stream is a subcommand rather than an argument, so a name that does not
+exist is reported instead of quietly showing this help.
+
+Examples:
+  c64u streams listen video
+  c64u streams listen debug --tui`,
+	Args: cobra.NoArgs,
+	Run: func(cmd *cobra.Command, args []string) {
+		cmd.Help() //nolint:errcheck
+	},
 }
 
 func init() {

@@ -16,11 +16,15 @@ import (
 
 var configCmd = &cobra.Command{
 	Use:   "config",
+	Args:  cobra.NoArgs,
 	Short: "Manage C64 Ultimate hardware configuration",
 	Long: `Manage C64 Ultimate hardware configuration settings.
 
 This manages the C64 Ultimate device settings (drives, machine, etc.),
 not the c64u CLI configuration file. For CLI config, use 'cli-config'.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		cmd.Help() //nolint:errcheck
+	},
 }
 
 // ============================================================================
@@ -29,6 +33,7 @@ not the c64u CLI configuration file. For CLI config, use 'cli-config'.`,
 
 var configListCmd = &cobra.Command{
 	Use:   "list",
+	Args:  cobra.NoArgs,
 	Short: "List all configuration categories",
 	Long: `List all available configuration categories on the C64 Ultimate.
 
@@ -332,6 +337,7 @@ Examples:
 
 var configSaveToFlashCmd = &cobra.Command{
 	Use:   "save-to-flash",
+	Args:  cobra.NoArgs,
 	Short: "Save configuration to flash memory",
 	Long: `Save current configuration to non-volatile flash memory.
 
@@ -355,6 +361,7 @@ Examples:
 
 var configLoadFromFlashCmd = &cobra.Command{
 	Use:   "load-from-flash",
+	Args:  cobra.NoArgs,
 	Short: "Load configuration from flash memory",
 	Long: `Load configuration from non-volatile flash memory.
 
@@ -378,6 +385,7 @@ Examples:
 
 var configResetToDefaultCmd = &cobra.Command{
 	Use:   "reset-to-default",
+	Args:  cobra.NoArgs,
 	Short: "Reset configuration to factory defaults",
 	Long: `Reset current configuration to factory default values.
 

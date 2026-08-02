@@ -11,6 +11,7 @@ import (
 // runnersCmd represents the runners command group
 var runnersCmd = &cobra.Command{
 	Use:   "runners",
+	Args:  cobra.NoArgs,
 	Short: "Media playback and program execution",
 	Long: `The runners commands allow you to play media files (SID, MOD) and
 execute programs (PRG, CRT) on the C64 Ultimate.
@@ -18,6 +19,9 @@ execute programs (PRG, CRT) on the C64 Ultimate.
 Each command has two variants:
 - Without 'upload': Uses a file already on the C64U filesystem
 - With 'upload': Uploads a local file and then executes it`,
+	Run: func(cmd *cobra.Command, args []string) {
+		cmd.Help() //nolint:errcheck
+	},
 }
 
 // ============================================================================

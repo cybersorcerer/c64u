@@ -16,6 +16,7 @@ import (
 
 var fsCmd = &cobra.Command{
 	Use:   "fs",
+	Args:  cobra.NoArgs,
 	Short: "Filesystem operations via FTP",
 	Long: `Complete filesystem access to C64 Ultimate via FTP.
 
@@ -23,6 +24,9 @@ Upload and download files and directories, create directories,
 delete, copy, move files, and list directory contents including C64 disk images.
 
 All operations use FTP (port 21) with anonymous login.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		cmd.Help() //nolint:errcheck
+	},
 }
 
 // ============================================================================

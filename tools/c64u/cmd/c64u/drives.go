@@ -13,11 +13,15 @@ import (
 // drivesCmd represents the drives command group
 var drivesCmd = &cobra.Command{
 	Use:   "drives",
+	Args:  cobra.NoArgs,
 	Short: "Floppy drive operations",
 	Long: `Manage internal floppy drives on the C64 Ultimate.
 
 Commands include mounting/unmounting disk images, resetting drives,
 enabling/disabling drives, loading custom ROMs, and changing drive modes.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		cmd.Help() //nolint:errcheck
+	},
 }
 
 // ============================================================================
@@ -26,6 +30,7 @@ enabling/disabling drives, loading custom ROMs, and changing drive modes.`,
 
 var drivesListCmd = &cobra.Command{
 	Use:   "list",
+	Args:  cobra.NoArgs,
 	Short: "List all drives and mounted images",
 	Long:  `Returns information on all internal drives including currently mounted images.`,
 	Run: func(cmd *cobra.Command, args []string) {

@@ -15,6 +15,7 @@ import (
 // machineCmd represents the machine command group
 var machineCmd = &cobra.Command{
 	Use:   "machine",
+	Args:  cobra.NoArgs,
 	Short: "Machine control and memory operations",
 	Long: `Control the C64 Ultimate machine state and perform memory operations.
 
@@ -35,6 +36,7 @@ Examples:
 
 var machineResetCmd = &cobra.Command{
 	Use:   "reset",
+	Args:  cobra.NoArgs,
 	Short: "Reset the machine",
 	Long:  `Send a reset signal to the machine without changing configuration.`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -55,6 +57,7 @@ var machineResetCmd = &cobra.Command{
 
 var machineRebootCmd = &cobra.Command{
 	Use:   "reboot",
+	Args:  cobra.NoArgs,
 	Short: "Reboot the machine",
 	Long:  `Restart the machine with cartridge reinitialization.`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -75,6 +78,7 @@ var machineRebootCmd = &cobra.Command{
 
 var machinePauseCmd = &cobra.Command{
 	Use:   "pause",
+	Args:  cobra.NoArgs,
 	Short: "Pause the machine",
 	Long:  `Pause the machine by pulling the DMA line low.`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -95,6 +99,7 @@ var machinePauseCmd = &cobra.Command{
 
 var machineResumeCmd = &cobra.Command{
 	Use:   "resume",
+	Args:  cobra.NoArgs,
 	Short: "Resume the machine",
 	Long:  `Resume the machine from paused state.`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -115,6 +120,7 @@ var machineResumeCmd = &cobra.Command{
 
 var machinePowerOffCmd = &cobra.Command{
 	Use:   "poweroff",
+	Args:  cobra.NoArgs,
 	Short: "Power off the machine (U64 only)",
 	Long:  `Power off the machine. This command only works on Ultimate 64 hardware.`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -135,6 +141,7 @@ var machinePowerOffCmd = &cobra.Command{
 
 var machineMenuButtonCmd = &cobra.Command{
 	Use:   "menu-button",
+	Args:  cobra.NoArgs,
 	Short: "Simulate pressing the Menu button",
 	Long: `Simulate pressing the Menu button.
 
@@ -358,6 +365,7 @@ Examples:
 
 var machineDebugRegCmd = &cobra.Command{
 	Use:   "debug-reg",
+	Args:  cobra.NoArgs,
 	Short: "Read debug register $D7FF (U64 only)",
 	Long:  `Read the debug register at $D7FF. This command only works on Ultimate 64 hardware.`,
 	Run: func(cmd *cobra.Command, args []string) {

@@ -13,6 +13,7 @@ import (
 // uiCmd represents the ui command
 var uiCmd = &cobra.Command{
 	Use:   "ui",
+	Args:  cobra.NoArgs,
 	Short: "Start interactive TUI mode",
 	Long: `Start the interactive Terminal User Interface (TUI) for controlling the C64 Ultimate.
 
