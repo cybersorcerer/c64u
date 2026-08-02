@@ -4,20 +4,20 @@ package disasm
 type AddrMode uint8
 
 const (
-	Implied    AddrMode = iota // no operand
-	Accumulator                // A
-	Immediate                  // #$nn
-	ZeroPage                   // $nn
-	ZeroPageX                  // $nn,X
-	ZeroPageY                  // $nn,Y
-	Absolute                   // $nnnn
-	AbsoluteX                  // $nnnn,X
-	AbsoluteY                  // $nnnn,Y
-	Indirect                   // ($nnnn)
-	IndirectX                  // ($nn,X)
-	IndirectY                  // ($nn),Y
-	Relative                   // $nn (signed branch offset)
-	ImpliedPad                 // implied + 1 padding byte (BRK: 6502 fetches 2 bytes)
+	Implied     AddrMode = iota // no operand
+	Accumulator                 // A
+	Immediate                   // #$nn
+	ZeroPage                    // $nn
+	ZeroPageX                   // $nn,X
+	ZeroPageY                   // $nn,Y
+	Absolute                    // $nnnn
+	AbsoluteX                   // $nnnn,X
+	AbsoluteY                   // $nnnn,Y
+	Indirect                    // ($nnnn)
+	IndirectX                   // ($nn,X)
+	IndirectY                   // ($nn),Y
+	Relative                    // $nn (signed branch offset)
+	ImpliedPad                  // implied + 1 padding byte (BRK: 6502 fetches 2 bytes)
 )
 
 // operandBytes returns number of operand bytes for an addressing mode

@@ -12,7 +12,7 @@ import (
 type CPUState struct {
 	PC               uint16
 	SP               uint8
-	Status           uint8  // Processor status register (aus Stack-Push rekonstruiert)
+	Status           uint8 // Processor status register (aus Stack-Push rekonstruiert)
 	EntriesProcessed uint64
 	InstrCount       uint64
 }
@@ -151,7 +151,7 @@ func (t *Tracker) Feed(e debug.Entry) {
 	// BA=0: VIC is stealing cycles, CPU is not running — abandon current fetch
 	// and re-sync on next valid read.
 	if !e.BA {
-		t.synced = true  // after BA recovers, next CPU read = opcode
+		t.synced = true // after BA recovers, next CPU read = opcode
 		t.fetchPhase = 0
 		t.pendingLen = 0
 		return

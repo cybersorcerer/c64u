@@ -68,8 +68,8 @@ var (
 
 // Formatter handles output formatting
 type Formatter struct {
-	Mode     OutputMode
-	NoColor  bool
+	Mode    OutputMode
+	NoColor bool
 }
 
 // NewFormatter creates a new output formatter
@@ -433,8 +433,8 @@ func GetFileIcon(filename string, isDir bool) string {
 
 	// Disk images
 	if strings.HasSuffix(ext, ".d64") || strings.HasSuffix(ext, ".d71") ||
-	   strings.HasSuffix(ext, ".d81") || strings.HasSuffix(ext, ".g64") ||
-	   strings.HasSuffix(ext, ".g71") || strings.HasSuffix(ext, ".dnp") {
+		strings.HasSuffix(ext, ".d81") || strings.HasSuffix(ext, ".g64") ||
+		strings.HasSuffix(ext, ".g71") || strings.HasSuffix(ext, ".dnp") {
 		return "●"
 	}
 
@@ -455,9 +455,9 @@ func GetFileIcon(filename string, isDir bool) string {
 
 	// Text files
 	if strings.HasSuffix(ext, ".seq") || strings.HasSuffix(ext, ".s00") ||
-	   strings.HasSuffix(ext, ".txt") || strings.HasSuffix(ext, ".asm") ||
-	   strings.HasSuffix(ext, ".sym") || strings.HasSuffix(ext, ".bas") ||
-	   strings.HasSuffix(ext, ".md") || strings.HasSuffix(ext, ".log") {
+		strings.HasSuffix(ext, ".txt") || strings.HasSuffix(ext, ".asm") ||
+		strings.HasSuffix(ext, ".sym") || strings.HasSuffix(ext, ".bas") ||
+		strings.HasSuffix(ext, ".md") || strings.HasSuffix(ext, ".log") {
 		return "―"
 	}
 
@@ -488,8 +488,8 @@ func GetFileTypeStyle(filename string, isDir bool) lipgloss.Style {
 
 	// Disk images: Magenta
 	if strings.HasSuffix(ext, ".d64") || strings.HasSuffix(ext, ".d71") ||
-	   strings.HasSuffix(ext, ".d81") || strings.HasSuffix(ext, ".g64") ||
-	   strings.HasSuffix(ext, ".g71") || strings.HasSuffix(ext, ".dnp") {
+		strings.HasSuffix(ext, ".d81") || strings.HasSuffix(ext, ".g64") ||
+		strings.HasSuffix(ext, ".g71") || strings.HasSuffix(ext, ".dnp") {
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("13"))
 	}
 
@@ -510,8 +510,8 @@ func GetFileTypeStyle(filename string, isDir bool) lipgloss.Style {
 
 	// Text files: White
 	if strings.HasSuffix(ext, ".seq") || strings.HasSuffix(ext, ".s00") ||
-	   strings.HasSuffix(ext, ".txt") || strings.HasSuffix(ext, ".asm") ||
-	   strings.HasSuffix(ext, ".sym") || strings.HasSuffix(ext, ".bas") {
+		strings.HasSuffix(ext, ".txt") || strings.HasSuffix(ext, ".asm") ||
+		strings.HasSuffix(ext, ".sym") || strings.HasSuffix(ext, ".bas") {
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
 	}
 

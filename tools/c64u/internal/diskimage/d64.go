@@ -15,19 +15,19 @@ const (
 	D64Size40Tracks = 196608 // 40 tracks (extended), no error bytes
 
 	// Sector and track layout
-	SectorSize      = 256
-	MaxTracks35     = 35
-	MaxTracks40     = 40
-	MaxDirEntries   = 144 // 18 sectors * 8 entries per sector
-	DirEntrySize    = 32
+	SectorSize       = 256
+	MaxTracks35      = 35
+	MaxTracks40      = 40
+	MaxDirEntries    = 144 // 18 sectors * 8 entries per sector
+	DirEntrySize     = 32
 	EntriesPerSector = 8
 
 	// Track/sector locations
-	BAMTrack         = 18
-	BAMSector        = 0
-	DirTrack         = 18
-	DirStartSector   = 1
-	MaxDirSectors    = 18
+	BAMTrack       = 18
+	BAMSector      = 0
+	DirTrack       = 18
+	DirStartSector = 1
+	MaxDirSectors  = 18
 
 	// File types (bits 0-3 of type byte)
 	FileTypeDEL = 0x00
@@ -52,22 +52,22 @@ const (
 
 // Track sectors distribution
 var trackSectors = []int{
-	0,  // Track 0 doesn't exist
+	0,                                                                  // Track 0 doesn't exist
 	21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, // Tracks 1-17: 21 sectors
 	19, 19, 19, 19, 19, 19, 19, // Tracks 18-24: 19 sectors
-	18, 18, 18, 18, 18, 18,     // Tracks 25-30: 18 sectors
-	17, 17, 17, 17, 17,         // Tracks 31-35: 17 sectors
+	18, 18, 18, 18, 18, 18, // Tracks 25-30: 18 sectors
+	17, 17, 17, 17, 17, // Tracks 31-35: 17 sectors
 	// Extended tracks for 40-track images
 	17, 17, 17, 17, 17, // Tracks 36-40: 17 sectors
 }
 
 // D64 represents a Commodore 64 disk image
 type D64 struct {
-	data       []byte
-	tracks     int
-	diskName   string
-	diskID     string
-	interleave int
+	data          []byte
+	tracks        int
+	diskName      string
+	diskID        string
+	interleave    int
 	nextDirSector int
 }
 
@@ -83,11 +83,11 @@ func NewD64(diskName, diskID string, tracks int) (*D64, error) {
 	}
 
 	d64 := &D64{
-		data:       make([]byte, size),
-		tracks:     tracks,
-		diskName:   diskName,
-		diskID:     diskID,
-		interleave: DefaultInterleave,
+		data:          make([]byte, size),
+		tracks:        tracks,
+		diskName:      diskName,
+		diskID:        diskID,
+		interleave:    DefaultInterleave,
 		nextDirSector: DirStartSector,
 	}
 
@@ -150,7 +150,7 @@ func (d *D64) initializeBAM() error {
 
 		// Don't mark track 18 as free (reserved for directory)
 		if track == DirTrack {
-			bam[bamOffset] = 0    // 0 free sectors
+			bam[bamOffset] = 0 // 0 free sectors
 			bam[bamOffset+1] = 0x00
 			bam[bamOffset+2] = 0x00
 			bam[bamOffset+3] = 0x00

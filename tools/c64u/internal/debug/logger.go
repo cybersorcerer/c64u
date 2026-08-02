@@ -8,9 +8,9 @@ import (
 )
 
 var (
-	enabled  bool
-	logFile  *os.File
-	logPath  string
+	enabled bool
+	logFile *os.File
+	logPath string
 )
 
 // Init initializes the debug logger

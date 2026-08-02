@@ -12,10 +12,10 @@ import (
 // Byte 4...: 360 × 32-bit Einträge (1440 Bytes) = 1444 Bytes gesamt
 
 const (
-	pktHeaderSize  = 4
-	entriesPerPkt  = 360
-	entrySize      = 4
-	minPacketSize  = pktHeaderSize + entrySize
+	pktHeaderSize = 4
+	entriesPerPkt = 360
+	entrySize     = 4
+	minPacketSize = pktHeaderSize + entrySize
 )
 
 // Entry repräsentiert einen dekodiertem 6510/VIC Bus-Zugriff

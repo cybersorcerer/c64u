@@ -7,10 +7,10 @@ import "fmt"
 // Result holds one disassembled instruction
 type Result struct {
 	Address  uint16
-	Bytes    []byte   // raw bytes (opcode + operands)
-	Mnemonic string   // e.g. "LDA"
-	Operand  string   // e.g. "$DC01,X"
-	Comment  string   // optional annotation (e.g. known I/O register name)
+	Bytes    []byte // raw bytes (opcode + operands)
+	Mnemonic string // e.g. "LDA"
+	Operand  string // e.g. "$DC01,X"
+	Comment  string // optional annotation (e.g. known I/O register name)
 	Illegal  bool
 }
 
@@ -215,38 +215,38 @@ var ioRegisters = map[uint16]string{
 	0xD02D: "VIC SP6COL", 0xD02E: "VIC SP7COL",
 	// SID
 	0xD400: "SID V1 FREQ LO", 0xD401: "SID V1 FREQ HI",
-	0xD402: "SID V1 PW LO",   0xD403: "SID V1 PW HI",
-	0xD404: "SID V1 CTRL",    0xD405: "SID V1 AD",
+	0xD402: "SID V1 PW LO", 0xD403: "SID V1 PW HI",
+	0xD404: "SID V1 CTRL", 0xD405: "SID V1 AD",
 	0xD406: "SID V1 SR",
 	0xD407: "SID V2 FREQ LO", 0xD408: "SID V2 FREQ HI",
-	0xD409: "SID V2 PW LO",   0xD40A: "SID V2 PW HI",
-	0xD40B: "SID V2 CTRL",    0xD40C: "SID V2 AD",
+	0xD409: "SID V2 PW LO", 0xD40A: "SID V2 PW HI",
+	0xD40B: "SID V2 CTRL", 0xD40C: "SID V2 AD",
 	0xD40D: "SID V2 SR",
 	0xD40E: "SID V3 FREQ LO", 0xD40F: "SID V3 FREQ HI",
-	0xD410: "SID V3 PW LO",   0xD411: "SID V3 PW HI",
-	0xD412: "SID V3 CTRL",    0xD413: "SID V3 AD",
+	0xD410: "SID V3 PW LO", 0xD411: "SID V3 PW HI",
+	0xD412: "SID V3 CTRL", 0xD413: "SID V3 AD",
 	0xD414: "SID V3 SR",
-	0xD415: "SID FILT LO",    0xD416: "SID FILT HI",
-	0xD417: "SID RESFILT",    0xD418: "SID SIGVOL",
-	0xD419: "SID POTX",       0xD41A: "SID POTY",
-	0xD41B: "SID OSC3",       0xD41C: "SID ENV3",
+	0xD415: "SID FILT LO", 0xD416: "SID FILT HI",
+	0xD417: "SID RESFILT", 0xD418: "SID SIGVOL",
+	0xD419: "SID POTX", 0xD41A: "SID POTY",
+	0xD41B: "SID OSC3", 0xD41C: "SID ENV3",
 	// CIA1
-	0xDC00: "CIA1 PRA",  0xDC01: "CIA1 PRB",
+	0xDC00: "CIA1 PRA", 0xDC01: "CIA1 PRB",
 	0xDC02: "CIA1 DDRA", 0xDC03: "CIA1 DDRB",
 	0xDC04: "CIA1 TA LO", 0xDC05: "CIA1 TA HI",
 	0xDC06: "CIA1 TB LO", 0xDC07: "CIA1 TB HI",
 	0xDC08: "CIA1 TOD 10THS", 0xDC09: "CIA1 TOD SEC",
-	0xDC0A: "CIA1 TOD MIN",   0xDC0B: "CIA1 TOD HR",
+	0xDC0A: "CIA1 TOD MIN", 0xDC0B: "CIA1 TOD HR",
 	0xDC0C: "CIA1 SDR",
 	0xDC0D: "CIA1 ICR",
 	0xDC0E: "CIA1 CRA", 0xDC0F: "CIA1 CRB",
 	// CIA2
-	0xDD00: "CIA2 PRA",  0xDD01: "CIA2 PRB",
+	0xDD00: "CIA2 PRA", 0xDD01: "CIA2 PRB",
 	0xDD02: "CIA2 DDRA", 0xDD03: "CIA2 DDRB",
 	0xDD04: "CIA2 TA LO", 0xDD05: "CIA2 TA HI",
 	0xDD06: "CIA2 TB LO", 0xDD07: "CIA2 TB HI",
 	0xDD08: "CIA2 TOD 10THS", 0xDD09: "CIA2 TOD SEC",
-	0xDD0A: "CIA2 TOD MIN",   0xDD0B: "CIA2 TOD HR",
+	0xDD0A: "CIA2 TOD MIN", 0xDD0B: "CIA2 TOD HR",
 	0xDD0C: "CIA2 SDR",
 	0xDD0D: "CIA2 ICR",
 	0xDD0E: "CIA2 CRA", 0xDD0F: "CIA2 CRB",

@@ -16,7 +16,7 @@ const (
 	AudioPort      = 11001
 	headerSize     = 2
 	samplesPerPkt  = 192
-	bytesPerSample = 4 // 16-bit stereo = 2 ch * 2 bytes
+	bytesPerSample = 4                              // 16-bit stereo = 2 ch * 2 bytes
 	payloadSize    = samplesPerPkt * bytesPerSample // 768
 	packetSize     = headerSize + payloadSize       // 770
 	sampleRate     = 48000

@@ -13,13 +13,13 @@ import (
 // colors: palette index repeated for all pixels
 func buildPacket(lineNum uint16, lines uint8, color uint8) []byte {
 	buf := make([]byte, headerSize+int(lines)*(PixelsPerLine/2))
-	binary.LittleEndian.PutUint16(buf[0:2], 0)              // seq
-	binary.LittleEndian.PutUint16(buf[2:4], 0)              // frame
-	binary.LittleEndian.PutUint16(buf[4:6], lineNum)        // line
-	binary.LittleEndian.PutUint16(buf[6:8], PixelsPerLine)  // width
-	buf[8] = lines                                           // lines per packet
-	buf[9] = 4                                               // bits per pixel
-	binary.LittleEndian.PutUint16(buf[10:12], 0)            // encoding
+	binary.LittleEndian.PutUint16(buf[0:2], 0)             // seq
+	binary.LittleEndian.PutUint16(buf[2:4], 0)             // frame
+	binary.LittleEndian.PutUint16(buf[4:6], lineNum)       // line
+	binary.LittleEndian.PutUint16(buf[6:8], PixelsPerLine) // width
+	buf[8] = lines                                         // lines per packet
+	buf[9] = 4                                             // bits per pixel
+	binary.LittleEndian.PutUint16(buf[10:12], 0)           // encoding
 
 	// Fill pixel data: each byte = two nibbles of same color
 	nibble := (color & 0x0F) | ((color & 0x0F) << 4)
