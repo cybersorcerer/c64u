@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/api"
@@ -226,21 +227,84 @@ Example:
 	},
 }
 
-var machineReadMemCmd = &cobra.Command{
-	Use:   "read-mem <address> [--length N]",
-	Short: "Read memory via DMA",
-	Long: `Perform DMA read operation and return binary data.
+// parseAddress reads a C64 address written as 0400, $0400 or 0x0400. The device
+// accepts nonsense like "zzzz" without complaint and answers with whatever it
+// finds, so the check happens here rather than there.
+func parseAddress(s string) (int, error) {
+	t := strings.TrimSpace(s)
+	t = strings.TrimPrefix(t, "$")
+	t = strings.TrimPrefix(strings.TrimPrefix(t, "0x"), "0X")
+	if t == "" {
+		return 0, fmt.Errorf("address is empty")
+	}
+	v, err := strconv.ParseUint(t, 16, 32)
+	if err != nil {
+		return 0, fmt.Errorf("%q is not a hexadecimal address", s)
+	}
+	if v > 0xFFFF {
+		return 0, fmt.Errorf("$%X is beyond $FFFF", v)
+	}
+	return int(v), nil
+}
 
-The output can be redirected to a file or viewed as hex dump.
+// rangeLength turns an inclusive end address into a byte count: --to 07e7 reads
+// up to and including $07E7, because that is how a C64 memory map reads.
+func rangeLength(start int, end string) (int, error) {
+	last, err := parseAddress(end)
+	if err != nil {
+		return 0, err
+	}
+	if last < start {
+		return 0, fmt.Errorf("end $%04X is below start $%04X", last, start)
+	}
+	return last - start + 1, nil
+}
+
+var machineReadMemCmd = &cobra.Command{
+	Use:   "read-mem <address> [--length N | --to ADDR]",
+	Short: "Read memory via DMA",
+	Long: `Perform a DMA read and show the memory as a hex dump.
+
+How much to read is either a byte count with --length, or an end address with
+--to, which is inclusive: --to 07e7 reads up to and including $07E7. Without
+either, 256 bytes are read.
+
+By default the memory is shown as a hex dump. To get the bytes themselves,
+add --output (-o) to write them to a file, or --raw to write them to standard
+output for piping. Either can be combined with --length or --to, and both hand
+over the memory exactly as the C64 returned it, with nothing added or removed.
+
+Addresses may be written as 0400, $0400 or 0x0400.
 
 Examples:
-  c64u machine read-mem 0400 --length 1000 > screen.bin
+  c64u machine read-mem 0400 --length 1000                    # hex dump
+  c64u machine read-mem 0400 --to 07e7                        # screen RAM
+  c64u machine read-mem 0400 --to 07e7 --output screen.bin    # binary file
+  c64u machine read-mem 0000 --to ffff -o memory.bin          # whole address space
+  c64u machine read-mem 0400 --length 1000 --raw | xxd        # pipe the bytes
   c64u machine read-mem d020 --length 1`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		address := args[0]
-		length, _ := cmd.Flags().GetInt("length")
+		outPath, _ := cmd.Flags().GetString("output")
+		raw, _ := cmd.Flags().GetBool("raw")
 
+		addr, err := parseAddress(args[0])
+		if err != nil {
+			formatter.Error("Invalid address", []string{err.Error()})
+			return
+		}
+
+		length, _ := cmd.Flags().GetInt("length")
+		if cmd.Flags().Changed("to") {
+			end, _ := cmd.Flags().GetString("to")
+			length, err = rangeLength(addr, end)
+			if err != nil {
+				formatter.Error("Invalid range", []string{err.Error()})
+				return
+			}
+		}
+
+		address := fmt.Sprintf("%04x", addr)
 		resp, err := apiClient.MachineReadMem(address, length)
 		if err != nil {
 			formatter.Error("Failed to read memory", []string{err.Error()})
@@ -252,10 +316,25 @@ Examples:
 			return
 		}
 
-		// Parse address for hex dump
-		addr, err := strconv.ParseInt(address, 16, 64)
-		if err != nil {
-			addr = 0
+		// --raw writes the bytes and nothing else, so a pipe stays clean.
+		if raw {
+			if _, err := os.Stdout.Write(resp.RawBody); err != nil {
+				formatter.Error("Failed to write memory to stdout", []string{err.Error()})
+			}
+			return
+		}
+
+		if outPath != "" {
+			if err := os.WriteFile(outPath, resp.RawBody, 0o644); err != nil {
+				formatter.Error("Failed to write memory to file", []string{err.Error()})
+				return
+			}
+			formatter.Success("Memory written", map[string]interface{}{
+				"address": "$" + address,
+				"file":    outPath,
+				"size":    len(resp.RawBody),
+			})
+			return
 		}
 
 		// Display as hex dump in text mode, raw bytes in JSON mode
@@ -385,4 +464,9 @@ func init() {
 
 	// Add flags
 	machineReadMemCmd.Flags().Int("length", 256, "Number of bytes to read")
+	machineReadMemCmd.Flags().String("to", "", "Read up to and including this address, instead of --length")
+	machineReadMemCmd.Flags().StringP("output", "o", "", "Write the raw bytes to this file instead of a hex dump")
+	machineReadMemCmd.Flags().Bool("raw", false, "Write the raw bytes to stdout instead of a hex dump, for piping")
+	machineReadMemCmd.MarkFlagsMutuallyExclusive("length", "to")
+	machineReadMemCmd.MarkFlagsMutuallyExclusive("output", "raw")
 }

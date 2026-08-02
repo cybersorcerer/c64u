@@ -268,10 +268,29 @@ c64u machine menu-button                       # Simulate Menu button press
 c64u machine write-mem <addr> <data>           # Write hex data to memory
 c64u machine write-mem-file <addr> <file>      # Write file to memory
 c64u machine read-mem <addr> [--length N]      # Read memory (hex dump)
+c64u machine read-mem <addr> --to <addr>       # Read an address range, end inclusive
+c64u machine read-mem <addr> --output <file>   # Write the raw bytes to a file (-o)
+c64u machine read-mem <addr> --raw             # Write the raw bytes to stdout
 c64u machine sendkey <string> [--delay <ms>]   # Send keystrokes to keyboard buffer
 c64u machine debug-reg                         # Read debug register (U64 only)
 c64u machine debug-reg-set <value>             # Write debug register (U64 only)
 ```
+
+**Reading memory** (`read-mem`) shows a hex dump by default. `--output` (`-o`)
+writes the bytes to a file and `--raw` writes them to standard output, both
+exactly as the C64 returned them — neither adds or removes anything. Either
+combines with `--length` or `--to`, in text and JSON mode alike:
+
+```bash
+c64u machine read-mem 0400 --to 07e7 --output screen.bin   # screen RAM, 1000 bytes
+c64u machine read-mem 0000 --to ffff -o memory.bin         # whole address space
+c64u machine read-mem 0400 --length 16 --raw | xxd         # pipe the bytes
+```
+
+`--to` is inclusive, so `0400 --to 07e7` is the full 1000-byte screen. Addresses
+may be written as `0400`, `$0400` or `0x0400`, and are checked before the
+request goes out — the device answers an invalid address with data from
+somewhere rather than an error.
 
 **Keyboard injection** (`sendkey`) converts ASCII strings to PETSCII and injects them into the C64 keyboard buffer via DMA. Strings longer than 10 characters are sent in chunks (default 100ms delay). Escape sequences: `\n` (Return), `\f1`–`\f8` (F1–F8), `\clr`, `\del`, `\home`, `\cup` (cursor up), `\cdn` (cursor down), `\cleft` (cursor left), `\cright` (cursor right).
 
