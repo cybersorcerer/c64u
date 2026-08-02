@@ -31,8 +31,14 @@ Each command has two variants:
 var sidPlayCmd = &cobra.Command{
 	Use:   "sidplay <file> [--song N]",
 	Short: "Play SID file from C64U filesystem",
-	Long:  `Play a SID file that is already stored on the C64 Ultimate filesystem.`,
-	Args:  cobra.ExactArgs(1),
+	Long: `Play a SID file that is already stored on the C64 Ultimate filesystem.
+
+Use --song to pick a subtune; the file's own default song is used otherwise.
+
+Examples:
+  c64u runners sidplay /Usb0/music/commando.sid
+  c64u runners sidplay /Usb0/music/commando.sid --song 2`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		file := args[0]
 		songNr, _ := cmd.Flags().GetInt("song")
@@ -59,8 +65,14 @@ var sidPlayCmd = &cobra.Command{
 var sidPlayUploadCmd = &cobra.Command{
 	Use:   "sidplay-upload <local-file> [--song N]",
 	Short: "Upload and play SID file",
-	Long:  `Upload a local SID file to the C64 Ultimate and play it.`,
-	Args:  cobra.ExactArgs(1),
+	Long: `Upload a local SID file to the C64 Ultimate and play it.
+
+The file is taken from this machine, so no copy has to exist on the device.
+
+Examples:
+  c64u runners sidplay-upload commando.sid
+  c64u runners sidplay-upload commando.sid --song 2`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		localFile := args[0]
 		songNr, _ := cmd.Flags().GetInt("song")
@@ -97,8 +109,11 @@ var sidPlayUploadCmd = &cobra.Command{
 var modPlayCmd = &cobra.Command{
 	Use:   "modplay <file>",
 	Short: "Play MOD file from C64U filesystem",
-	Long:  `Play an Amiga MOD file that is already stored on the C64 Ultimate filesystem.`,
-	Args:  cobra.ExactArgs(1),
+	Long: `Play an Amiga MOD file that is already stored on the C64 Ultimate filesystem.
+
+Example:
+  c64u runners modplay /Usb0/music/enigma.mod`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		file := args[0]
 
@@ -120,8 +135,11 @@ var modPlayCmd = &cobra.Command{
 var modPlayUploadCmd = &cobra.Command{
 	Use:   "modplay-upload <local-file>",
 	Short: "Upload and play MOD file",
-	Long:  `Upload a local Amiga MOD file to the C64 Ultimate and play it.`,
-	Args:  cobra.ExactArgs(1),
+	Long: `Upload a local Amiga MOD file to the C64 Ultimate and play it.
+
+Example:
+  c64u runners modplay-upload enigma.mod`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		localFile := args[0]
 
@@ -153,8 +171,14 @@ var modPlayUploadCmd = &cobra.Command{
 var loadPrgCmd = &cobra.Command{
 	Use:   "load-prg <file>",
 	Short: "Load PRG file from C64U filesystem (no execution)",
-	Long:  `Load a program into memory via DMA without executing it. The file must already be on the C64 Ultimate filesystem.`,
-	Args:  cobra.ExactArgs(1),
+	Long: `Load a program into memory via DMA without executing it. The file must already
+be on the C64 Ultimate filesystem.
+
+Use run-prg to load and start in one step.
+
+Example:
+  c64u runners load-prg /Usb0/development/hello.prg`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		file := args[0]
 
@@ -176,8 +200,12 @@ var loadPrgCmd = &cobra.Command{
 var loadPrgUploadCmd = &cobra.Command{
 	Use:   "load-prg-upload <local-file>",
 	Short: "Upload and load PRG file (no execution)",
-	Long:  `Upload a local program file and load it into memory via DMA without executing it.`,
-	Args:  cobra.ExactArgs(1),
+	Long: `Upload a local program file and load it into memory via DMA without executing
+it. Use run-prg-upload to load and start in one step.
+
+Example:
+  c64u runners load-prg-upload hello.prg`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		localFile := args[0]
 
@@ -209,8 +237,12 @@ var loadPrgUploadCmd = &cobra.Command{
 var runPrgCmd = &cobra.Command{
 	Use:   "run-prg <file>",
 	Short: "Load and run PRG file from C64U filesystem",
-	Long:  `Load a program into memory and automatically execute it. The file must already be on the C64 Ultimate filesystem.`,
-	Args:  cobra.ExactArgs(1),
+	Long: `Load a program into memory and automatically execute it. The file must already
+be on the C64 Ultimate filesystem.
+
+Example:
+  c64u runners run-prg /Usb0/development/hello.prg`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		file := args[0]
 
@@ -232,8 +264,13 @@ var runPrgCmd = &cobra.Command{
 var runPrgUploadCmd = &cobra.Command{
 	Use:   "run-prg-upload <local-file>",
 	Short: "Upload and run PRG file",
-	Long:  `Upload a local program file, load it into memory, and automatically execute it.`,
-	Args:  cobra.ExactArgs(1),
+	Long: `Upload a local program file, load it into memory, and automatically execute
+it. This is the usual last step of a build.
+
+Examples:
+  c64u runners run-prg-upload hello.prg
+  acme -o hello.prg hello.asm && c64u runners run-prg-upload hello.prg`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		localFile := args[0]
 
@@ -265,8 +302,12 @@ var runPrgUploadCmd = &cobra.Command{
 var runCrtCmd = &cobra.Command{
 	Use:   "run-crt <file>",
 	Short: "Start cartridge file from C64U filesystem",
-	Long:  `Start a cartridge file with reset. The file must already be on the C64 Ultimate filesystem.`,
-	Args:  cobra.ExactArgs(1),
+	Long: `Start a cartridge file with reset. The file must already be on the C64
+Ultimate filesystem.
+
+Example:
+  c64u runners run-crt /Usb0/carts/epyxfastload.crt`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		file := args[0]
 
@@ -288,8 +329,11 @@ var runCrtCmd = &cobra.Command{
 var runCrtUploadCmd = &cobra.Command{
 	Use:   "run-crt-upload <local-file>",
 	Short: "Upload and start cartridge file",
-	Long:  `Upload a local cartridge file and start it with reset.`,
-	Args:  cobra.ExactArgs(1),
+	Long: `Upload a local cartridge file and start it with reset.
+
+Example:
+  c64u runners run-crt-upload epyxfastload.crt`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		localFile := args[0]
 

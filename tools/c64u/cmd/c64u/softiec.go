@@ -30,7 +30,15 @@ Examples:
 var softiecStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show SoftIEC state, bus ID and served directory",
-	Args:  cobra.NoArgs,
+	Long: `Report what SoftIEC is currently doing.
+
+The directory and the drive status come from the device itself rather than from
+the configuration, so they show what the drive actually serves — the configured
+default path is only applied when the drive starts.
+
+Example:
+  c64u drives softiec status`,
+	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		status, err := softiec.ReadStatus(apiClient)
 		if err != nil {
@@ -72,8 +80,15 @@ Examples:
 var softiecDisableCmd = &cobra.Command{
 	Use:   "disable",
 	Short: "Disable SoftIEC",
-	Args:  cobra.NoArgs,
-	Run:   func(cmd *cobra.Command, args []string) { runSoftIECEnable(cmd, false) },
+	Long: `Disable the SoftIEC drive, so it stops answering on the IEC bus.
+
+This writes the device configuration; the drives endpoint has no effect on
+SoftIEC. The bus ID and directory are left as they are.
+
+Example:
+  c64u drives softiec disable`,
+	Args: cobra.NoArgs,
+	Run:  func(cmd *cobra.Command, args []string) { runSoftIECEnable(cmd, false) },
 }
 
 func runSoftIECEnable(cmd *cobra.Command, on bool) {

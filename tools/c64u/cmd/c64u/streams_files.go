@@ -473,13 +473,21 @@ var streamsListenDebugCmd = &cobra.Command{
 	Use:   "debug",
 	Args:  cobra.NoArgs,
 	Short: "Listen to the debug stream",
-	Long: `Start the C64 Ultimate debug stream and print incoming data to stdout.
+	Long: `Start the C64 Ultimate debug stream, a clock-cycle-accurate trace of the
+6510/VIC/1541 bus. Requires firmware 3.7 or newer.
+
+Three ways to consume it:
+  (default)  decoded bus accesses printed to stdout
+  --raw      plain output, for piping into other tools
+  --tui      full-screen live disassembler with CPU registers, an I/O log
+             and watchpoints — this is what the Streams tab of 'c64u ui'
+             starts for you
 
 The local IP address is detected automatically. Use --ip to override.
-Use --raw to get plain output suitable for piping to other tools.
 
 Examples:
   c64u streams listen debug
+  c64u streams listen debug --tui
   c64u streams listen debug --ip 192.168.1.50
   c64u streams listen debug --raw | grep SID`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -732,8 +740,9 @@ func init() {
 	streamsListenCmd.AddCommand(streamsListenAudioCmd)
 
 	streamsListenDebugCmd.Flags().String("ip", "", "Local IP address to receive stream (auto-detected if omitted)")
-	streamsListenDebugCmd.Flags().Bool("raw", false, "Raw output, suitable for piping")
-	streamsListenDebugCmd.Flags().Bool("tui", false, "Start interactive TUI debugger")
+	streamsListenDebugCmd.Flags().Bool("raw", false, "Plain output, suitable for piping")
+	streamsListenDebugCmd.Flags().Bool("tui", false, "Show the live disassembler instead of printing to stdout")
+	streamsListenDebugCmd.MarkFlagsMutuallyExclusive("raw", "tui")
 	streamsListenVideoCmd.Flags().String("ip", "", "Local IP address to receive stream (auto-detected if omitted)")
 	streamsListenAudioCmd.Flags().String("ip", "", "Local IP address to receive stream (auto-detected if omitted)")
 
