@@ -447,8 +447,8 @@ first, then tag — GoReleaser takes its own version from the tag.
 ```bash
 # 1. Bump RELEASE in tools/c64u/Makefile, commit it
 # 2. Tag and push
-git tag v0.9.0
-git push origin v0.9.0
+git tag v0.9.1
+git push origin v0.9.1
 ```
 
 The GitHub Action builds automatically for all platforms and creates a GitHub Release:
