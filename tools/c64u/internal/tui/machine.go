@@ -13,6 +13,7 @@ type MachineModel struct {
 	selector *Selector
 	message  string
 	err      error
+	width    int
 }
 
 // NewMachineModel creates a new machine control view
@@ -85,12 +86,9 @@ func (m *MachineModel) performAction(action string) tea.Cmd {
 }
 
 func (m *MachineModel) View() string {
-	var s string
-	s += m.selector.View()
-
-	if m.message != "" {
-		s += "\n\n" + StatusBarStyle.Render(m.message)
-	}
-
-	return s
+	m.selector.width = m.width
+	// Reset selector state so it keeps rendering after actions
+	m.selector.confirmed = false
+	m.selector.cancelled = false
+	return m.selector.View()
 }
