@@ -120,19 +120,11 @@ func (m *ViewerModel) renderContent() string {
 	return m.renderText()
 }
 
-// renderText displays content as text with non-printable chars replaced
+// renderText displays content as text with non-printable chars replaced.
+// Carriage returns have to go: the viewport would pass them through to the
+// terminal, where they send the cursor back to column one mid-line.
 func (m *ViewerModel) renderText() string {
-	var b strings.Builder
-	for _, ch := range m.content {
-		if ch == '\n' || ch == '\r' || ch == '\t' {
-			b.WriteByte(ch)
-		} else if ch < 32 || ch == 127 {
-			b.WriteByte('.')
-		} else {
-			b.WriteByte(ch)
-		}
-	}
-	return b.String()
+	return sanitizeText(string(m.content))
 }
 
 // renderHex displays content as a classic hex dump
