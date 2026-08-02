@@ -25,13 +25,45 @@ type DrivesModel struct {
 	selectedDrive  string // "a" or "b"
 }
 
-// The SoftIEC drive is listed among the drives but is enabled through the
-// device configuration rather than the drives endpoint.
+// Not every entry in the drives list is a floppy drive. SoftIEC and the printer
+// are device features that happen to sit on the IEC bus; they are switched
+// through the configuration. The drives endpoint accepts /v1/drives/<id>:on for
+// them and answers success, but nothing changes.
 const (
-	softIECDrive    = "softiec"
-	softIECCategory = "SoftIEC Drive Settings"
-	softIECItem     = "IEC Drive"
+	softIECDrive = "softiec"
+	printerDrive = "printer"
 )
+
+// configToggle locates the configuration item that enables such an entry.
+type configToggle struct {
+	category string
+	item     string
+	label    string // used in the status message
+}
+
+var configDrives = map[string]configToggle{
+	softIECDrive: {"SoftIEC Drive Settings", "IEC Drive", "SoftIEC"},
+	printerDrive: {"Printer Settings", "IEC printer", "Printer emulation"},
+}
+
+// driveLetter maps a name from the drives list ("a", "IEC Drive", "Printer
+// Emulation") to the identifier the API and configDrives use.
+func driveLetter(name string) string {
+	switch lower := strings.ToLower(name); {
+	case strings.Contains(lower, "iec"):
+		return softIECDrive
+	case strings.Contains(lower, "printer"):
+		return printerDrive
+	default:
+		return strings.ToLower(strings.TrimSpace(strings.TrimPrefix(name, "Drive")))
+	}
+}
+
+// isConfigDrive reports whether a drive list entry is one of those features.
+func isConfigDrive(letter string) bool {
+	_, ok := configDrives[letter]
+	return ok
+}
 
 // DriveItem represents a row in the drive list
 type DriveItem struct {
@@ -82,10 +114,7 @@ func (m *DrivesModel) fetchDrivesCmd() tea.Cmd {
 					continue
 				}
 
-				letter := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(name, "Drive")))
-				if strings.Contains(strings.ToLower(name), "iec") {
-					letter = "softiec"
-				}
+				letter := driveLetter(name)
 
 				enabled, _ := info["enabled"].(bool)
 				image, _ := info["image_file"].(string)
@@ -178,12 +207,12 @@ func (m *DrivesModel) openActionMenu(drive DriveItem) {
 	// Build actions based on state
 	var actions []SelectorItem
 
-	if drive.Letter == softIECDrive {
-		// SoftIEC is DOS emulation, not a floppy: no image, no ROM, no mode.
+	if toggle, ok := configDrives[drive.Letter]; ok {
+		// Not a floppy: no image, no ROM, no drive mode — only on and off.
 		if drive.Enabled {
-			actions = append(actions, SelectorItem{Label: "Disable", Value: "off", Description: "Turn off SoftIEC"})
+			actions = append(actions, SelectorItem{Label: "Disable", Value: "off", Description: "Turn off " + toggle.label})
 		} else {
-			actions = append(actions, SelectorItem{Label: "Enable", Value: "on", Description: "Turn on SoftIEC"})
+			actions = append(actions, SelectorItem{Label: "Enable", Value: "on", Description: "Turn on " + toggle.label})
 		}
 		m.actionSelector = NewSelector(fmt.Sprintf("%s Actions", drive.Name), actions)
 		m.actionSelector.PreventQuit = true
@@ -219,18 +248,15 @@ func (m *DrivesModel) performActionCmd(action string) tea.Cmd {
 			return FilePickerRequestMsg{Drive: drive}
 		}
 
-		// SoftIEC is switched through the device configuration. The drives
-		// endpoint accepts /v1/drives/softiec:on and answers success, but the
-		// drive stays disabled.
-		if drive == softIECDrive && (action == "on" || action == "off") {
+		if toggle, ok := configDrives[drive]; ok && (action == "on" || action == "off") {
 			value := "Enabled"
 			if action == "off" {
 				value = "Disabled"
 			}
-			if err := m.client.SetConfigItem(softIECCategory, softIECItem, value); err != nil {
+			if err := m.client.SetConfigItem(toggle.category, toggle.item, value); err != nil {
 				return statusMsg("Error: " + err.Error())
 			}
-			return statusMsg("SoftIEC " + strings.ToLower(value))
+			return statusMsg(toggle.label + " " + strings.ToLower(value))
 		}
 
 		var resp *api.Response
@@ -301,13 +327,17 @@ func (m *DrivesModel) View() string {
 			icon = "●" // Enabled
 		}
 
-		stateStr := drive.Mode
-		if !drive.Enabled {
+		var stateStr string
+		switch {
+		case !drive.Enabled:
 			stateStr = "Disabled"
-		} else if drive.Mounted != "" {
-			stateStr += " • " + drive.Mounted
-		} else {
-			stateStr += " • Empty"
+		case isConfigDrive(drive.Letter):
+			// No disk can be inserted into SoftIEC or the printer.
+			stateStr = "Enabled"
+		case drive.Mounted != "":
+			stateStr = drive.Mode + " • " + drive.Mounted
+		default:
+			stateStr = drive.Mode + " • Empty"
 		}
 
 		// Formatting

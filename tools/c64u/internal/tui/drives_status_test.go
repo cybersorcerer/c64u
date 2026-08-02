@@ -54,24 +54,59 @@ func TestDrivesFooterSurvivesStatusClear(t *testing.T) {
 	}
 }
 
-// SoftIEC is DOS emulation: mounting, ROMs and drive modes do not apply to it.
-func TestSoftIECActionMenuOnlyToggles(t *testing.T) {
+// SoftIEC and the printer are not floppies: mounting, ROMs and drive modes do
+// not apply to them, and they are switched through the configuration.
+func TestConfigDriveActionMenuOnlyToggles(t *testing.T) {
 	m := NewDrivesModel(nil)
 
-	m.openActionMenu(DriveItem{Name: "IEC Drive", Letter: softIECDrive, Enabled: false})
-	if len(m.actionSelector.Items) != 1 || m.actionSelector.Items[0].Value != "on" {
-		t.Errorf("disabled SoftIEC offers %+v, want a single Enable entry", m.actionSelector.Items)
-	}
+	for letter := range configDrives {
+		m.openActionMenu(DriveItem{Name: letter, Letter: letter, Enabled: false})
+		if len(m.actionSelector.Items) != 1 || m.actionSelector.Items[0].Value != "on" {
+			t.Errorf("disabled %q offers %+v, want a single Enable entry", letter, m.actionSelector.Items)
+		}
 
-	m.openActionMenu(DriveItem{Name: "IEC Drive", Letter: softIECDrive, Enabled: true})
-	if len(m.actionSelector.Items) != 1 || m.actionSelector.Items[0].Value != "off" {
-		t.Errorf("enabled SoftIEC offers %+v, want a single Disable entry", m.actionSelector.Items)
+		m.openActionMenu(DriveItem{Name: letter, Letter: letter, Enabled: true})
+		if len(m.actionSelector.Items) != 1 || m.actionSelector.Items[0].Value != "off" {
+			t.Errorf("enabled %q offers %+v, want a single Disable entry", letter, m.actionSelector.Items)
+		}
 	}
 
 	// A real floppy keeps the full action list.
 	m.openActionMenu(DriveItem{Name: "Drive A", Letter: "a", Enabled: true})
 	if len(m.actionSelector.Items) < 2 {
 		t.Errorf("drive A offers only %d actions", len(m.actionSelector.Items))
+	}
+}
+
+// The drives list names these entries; the mapping to the identifier the API
+// and the config toggles use has to hold for every one of them.
+func TestDriveLetterMapping(t *testing.T) {
+	cases := map[string]string{
+		"a":                 "a",
+		"b":                 "b",
+		"Drive A":           "a",
+		"IEC Drive":         softIECDrive,
+		"Printer Emulation": printerDrive,
+	}
+	for name, want := range cases {
+		if got := driveLetter(name); got != want {
+			t.Errorf("driveLetter(%q) = %q, want %q", name, got, want)
+		}
+	}
+}
+
+func TestConfigDriveRowShowsNoDiskState(t *testing.T) {
+	m := NewDrivesModel(nil)
+	m.width = 80
+	m.loading = false
+	m.drives = []DriveItem{{Name: "Printer Emulation", Letter: printerDrive, Enabled: true}}
+
+	view := m.View()
+	if strings.Contains(view, "Empty") {
+		t.Errorf("printer row claims an empty disk slot:\n%s", view)
+	}
+	if !strings.Contains(view, "Enabled") {
+		t.Errorf("printer row does not show its state:\n%s", view)
 	}
 }
 
