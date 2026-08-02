@@ -54,20 +54,31 @@ func TestDrivesFooterSurvivesStatusClear(t *testing.T) {
 	}
 }
 
+func actionValues(m *DrivesModel) []string {
+	var values []string
+	for _, it := range m.actionSelector.Items {
+		values = append(values, it.Value)
+	}
+	return values
+}
+
 // SoftIEC and the printer are not floppies: mounting, ROMs and drive modes do
-// not apply to them, and they are switched through the configuration.
-func TestConfigDriveActionMenuOnlyToggles(t *testing.T) {
+// not apply to either of them.
+func TestConfigDrivesOfferNoFloppyActions(t *testing.T) {
 	m := NewDrivesModel(nil)
+	floppyOnly := map[string]bool{
+		"unmount": true, "loadrom": true, "reset": true,
+		"mode_1541": true, "mode_1571": true, "mode_1581": true,
+	}
 
 	for letter := range configDrives {
-		m.openActionMenu(DriveItem{Name: letter, Letter: letter, Enabled: false})
-		if len(m.actionSelector.Items) != 1 || m.actionSelector.Items[0].Value != "on" {
-			t.Errorf("disabled %q offers %+v, want a single Enable entry", letter, m.actionSelector.Items)
-		}
-
-		m.openActionMenu(DriveItem{Name: letter, Letter: letter, Enabled: true})
-		if len(m.actionSelector.Items) != 1 || m.actionSelector.Items[0].Value != "off" {
-			t.Errorf("enabled %q offers %+v, want a single Disable entry", letter, m.actionSelector.Items)
+		for _, enabled := range []bool{false, true} {
+			m.openActionMenu(DriveItem{Name: letter, Letter: letter, Enabled: enabled})
+			for _, v := range actionValues(m) {
+				if floppyOnly[v] {
+					t.Errorf("%q (enabled=%v) offers the floppy action %q", letter, enabled, v)
+				}
+			}
 		}
 	}
 
@@ -75,6 +86,67 @@ func TestConfigDriveActionMenuOnlyToggles(t *testing.T) {
 	m.openActionMenu(DriveItem{Name: "Drive A", Letter: "a", Enabled: true})
 	if len(m.actionSelector.Items) < 2 {
 		t.Errorf("drive A offers only %d actions", len(m.actionSelector.Items))
+	}
+}
+
+func TestPrinterIsAPlainToggle(t *testing.T) {
+	m := NewDrivesModel(nil)
+
+	m.openActionMenu(DriveItem{Name: "Printer Emulation", Letter: printerDrive, Enabled: false})
+	if got := actionValues(m); len(got) != 1 || got[0] != "on" {
+		t.Errorf("disabled printer offers %v, want [on]", got)
+	}
+
+	m.openActionMenu(DriveItem{Name: "Printer Emulation", Letter: printerDrive, Enabled: true})
+	if got := actionValues(m); len(got) != 1 || got[0] != "off" {
+		t.Errorf("enabled printer offers %v, want [off]", got)
+	}
+}
+
+// The device number has to be settable, and enabling SoftIEC asks for it.
+func TestSoftIECActions(t *testing.T) {
+	m := NewDrivesModel(nil)
+
+	m.openActionMenu(DriveItem{Name: "IEC Drive", Letter: softIECDrive, Enabled: false})
+	if got := actionValues(m); len(got) != 1 || got[0] != "softiec-enable" {
+		t.Errorf("disabled SoftIEC offers %v, want [softiec-enable]", got)
+	}
+
+	m.openActionMenu(DriveItem{Name: "IEC Drive", Letter: softIECDrive, Enabled: true, BusID: 11})
+	want := []string{"softiec-root", "softiec-busid", "off"}
+	got := actionValues(m)
+	if len(got) != len(want) {
+		t.Fatalf("enabled SoftIEC offers %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("action %d is %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+// Both prompts have to prefill the current value, so confirming unchanged input
+// is a no-op rather than a surprise.
+func TestSoftIECPromptsPrefillCurrentValues(t *testing.T) {
+	m := NewDrivesModel(nil)
+	m.drives = []DriveItem{{Name: "IEC Drive", Letter: softIECDrive, Enabled: true, BusID: 12, Path: "/USB0/development/"}}
+
+	if _, handled := m.startInput("softiec-root"); !handled {
+		t.Fatal("softiec-root did not open a prompt")
+	}
+	if m.state != drivesRootInput || m.ti.Value() != "/USB0/development/" {
+		t.Errorf("root prompt state=%v value=%q", m.state, m.ti.Value())
+	}
+
+	if _, handled := m.startInput("softiec-busid"); !handled {
+		t.Fatal("softiec-busid did not open a prompt")
+	}
+	if m.state != drivesBusIDInput || m.ti.Value() != "12" {
+		t.Errorf("bus ID prompt state=%v value=%q", m.state, m.ti.Value())
+	}
+
+	if _, handled := m.startInput("off"); handled {
+		t.Error("a plain action should not open a prompt")
 	}
 }
 
@@ -91,6 +163,27 @@ func TestDriveLetterMapping(t *testing.T) {
 	for name, want := range cases {
 		if got := driveLetter(name); got != want {
 			t.Errorf("driveLetter(%q) = %q, want %q", name, got, want)
+		}
+	}
+}
+
+// Every enabled drive shows the device number it answers on, so a LOAD from
+// the C64 can address it without looking it up elsewhere.
+func TestDriveStateText(t *testing.T) {
+	cases := []struct {
+		name  string
+		drive DriveItem
+		want  string
+	}{
+		{"empty floppy", DriveItem{Letter: "a", Mode: "1541", BusID: 9, Enabled: true}, "1541 • #9 • Empty"},
+		{"floppy with disk", DriveItem{Letter: "b", Mode: "1541", BusID: 10, Enabled: true, Mounted: "games.d64"}, "1541 • #10 • games.d64"},
+		{"softiec", DriveItem{Letter: softIECDrive, BusID: 11, Enabled: true, Path: "/USB0/development/"}, "#11 • /USB0/development/"},
+		{"printer", DriveItem{Letter: printerDrive, BusID: 4, Enabled: true}, "#4"},
+		{"disabled", DriveItem{Letter: softIECDrive, BusID: 11, Enabled: false, Path: "/USB0/"}, "Disabled"},
+	}
+	for _, c := range cases {
+		if got := driveStateText(c.drive); got != c.want {
+			t.Errorf("%s: %q, want %q", c.name, got, c.want)
 		}
 	}
 }

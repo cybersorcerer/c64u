@@ -148,6 +148,9 @@ func (m *MainModel) inModalState() bool {
 		case ConfigEditing, ConfigFileNaming:
 			return true
 		}
+	case ViewDrives:
+		// Typing a device number or a directory, or picking an action.
+		return m.drives.state != drivesBrowsing || m.drives.actionSelector != nil
 	}
 	return false
 }
@@ -516,6 +519,8 @@ func (m *MainModel) helpView() string {
 			{"Reset Drive", "Soft reset the drive"},
 			{"Enable / Disable", "Toggle drive on/off"},
 			{"Mode: 1541/1571/1581", "Switch drive emulation mode"},
+			{"Set directory", "SoftIEC: serve this directory (C64 must be at BASIC)"},
+			{"Set device number", "SoftIEC: IEC bus number to answer on"},
 		}
 	case ViewMachineControl:
 		viewName = "Machine Control"

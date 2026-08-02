@@ -3,11 +3,14 @@ package tui
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/api"
+	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/softiec"
 )
 
 // DrivesModel handles the drives list view and management
@@ -23,7 +26,21 @@ type DrivesModel struct {
 	// Action Menu State
 	actionSelector *Selector
 	selectedDrive  string // "a" or "b"
+
+	// Text entry for the SoftIEC device number and directory
+	state    drivesState
+	ti       textinput.Model
+	prompt   string
+	enabling bool // the bus ID being entered is part of enabling SoftIEC
 }
+
+type drivesState int
+
+const (
+	drivesBrowsing drivesState = iota
+	drivesBusIDInput
+	drivesRootInput
+)
 
 // Not every entry in the drives list is a floppy drive. SoftIEC and the printer
 // are device features that happen to sit on the IEC bus; they are switched
@@ -59,6 +76,55 @@ func driveLetter(name string) string {
 	}
 }
 
+// driveStateText is what a drive row shows in brackets: its device number on
+// the IEC bus, and what it currently holds — a disk image for the floppies, the
+// served directory for SoftIEC.
+func driveStateText(drive DriveItem) string {
+	if !drive.Enabled {
+		return "Disabled"
+	}
+
+	parts := []string{}
+	if !isConfigDrive(drive.Letter) && drive.Mode != "" {
+		parts = append(parts, drive.Mode)
+	}
+	if drive.BusID > 0 {
+		parts = append(parts, fmt.Sprintf("#%d", drive.BusID))
+	}
+
+	switch {
+	case drive.Letter == softIECDrive:
+		if drive.Path != "" {
+			parts = append(parts, drive.Path)
+		}
+	case isConfigDrive(drive.Letter):
+		// Nothing can be inserted into the printer.
+	case drive.Mounted != "":
+		parts = append(parts, drive.Mounted)
+	default:
+		parts = append(parts, "Empty")
+	}
+
+	if len(parts) == 0 {
+		return "Enabled"
+	}
+	return strings.Join(parts, " • ")
+}
+
+// firstPartitionPath returns the directory a SoftIEC drive currently serves.
+func firstPartitionPath(info map[string]interface{}) string {
+	parts, _ := info["partitions"].([]interface{})
+	if len(parts) == 0 {
+		return ""
+	}
+	p, ok := parts[0].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	path, _ := p["path"].(string)
+	return path
+}
+
 // isConfigDrive reports whether a drive list entry is one of those features.
 func isConfigDrive(letter string) bool {
 	_, ok := configDrives[letter]
@@ -73,12 +139,17 @@ type DriveItem struct {
 	Mounted     string
 	Mode        string
 	Enabled     bool
+	BusID       int    // IEC device number the drive answers on
+	Path        string // directory served, SoftIEC only
 }
 
 func NewDrivesModel(client *api.Client) *DrivesModel {
+	ti := textinput.New()
+	ti.CharLimit = 128
 	return &DrivesModel{
 		client:  client,
 		loading: true,
+		ti:      ti,
 	}
 }
 
@@ -125,9 +196,16 @@ func (m *DrivesModel) fetchDrivesCmd() tea.Cmd {
 					desc += " (Disabled)"
 				}
 
+				busID := 0
+				if id, ok := info["bus_id"].(float64); ok {
+					busID = int(id)
+				}
+
 				items = append(items, DriveItem{
 					Name:        name,
 					Letter:      letter,
+					BusID:       busID,
+					Path:        firstPartitionPath(info),
 					Description: desc,
 					Mounted:     image,
 					Mode:        mode,
@@ -148,6 +226,13 @@ func (m *DrivesModel) fetchDrivesCmd() tea.Cmd {
 type drivesFetchedMsg []DriveItem
 
 func (m *DrivesModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.state != drivesBrowsing {
+		if key, ok := msg.(tea.KeyMsg); ok {
+			return m.handleTextInput(key)
+		}
+		return m, nil
+	}
+
 	// If action menu is open, delegate to it
 	if m.actionSelector != nil {
 		_, cmd := m.actionSelector.Update(msg)
@@ -160,6 +245,9 @@ func (m *DrivesModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.actionSelector.confirmed {
 			selectedAction := m.actionSelector.Items[m.actionSelector.selected].Value
 			m.actionSelector = nil
+			if cmd, handled := m.startInput(selectedAction); handled {
+				return m, cmd
+			}
 			return m, m.performActionCmd(selectedAction)
 		}
 
@@ -208,11 +296,20 @@ func (m *DrivesModel) openActionMenu(drive DriveItem) {
 	var actions []SelectorItem
 
 	if toggle, ok := configDrives[drive.Letter]; ok {
-		// Not a floppy: no image, no ROM, no drive mode — only on and off.
-		if drive.Enabled {
+		// Not a floppy: no image, no ROM, no drive mode.
+		switch {
+		case drive.Letter != softIECDrive && drive.Enabled:
 			actions = append(actions, SelectorItem{Label: "Disable", Value: "off", Description: "Turn off " + toggle.label})
-		} else {
+		case drive.Letter != softIECDrive:
 			actions = append(actions, SelectorItem{Label: "Enable", Value: "on", Description: "Turn on " + toggle.label})
+		case drive.Enabled:
+			actions = append(actions,
+				SelectorItem{Label: "Set directory", Value: "softiec-root", Description: "Directory served over the IEC bus"},
+				SelectorItem{Label: "Set device number", Value: "softiec-busid", Description: "IEC device number, currently #" + strconv.Itoa(drive.BusID)},
+				SelectorItem{Label: "Disable", Value: "off", Description: "Turn off SoftIEC"},
+			)
+		default:
+			actions = append(actions, SelectorItem{Label: "Enable", Value: "softiec-enable", Description: "Turn on SoftIEC and choose its device number"})
 		}
 		m.actionSelector = NewSelector(fmt.Sprintf("%s Actions", drive.Name), actions)
 		m.actionSelector.PreventQuit = true
@@ -239,6 +336,110 @@ func (m *DrivesModel) openActionMenu(drive DriveItem) {
 	m.actionSelector.PreventQuit = true
 }
 
+// startInput opens the text prompt for actions that need a value. It reports
+// whether it took the action; anything else is a plain API call.
+func (m *DrivesModel) startInput(action string) (tea.Cmd, bool) {
+	current := m.currentDrive()
+
+	switch action {
+	case "softiec-root":
+		m.state = drivesRootInput
+		m.prompt = "Directory to serve:"
+		m.ti.SetValue(current.Path)
+	case "softiec-busid", "softiec-enable":
+		m.state = drivesBusIDInput
+		m.prompt = "IEC device number:"
+		m.enabling = action == "softiec-enable"
+		busID := current.BusID
+		if busID == 0 {
+			busID = 11
+		}
+		m.ti.SetValue(strconv.Itoa(busID))
+	default:
+		return nil, false
+	}
+
+	m.ti.CursorEnd()
+	m.ti.Focus()
+	return textinput.Blink, true
+}
+
+func (m *DrivesModel) currentDrive() DriveItem {
+	if m.cursor < len(m.drives) {
+		return m.drives[m.cursor]
+	}
+	return DriveItem{}
+}
+
+func (m *DrivesModel) handleTextInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.state = drivesBrowsing
+		m.ti.Blur()
+		return m, nil
+
+	case "enter":
+		value := strings.TrimSpace(m.ti.Value())
+		state := m.state
+		enabling := m.enabling
+		m.state = drivesBrowsing
+		m.enabling = false
+		m.ti.Blur()
+		if value == "" {
+			return m, nil
+		}
+		if state == drivesRootInput {
+			return m, m.setSoftIECRootCmd(value)
+		}
+		return m, m.setSoftIECBusIDCmd(value, enabling)
+
+	default:
+		var cmd tea.Cmd
+		m.ti, cmd = m.ti.Update(msg)
+		return m, cmd
+	}
+}
+
+// setSoftIECRootCmd points SoftIEC at a directory and confirms it took effect.
+func (m *DrivesModel) setSoftIECRootCmd(path string) tea.Cmd {
+	client := m.client
+	busID := m.currentDrive().BusID
+	return func() tea.Msg {
+		status, err := softiec.SetRoot(client, busID, path)
+		if err != nil {
+			return statusMsg("Error: " + err.Error())
+		}
+		return statusMsg("SoftIEC now serves " + status.Path)
+	}
+}
+
+// setSoftIECBusIDCmd changes the IEC device number, and enables the drive too
+// when the number was asked for as part of enabling it.
+func (m *DrivesModel) setSoftIECBusIDCmd(value string, enable bool) tea.Cmd {
+	client := m.client
+	return func() tea.Msg {
+		busID, err := strconv.Atoi(value)
+		if err != nil {
+			return statusMsg(fmt.Sprintf("Error: %q is not a device number", value))
+		}
+
+		settings, err := softiec.LoadSettings(client)
+		if err != nil {
+			return statusMsg("Error: " + err.Error())
+		}
+		if err := softiec.SetBusID(client, settings, busID); err != nil {
+			return statusMsg("Error: " + err.Error())
+		}
+		if !enable {
+			return statusMsg(fmt.Sprintf("SoftIEC device number set to #%d", busID))
+		}
+		if err := softiec.SetEnabled(client, settings, true); err != nil {
+			return statusMsg("Error: " + err.Error())
+		}
+		return statusMsg(fmt.Sprintf("SoftIEC enabled on #%d", busID))
+	}
+}
+
 func (m *DrivesModel) performActionCmd(action string) tea.Cmd {
 	return func() tea.Msg {
 		drive := m.selectedDrive
@@ -249,8 +450,12 @@ func (m *DrivesModel) performActionCmd(action string) tea.Cmd {
 		}
 
 		if toggle, ok := configDrives[drive]; ok && (action == "on" || action == "off") {
+			on := action == "on"
+			if drive == softIECDrive {
+				return statusMsg(setSoftIECEnabled(m.client, on))
+			}
 			value := "Enabled"
-			if action == "off" {
+			if !on {
 				value = "Disabled"
 			}
 			if err := m.client.SetConfigItem(toggle.category, toggle.item, value); err != nil {
@@ -287,6 +492,22 @@ func (m *DrivesModel) performActionCmd(action string) tea.Cmd {
 
 		return statusMsg(driveActionResult(resp, err, okMsg))
 	}
+}
+
+// setSoftIECEnabled switches SoftIEC through the configuration, resolving where
+// that setting lives on this firmware, and returns the status line.
+func setSoftIECEnabled(client *api.Client, on bool) string {
+	settings, err := softiec.LoadSettings(client)
+	if err != nil {
+		return "Error: " + err.Error()
+	}
+	if err := softiec.SetEnabled(client, settings, on); err != nil {
+		return "Error: " + err.Error()
+	}
+	if on {
+		return "SoftIEC enabled"
+	}
+	return "SoftIEC disabled"
 }
 
 // driveActionResult turns an API call's outcome into a status line. The device
@@ -327,18 +548,7 @@ func (m *DrivesModel) View() string {
 			icon = "●" // Enabled
 		}
 
-		var stateStr string
-		switch {
-		case !drive.Enabled:
-			stateStr = "Disabled"
-		case isConfigDrive(drive.Letter):
-			// No disk can be inserted into SoftIEC or the printer.
-			stateStr = "Enabled"
-		case drive.Mounted != "":
-			stateStr = drive.Mode + " • " + drive.Mounted
-		default:
-			stateStr = drive.Mode + " • Empty"
-		}
+		stateStr := driveStateText(drive)
 
 		// Formatting
 		nameStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
@@ -363,7 +573,11 @@ func (m *DrivesModel) View() string {
 		}
 	}
 
-	b.WriteString("\n" + StatusBarStyle.Width(m.width).Render("↑/↓: select  Enter: actions  ?: help"))
+	footer := "↑/↓: select  Enter: actions  ?: help"
+	if m.state != drivesBrowsing {
+		footer = m.prompt + " " + m.ti.View() + "   (Enter: apply, Esc: cancel)"
+	}
+	b.WriteString("\n" + StatusBarStyle.Width(m.width).Render(footer))
 
 	return b.String()
 }
