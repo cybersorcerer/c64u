@@ -278,8 +278,12 @@ either, 256 bytes are read.
 
 By default the memory is shown as a hex dump. To get the bytes themselves,
 add --output (-o) to write them to a file, or --raw to write them to standard
-output for piping. Either can be combined with --length or --to, and both hand
-over the memory exactly as the C64 returned it, with nothing added or removed.
+output for piping. Given together they do both, like tee. Either combines with
+--length or --to, and all of them hand over the memory exactly as the C64
+returned it, with nothing added or removed.
+
+With --raw, standard output carries the memory and nothing else — no
+confirmation is printed even when a file was written, so a pipe stays clean.
 
 Addresses may be written as 0400, $0400 or 0x0400.
 
@@ -289,6 +293,7 @@ Examples:
   c64u machine read-mem 0400 --to 07e7 --output screen.bin    # binary file
   c64u machine read-mem 0000 --to ffff -o memory.bin          # whole address space
   c64u machine read-mem 0400 --length 1000 --raw | xxd        # pipe the bytes
+  c64u machine read-mem 0400 --to 07e7 -o s.bin --raw | xxd    # file and pipe
   c64u machine read-mem d020 --length 1`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -323,7 +328,17 @@ Examples:
 			return
 		}
 
-		// --raw writes the bytes and nothing else, so a pipe stays clean.
+		// The file is written first, so a failure is reported before any bytes
+		// have gone out and half a pipeline has run on them.
+		if outPath != "" {
+			if err := os.WriteFile(outPath, resp.RawBody, 0o644); err != nil {
+				formatter.Error("Failed to write memory to file", []string{err.Error()})
+				return
+			}
+		}
+
+		// With --raw, stdout carries the memory and nothing else — not even a
+		// confirmation of the file just written, which would land in the pipe.
 		if raw {
 			if _, err := os.Stdout.Write(resp.RawBody); err != nil {
 				formatter.Error("Failed to write memory to stdout", []string{err.Error()})
@@ -332,10 +347,6 @@ Examples:
 		}
 
 		if outPath != "" {
-			if err := os.WriteFile(outPath, resp.RawBody, 0o644); err != nil {
-				formatter.Error("Failed to write memory to file", []string{err.Error()})
-				return
-			}
 			formatter.Success("Memory written", map[string]interface{}{
 				"address": "$" + address,
 				"file":    outPath,
@@ -476,5 +487,4 @@ func init() {
 	machineReadMemCmd.Flags().StringP("output", "o", "", "Write the raw bytes to this file instead of a hex dump")
 	machineReadMemCmd.Flags().Bool("raw", false, "Write the raw bytes to stdout instead of a hex dump, for piping")
 	machineReadMemCmd.MarkFlagsMutuallyExclusive("length", "to")
-	machineReadMemCmd.MarkFlagsMutuallyExclusive("output", "raw")
 }
