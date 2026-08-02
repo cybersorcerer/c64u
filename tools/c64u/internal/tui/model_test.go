@@ -1,6 +1,19 @@
 package tui
 
-import "testing"
+import (
+	"regexp"
+	"strings"
+	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+)
+
+var (
+	ansiRE     = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+	viewNameRE = regexp.MustCompile(`View: *(.*)`)
+)
+
+func stripANSI(s string) string { return ansiRE.ReplaceAllString(s, "") }
 
 func TestSetTabSelectsMatchingView(t *testing.T) {
 	m := NewMainModel(nil, "")
@@ -23,6 +36,28 @@ func TestSetTabIgnoresOutOfRange(t *testing.T) {
 	m.SetTab(len(tabs))
 	if m.ActiveTab() != before {
 		t.Errorf("out-of-range SetTab changed the tab to %d, want %d", m.ActiveTab(), before)
+	}
+}
+
+// Every tab needs its own help section. The Streams view had none, so pressing
+// ? there showed only the global keys.
+func TestHelpCoversEveryTab(t *testing.T) {
+	for i, tab := range tabs {
+		m := NewMainModel(nil, "")
+		m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+		m.SetTab(i)
+		m.showHelp = true
+
+		help := stripANSI(m.helpView())
+		if !strings.Contains(help, "Keyboard Shortcuts") {
+			t.Fatalf("tab %q rendered no help at all", tab.Label)
+		}
+		// helpView leaves the view name empty when its switch has no case for
+		// the state, which is exactly the gap this guards against.
+		name := viewNameRE.FindStringSubmatch(help)
+		if name == nil || strings.TrimSpace(name[1]) == "" {
+			t.Errorf("tab %q (%v) has no help section of its own", tab.Label, tab.State)
+		}
 	}
 }
 

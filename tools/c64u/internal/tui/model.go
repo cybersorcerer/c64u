@@ -548,6 +548,17 @@ func (m *MainModel) helpView() string {
 			{"Reset to Defaults", "Reset to factory defaults"},
 			{"Save to File", "Export configuration to remote file"},
 		}
+	case ViewStreams:
+		viewName = "Data Streams (U64 only)"
+		specific = []helpEntry{
+			{"Enter / Space", "Start or stop the selected stream"},
+		}
+		actions = []helpEntry{
+			{"Video", "Opens a separate window, the TUI keeps running"},
+			{"Audio", "Plays through this process, no window"},
+			{"Debug", "Live disassembler, takes over the terminal until you quit it"},
+			{"One at a time", "Starting a stream stops the one already running"},
+		}
 	case ViewFileViewer:
 		viewName = "File Viewer"
 		specific = []helpEntry{
