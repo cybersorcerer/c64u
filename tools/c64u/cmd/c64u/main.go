@@ -263,6 +263,17 @@ var cliConfigShowCmd = &cobra.Command{
 	},
 }
 
+// isZeroDefault reports whether a flag's default is the zero value of its type,
+// which pflag leaves out of the help. pflag decides this with an unexported
+// helper, so the zero values are listed here instead.
+func isZeroDefault(f *pflag.Flag) bool {
+	switch f.DefValue {
+	case "", "0", "false", "[]", "<nil>", "0s":
+		return true
+	}
+	return false
+}
+
 // setupColoredHelp configures Cobra to use colored output in help text
 func setupColoredHelp() {
 	// Import lipgloss for colored help
@@ -274,17 +285,46 @@ func setupColoredHelp() {
 	// Store default help function
 	defaultHelpFunc := rootCmd.HelpFunc()
 
-	printFlag := func(f *pflag.Flag) {
-		if f.Hidden {
-			return
+	// printFlags renders a flag set the way pflag does — name, value type and
+	// default — because dropping those left the colored help less informative
+	// than the plain one behind --no-color: nothing said that --length is an
+	// int defaulting to 256, or that --port defaults to 80.
+	printFlags := func(fs *pflag.FlagSet) {
+		type row struct{ name, usage string }
+		var rows []row
+		width := 0
+
+		fs.VisitAll(func(f *pflag.Flag) {
+			if f.Hidden {
+				return
+			}
+			varName, usage := pflag.UnquoteUsage(f)
+
+			name := fmt.Sprintf("      --%s", f.Name)
+			if f.Shorthand != "" {
+				name = fmt.Sprintf("  -%s, --%s", f.Shorthand, f.Name)
+			}
+			if varName != "" {
+				name += " " + varName
+			}
+
+			if !isZeroDefault(f) {
+				if f.Value.Type() == "string" {
+					usage += fmt.Sprintf(" (default %q)", f.DefValue)
+				} else {
+					usage += fmt.Sprintf(" (default %s)", f.DefValue)
+				}
+			}
+
+			if len(name) > width {
+				width = len(name)
+			}
+			rows = append(rows, row{name, usage})
+		})
+
+		for _, r := range rows {
+			fmt.Printf("%s  %s\n", flagStyle.Render(fmt.Sprintf("%-*s", width, r.name)), r.usage)
 		}
-		flagName := fmt.Sprintf("  -%s, --%s", f.Shorthand, f.Name)
-		if f.Shorthand == "" {
-			flagName = fmt.Sprintf("      --%s", f.Name)
-		}
-		fmt.Printf("%s  %s\n",
-			flagStyle.Render(fmt.Sprintf("%-20s", flagName)),
-			f.Usage)
 	}
 
 	// Custom help template with colors
@@ -321,13 +361,13 @@ func setupColoredHelp() {
 		if cmd.HasAvailableLocalFlags() {
 			fmt.Println()
 			fmt.Println(sectionStyle.Render("Flags:"))
-			cmd.LocalFlags().VisitAll(printFlag)
+			printFlags(cmd.LocalFlags())
 		}
 
 		if cmd.HasAvailableInheritedFlags() {
 			fmt.Println()
 			fmt.Println(sectionStyle.Render("Global Flags:"))
-			cmd.InheritedFlags().VisitAll(printFlag)
+			printFlags(cmd.InheritedFlags())
 		}
 
 		fmt.Println()
