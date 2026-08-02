@@ -83,6 +83,10 @@ func Encode(s string) ([]byte, error) {
 
 func asciiToPetscii(c byte) (byte, error) {
 	switch {
+	// A real line break means RETURN, like the \n escape. Callers that build a
+	// line in Go rather than taking it from the command line write "\n".
+	case c == '\n' || c == '\r':
+		return 0x0D, nil
 	case c >= 'a' && c <= 'z':
 		// Lowercase ASCII maps to PETSCII 0x41-0x5A (unshifted letters).
 		return c - 'a' + 0x41, nil

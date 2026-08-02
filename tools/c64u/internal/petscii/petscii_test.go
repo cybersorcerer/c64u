@@ -168,3 +168,22 @@ func TestEncodeQuote(t *testing.T) {
 		t.Errorf("got %X, want [22]", got)
 	}
 }
+
+// A line break in the input means RETURN, so callers building a BASIC line in
+// Go do not have to know about the backslash escape syntax.
+func TestEncodeRealLineBreak(t *testing.T) {
+	viaEscape, err := Encode(`RUN\n`)
+	if err != nil {
+		t.Fatalf("escape form: %v", err)
+	}
+	viaNewline, err := Encode("RUN\n")
+	if err != nil {
+		t.Fatalf("newline form: %v", err)
+	}
+	if string(viaEscape) != string(viaNewline) {
+		t.Errorf("escape form %X differs from newline form %X", viaEscape, viaNewline)
+	}
+	if viaNewline[len(viaNewline)-1] != 0x0D {
+		t.Errorf("last byte is %02X, want 0D (RETURN)", viaNewline[len(viaNewline)-1])
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/softiec"
 	"github.com/spf13/cobra"
 )
 
@@ -309,6 +310,10 @@ Example:
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		drive := args[0]
+		if isSoftIEC(drive) {
+			setSoftIECEnabled(true)
+			return
+		}
 
 		resp, err := apiClient.DrivesOn(drive)
 		if err != nil {
@@ -325,6 +330,29 @@ Example:
 	},
 }
 
+// isSoftIEC reports whether a drive argument names the SoftIEC drive, which the
+// drives endpoint accepts but does not actually switch.
+func isSoftIEC(drive string) bool {
+	return strings.Contains(strings.ToLower(drive), "iec")
+}
+
+func setSoftIECEnabled(on bool) {
+	settings, err := softiec.LoadSettings(apiClient)
+	if err != nil {
+		formatter.Error("Failed to read SoftIEC settings", []string{err.Error()})
+		return
+	}
+	if err := softiec.SetEnabled(apiClient, settings, on); err != nil {
+		formatter.Error("Failed to change SoftIEC", []string{err.Error()})
+		return
+	}
+	state := "disabled"
+	if on {
+		state = "enabled"
+	}
+	formatter.Success("SoftIEC "+state, nil)
+}
+
 var drivesOffCmd = &cobra.Command{
 	Use:   "off <drive>",
 	Short: "Disable internal drive",
@@ -335,6 +363,10 @@ Example:
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		drive := args[0]
+		if isSoftIEC(drive) {
+			setSoftIECEnabled(false)
+			return
+		}
 
 		resp, err := apiClient.DrivesOff(drive)
 		if err != nil {
