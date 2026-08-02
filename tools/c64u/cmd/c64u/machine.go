@@ -354,40 +354,9 @@ Examples:
 			return
 		}
 
-		const chunkSize = 10
-		for start := 0; start < len(encoded); start += chunkSize {
-			end := start + chunkSize
-			if end > len(encoded) {
-				end = len(encoded)
-			}
-			chunk := encoded[start:end]
-
-			hexData := fmt.Sprintf("%X", chunk)
-			hexLen := fmt.Sprintf("%02X", len(chunk))
-
-			resp, err := apiClient.MachineWriteMem("0277", hexData)
-			if err != nil {
-				formatter.Error("Failed to write keyboard buffer", []string{err.Error()})
-				return
-			}
-			if resp.HasErrors() {
-				formatter.Error("API error writing keyboard buffer", resp.Errors)
-				return
-			}
-
-			resp, err = apiClient.MachineWriteMem("00C6", hexLen)
-			if err != nil {
-				formatter.Error("Failed to write buffer length", []string{err.Error()})
-				return
-			}
-			if resp.HasErrors() {
-				formatter.Error("API error writing buffer length", resp.Errors)
-				return
-			}
-
-			if end < len(encoded) {
-				time.Sleep(time.Duration(delay) * time.Millisecond)
-			}
+		if err := apiClient.SendKeyBytes(encoded, time.Duration(delay)*time.Millisecond); err != nil {
+			formatter.Error("Failed to send keystrokes", []string{err.Error()})
+			return
 		}
 
 		formatter.Success(fmt.Sprintf("Sent %d byte(s) to keyboard buffer", len(encoded)), nil)

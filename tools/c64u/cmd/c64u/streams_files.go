@@ -661,13 +661,7 @@ Examples:
 		}
 
 		sendFn := func(data []byte) error {
-			hexData := fmt.Sprintf("%X", data)
-			hexLen := fmt.Sprintf("%02X", len(data))
-			if _, err := apiClient.MachineWriteMem("0277", hexData); err != nil {
-				return err
-			}
-			_, err := apiClient.MachineWriteMem("00C6", hexLen)
-			return err
+			return apiClient.SendKeyBytes(data, 0)
 		}
 
 		if err := video.Listen(
