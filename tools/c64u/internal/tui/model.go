@@ -573,6 +573,20 @@ func (m *MainModel) clearStatusAfter(id int, d time.Duration) tea.Cmd {
 	})
 }
 
+// ActiveTab returns the index of the tab currently shown. A caller that has to
+// restart the TUI — see ui.go and PendingStream — uses it together with SetTab
+// to put the user back where they were.
+func (m *MainModel) ActiveTab() int { return m.activeTab }
+
+// SetTab selects a tab before the TUI starts. Out-of-range indices are ignored.
+func (m *MainModel) SetTab(idx int) {
+	if idx < 0 || idx >= len(tabs) {
+		return
+	}
+	m.activeTab = idx
+	m.viewState = tabs[idx].State
+}
+
 // Run starts the TUI program
 func (m *MainModel) Run() error {
 	p := tea.NewProgram(m, tea.WithAltScreen())

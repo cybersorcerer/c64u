@@ -30,9 +30,13 @@ This mode provides a visual interface for:
 		// Carries a failed stream's error into the status line of the TUI that
 		// is started afterwards; the stream writes to a screen the TUI wipes.
 		var status string
+		// The tab to return to after a stream, so leaving a stream viewer does
+		// not dump the user back on the first tab.
+		tab := 0
 
 		for {
 			model := tui.NewMainModel(apiClient, host)
+			model.SetTab(tab)
 			model.InitialStatus = status
 			status = ""
 
@@ -41,6 +45,7 @@ This mode provides a visual interface for:
 				os.Exit(1)
 			}
 
+			tab = model.ActiveTab()
 			pending := model.PendingStream
 			if pending == "" {
 				break
