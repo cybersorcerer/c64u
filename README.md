@@ -5,7 +5,8 @@ A command-line interface for controlling the [Commodore C64 Ultimate](https://co
 ## Features
 
 - **Complete REST API Coverage**: All C64 Ultimate API endpoints supported
-- **Interactive TUI**: Full-screen terminal UI for browsing, mounting, and controlling
+- **Interactive TUI**: Full-screen terminal UI with a dual-pane file browser, drive, machine and config views
+- **SoftIEC Control**: Enable the DOS emulation drive, set its device number, and point it at a directory
 - **Live Video Stream**: Display C64 video output in a native window with keyboard forwarding — type into BASIC, load and run programs from your Mac keyboard (BASIC/KERNAL input only; games that poll the keyboard matrix directly are not supported)
 - **Live Audio Stream**: Play back C64 audio in real time
 - **FTP Integration**: Access the C64 Ultimate filesystem
@@ -42,7 +43,7 @@ c64u version
 
 **Windows:**
 
-1. Download `c64u_Windows_x86_64.zip`
+1. Download `c64u_Windows_x86_64.tar.gz`
 2. Extract `c64u.exe`
 3. Add the directory to your PATH
 
@@ -108,6 +109,14 @@ c64u info         # Device information
 --no-color         Disable colored output
 ```
 
+### Shell Completion
+
+```bash
+c64u completion zsh > "${fpath[1]}/_c64u"        # zsh
+c64u completion bash > /etc/bash_completion.d/c64u
+c64u completion fish > ~/.config/fish/completions/c64u.fish
+```
+
 ### Commands
 
 #### Interactive TUI
@@ -116,23 +125,52 @@ c64u info         # Device information
 c64u ui
 ```
 
-Full-screen terminal UI with:
+Full-screen terminal UI, organised as five tabs:
 
-- **File Browser**: Navigate filesystem, mount disk images, run programs
-- **Drive Management**: Mount/unmount, load ROMs, enable/disable drives
-- **Machine Control**: Reset, reboot, pause/resume, power off
-- **Configuration**: Browse and edit device settings, save/load from flash
+- **Files**: Dual-pane browser — your machine on the left, the C64 Ultimate on the right. Copy between them, run programs, mount images
+- **Drives**: Mount/unmount, load ROMs, enable/disable drives, SoftIEC directory and device number
+- **Machine**: Reset, reboot, pause/resume, menu button, power off
+- **Config**: Browse and edit device settings, save/load from flash
+- **Streams**: Start the video, audio or debug stream
+
+Global keys, in every view:
 
 | Key | Action |
 | --- | --- |
-| `↑/↓` or `j/k` | Navigate |
-| `Enter` | Select / Confirm |
-| `←/Backspace/h` | Parent directory (File Browser) |
-| `Tab` | Toggle Text/Hex view (File Viewer) |
-| `PgUp/PgDn` | Scroll (File Viewer) |
+| `1`–`5` | Jump to tab |
+| `Ctrl+h` / `Ctrl+l` | Previous / next tab |
+| `j` / `k`, `↑` / `↓` | Move down / up |
+| `g` / `G` | Top / bottom |
+| `Ctrl+d` / `Ctrl+u` | Half page down / up |
+| `Enter` | Select / open |
 | `?` | Help overlay |
-| `Esc` | Back / Close |
+| `Esc` | Back / close |
 | `Ctrl+C` | Quit |
+
+File browser:
+
+| Key | Action |
+| --- | --- |
+| `Tab`, `h` / `l` | Switch active pane (local/remote) |
+| `Enter` | Open directory, disk actions, or run PRG/CRT/SID/MOD |
+| `Backspace` | Parent directory |
+| `Space` | Mark file for a batch operation |
+| `F5` or `c` | Copy marked files to the other pane |
+| `d` / `r` / `m` | Delete / rename / make directory |
+| `n` | New disk image (remote pane) |
+| `u` | Apply to a drive: mount disk image, or load ROM |
+| `p` | Toggle the preview column |
+
+File viewer:
+
+| Key | Action |
+| --- | --- |
+| `Tab` | Toggle text / hex view |
+| `PgUp` / `PgDn` | Scroll page by page |
+| `Esc` / `q` | Back to the file browser |
+
+Starting a stream from the Streams tab suspends the TUI, hands the terminal to
+the stream viewer, and returns you to the same tab when it exits.
 
 #### Data Streams (U64 Only)
 
@@ -256,6 +294,35 @@ c64u drives set-mode <drive> <mode>            # 1541 / 1571 / 1581
 
 **Mount types:** `d64`, `g64`, `d71`, `g71`, `d81` — **Modes:** `readwrite`, `readonly`, `unlinked`
 
+#### SoftIEC — DOS Emulation Drive
+
+SoftIEC serves a directory of the C64 Ultimate filesystem over the IEC bus, so
+the C64 can `LOAD"$",11` straight into it without a disk image.
+
+```bash
+c64u drives softiec status                     # State, device number, directory
+c64u drives softiec enable [--bus-id N]        # Enable, optionally on another bus ID
+c64u drives softiec disable
+c64u drives softiec bus-id <id>                # Change the device number (8-30)
+c64u drives softiec root <path>                # Point the drive at a directory
+```
+
+SoftIEC is not a floppy drive, and the drives endpoints do not control it —
+`/v1/drives/softiec:on` answers success while nothing changes. Enabling it and
+its bus ID are device configuration settings, which these commands write. For
+convenience `c64u drives on softiec` and `off` are routed the same way.
+
+> **`root` types on the C64.** There is no API endpoint for the served
+> directory. The command is sent as a CBM DOS `CD:` line through the keyboard
+> buffer, so the **C64 must be sitting at the BASIC prompt** — if a program is
+> running, the line goes nowhere. The drive is read back afterwards, and the
+> command reports the directory actually being served rather than assuming it
+> worked. From the C64 itself the equivalent is:
+>
+> ```basic
+> OPEN 1,11,15,"CD:development":CLOSE 1
+> ```
+
 #### File Operations
 
 ```bash
@@ -311,6 +378,8 @@ tools/c64u/
 │   ├── diskimage/     # Local disk image creation
 │   ├── network/       # Local IP detection
 │   ├── output/        # Output formatting
+│   ├── petscii/       # ASCII to PETSCII conversion for keyboard injection
+│   ├── softiec/       # SoftIEC drive: settings discovery and directory control
 │   ├── tui/           # Interactive terminal UI (Bubble Tea)
 │   └── video/         # Video stream receiver and rendering (Ebitengine)
 ├── go.mod
@@ -353,9 +422,14 @@ make lint      # Run linter (requires golangci-lint)
 
 ## Releasing
 
+The version `c64u version` reports comes from `RELEASE` in the Makefile. Bump it
+first, then tag — GoReleaser takes its own version from the tag.
+
 ```bash
-git tag v0.6.0
-git push origin v0.6.0
+# 1. Bump RELEASE in tools/c64u/Makefile, commit it
+# 2. Tag and push
+git tag v0.9.0
+git push origin v0.9.0
 ```
 
 The GitHub Action builds automatically for all platforms and creates a GitHub Release:

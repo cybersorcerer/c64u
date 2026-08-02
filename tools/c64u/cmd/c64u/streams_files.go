@@ -635,12 +635,13 @@ Examples:
 
 var streamsListenVideoCmd = &cobra.Command{
 	Use:   "video",
-	Short: "Listen to the video stream and display it in the terminal",
-	Long: `Start the C64 Ultimate video stream and render it in the terminal.
+	Short: "Listen to the video stream and display it in a window",
+	Long: `Start the C64 Ultimate video stream and render it in a native window.
 
 The local IP address is detected automatically. Use --ip to override.
-The video is rendered using Unicode half-block characters with true VIC colors.
-Press Ctrl+C to stop.
+The window is 768x544 (2x scale) with true VIC colors; PAL and NTSC are both
+supported. While it has focus, keystrokes are forwarded to the C64 keyboard
+buffer, so you can type into BASIC. Press Ctrl+C to stop.
 
 Examples:
   c64u streams listen video
