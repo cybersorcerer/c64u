@@ -4,3 +4,5 @@ monitor.log
 build
 dist
 docs/superpowers/
+.superpowers/
+/c64u

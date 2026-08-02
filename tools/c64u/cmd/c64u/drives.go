@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -140,7 +139,7 @@ var drivesListCmd = &cobra.Command{
 // ============================================================================
 
 var drivesMountCmd = &cobra.Command{
-	Use:   "mount [drive] [image] [--type TYPE] [--mode MODE] [--interactive]",
+	Use:   "mount <drive> <image> [--type TYPE] [--mode MODE]",
 	Short: "Mount disk image from C64U filesystem to internal drive",
 	Long: `Mount a disk image to internal drives (a or b) that is already on the C64 Ultimate filesystem.
 
@@ -149,41 +148,13 @@ Types: d64, g64, d71, g71, d81
 Modes: readwrite, readonly, unlinked
 
 Examples:
-  c64u drives mount a /usb0/games.d64 --mode readonly
-  c64u drives mount --interactive`,
-	Args: cobra.MaximumNArgs(2),
+  c64u drives mount a /usb0/games.d64 --mode readonly`,
+	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
-		interactive, _ := cmd.Flags().GetBool("interactive")
-
-		var drive, image string
-		var imageType, mode string
-
-		if interactive {
-			// Interactive mode: guide user through selections
-			var err error
-			drive, image, imageType, mode, err = runInteractiveMount()
-			if err != nil {
-				if err.Error() == "cancelled" {
-					formatter.Info("Mount cancelled")
-					return
-				}
-				formatter.Error("Interactive mount failed", []string{err.Error()})
-				return
-			}
-		} else {
-			// Standard CLI mode
-			if len(args) != 2 {
-				formatter.Error("Invalid arguments", []string{
-					"Expected: mount <drive> <image>",
-					"Or use: mount --interactive",
-				})
-				return
-			}
-			drive = args[0]
-			image = args[1]
-			imageType, _ = cmd.Flags().GetString("type")
-			mode, _ = cmd.Flags().GetString("mode")
-		}
+		drive := args[0]
+		image := args[1]
+		imageType, _ := cmd.Flags().GetString("type")
+		mode, _ := cmd.Flags().GetString("mode")
 
 		resp, err := apiClient.DrivesMount(drive, image, imageType, mode)
 		if err != nil {
@@ -495,193 +466,6 @@ Example:
 	},
 }
 
-// ============================================================================
-// Interactive Mount Helper
-// ============================================================================
-
-func runInteractiveMount() (drive, image, imageType, mode string, err error) {
-	// Step 1: Query available drives from API
-	resp, err := apiClient.DrivesList()
-	if err != nil {
-		return "", "", "", "", fmt.Errorf("failed to query drives: %w", err)
-	}
-
-	if resp.HasErrors() {
-		return "", "", "", "", fmt.Errorf("API errors: %s", strings.Join(resp.Errors, ", "))
-	}
-
-	// Parse drives data and filter for enabled drives
-	drives, ok := resp.Data["drives"].([]interface{})
-	if !ok || len(drives) == 0 {
-		return "", "", "", "", fmt.Errorf("no drives found")
-	}
-
-	var driveItems []tui.SelectorItem
-	for _, driveData := range drives {
-		driveMap, ok := driveData.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		// Each drive is a map with one key (the drive name)
-		for driveName, driveInfo := range driveMap {
-			info, ok := driveInfo.(map[string]interface{})
-			if !ok {
-				continue
-			}
-
-			// Only show enabled drives
-			enabled, ok := info["enabled"].(bool)
-			if !ok || !enabled {
-				continue
-			}
-
-			// Extract drive letter from name (e.g., "Drive A" -> "a")
-			driveLetter := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(driveName, "Drive")))
-
-			// Build description with type and bus ID
-			description := ""
-			if driveType, ok := info["type"].(string); ok && driveType != "" {
-				description = driveType
-			}
-			if busID, ok := info["bus_id"].(float64); ok {
-				if description != "" {
-					description += fmt.Sprintf(" (Bus #%d)", int(busID))
-				} else {
-					description = fmt.Sprintf("Bus #%d", int(busID))
-				}
-			}
-
-			// Show mounted image if any
-			if imageName, ok := info["image_file"].(string); ok && imageName != "" {
-				description += fmt.Sprintf(" - Mounted: %s", imageName)
-			}
-
-			driveItems = append(driveItems, tui.SelectorItem{
-				Label:       driveName,
-				Value:       driveLetter,
-				Description: description,
-			})
-		}
-	}
-
-	if len(driveItems) == 0 {
-		return "", "", "", "", fmt.Errorf("no enabled drives found")
-	}
-
-	driveSelector := tui.NewSelector("Select Drive", driveItems)
-	selectedDrive, err := driveSelector.Run()
-	if err != nil {
-		return "", "", "", "", err
-	}
-	drive = selectedDrive.Value
-
-	// Step 2: Browse and select disk image
-	image, imageType, err = selectDiskImage()
-	if err != nil {
-		return "", "", "", "", err
-	}
-
-	// Step 3: Select mount mode
-	modeSelector := tui.NewSelector("Select Mount Mode", []tui.SelectorItem{
-		{Label: "Read/Write", Value: "readwrite", Description: "Allow modifications to the disk"},
-		{Label: "Read Only", Value: "readonly", Description: "Protect disk from changes"},
-		{Label: "Unlinked", Value: "unlinked", Description: "Changes only in memory"},
-	})
-
-	selectedMode, err := modeSelector.Run()
-	if err != nil {
-		return "", "", "", "", err
-	}
-	mode = selectedMode.Value
-
-	return drive, image, imageType, mode, nil
-}
-
-func selectDiskImage() (path, imageType string, err error) {
-	// Get list of common paths to search
-	searchPaths := []string{"/usb0", "/usb1", "/sd", "/temp"}
-
-	var allImages []tui.SelectorItem
-
-	// Print status to stderr so it doesn't interfere with TUI
-	fmt.Fprintln(os.Stderr, "\nScanning for disk images...")
-
-	// Search for disk images in common locations (non-recursive for speed)
-	for _, searchPath := range searchPaths {
-		fmt.Fprintf(os.Stderr, "  Checking %s...\n", searchPath)
-		images, err := findDiskImages(searchPath)
-		if err == nil {
-			allImages = append(allImages, images...)
-			if len(images) > 0 {
-				fmt.Fprintf(os.Stderr, "    Found %d image(s)\n", len(images))
-			}
-		}
-	}
-
-	fmt.Fprintln(os.Stderr, "") // Clear line
-
-	if len(allImages) == 0 {
-		return "", "", fmt.Errorf("no disk images found in common locations (/usb0, /usb1, /sd, /temp)")
-	}
-
-	// Show selector with found images
-	imageSelector := tui.NewSelector("Select Disk Image", allImages)
-	selectedImage, err := imageSelector.Run()
-	if err != nil {
-		return "", "", err
-	}
-
-	// Determine image type from file extension
-	ext := strings.ToLower(filepath.Ext(selectedImage.Value))
-	if len(ext) > 0 && ext[0] == '.' {
-		ext = ext[1:]
-	}
-
-	return selectedImage.Value, ext, nil
-}
-
-func findDiskImages(basePath string) ([]tui.SelectorItem, error) {
-	// Use FTP to list directory contents
-	entries, err := apiClient.FTPList(basePath)
-	if err != nil {
-		return nil, err
-	}
-
-	var items []tui.SelectorItem
-
-	for _, entry := range entries {
-		// Skip directories for now (non-recursive search for speed)
-		if entry.IsDir {
-			continue
-		}
-
-		// Check if it's a disk image file
-		ext := strings.ToLower(filepath.Ext(entry.Name))
-		isDiskImage := ext == ".d64" || ext == ".d71" || ext == ".d81" ||
-			ext == ".g64" || ext == ".g71" || ext == ".dnp"
-
-		if isDiskImage {
-			fullPath := filepath.Join(basePath, entry.Name)
-			description := fmt.Sprintf("%s image", strings.ToUpper(ext[1:]))
-
-			// Add size info
-			if entry.Size > 0 {
-				sizeKB := entry.Size / 1024
-				description = fmt.Sprintf("%s - %d KB", description, sizeKB)
-			}
-
-			items = append(items, tui.SelectorItem{
-				Label:       entry.Name,
-				Value:       fullPath,
-				Description: description,
-			})
-		}
-	}
-
-	return items, nil
-}
-
 func init() {
 	// Add list command
 	drivesCmd.AddCommand(drivesListCmd)
@@ -704,7 +488,6 @@ func init() {
 	// Add flags for mount commands
 	drivesMountCmd.Flags().String("type", "", "Image type (d64, g64, d71, g71, d81)")
 	drivesMountCmd.Flags().String("mode", "", "Mount mode (readwrite, readonly, unlinked)")
-	drivesMountCmd.Flags().Bool("interactive", false, "Interactive mode with guided selection")
 	drivesMountUploadCmd.Flags().String("type", "", "Image type (d64, g64, d71, g71, d81)")
 	drivesMountUploadCmd.Flags().String("mode", "", "Mount mode (readwrite, readonly, unlinked)")
 }
