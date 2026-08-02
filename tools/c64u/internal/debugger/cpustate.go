@@ -12,7 +12,7 @@ import (
 type CPUState struct {
 	PC               uint16
 	SP               uint8
-	Status           uint8 // Processor status register (aus Stack-Push rekonstruiert)
+	Status           uint8 // Processor status register (reconstructed from the stack push)
 	EntriesProcessed uint64
 	InstrCount       uint64
 }
@@ -78,7 +78,7 @@ type Tracker struct {
 	pendingLen  int
 	pendingSize int // expected total instruction size
 
-	// Stack-Write-Tracking für Status-Register-Rekonstruktion
+	// Stack write tracking, used to reconstruct the status register
 	stackWriteBuf   [3]byte
 	stackWriteCount int
 }
@@ -109,7 +109,7 @@ func (t *Tracker) Feed(e debug.Entry) {
 
 	t.state.EntriesProcessed++
 
-	// Watchpoint-Prüfung auf jedem Bus-Zugriff (6510 und 1541)
+	// Check watchpoints on every bus access (6510 and 1541)
 	if hit, cond := t.Watches.Check(e.Address, e.Data, !e.RW); hit && cond {
 		t.watchTriggered = true
 	}
@@ -118,18 +118,18 @@ func (t *Tracker) Feed(e debug.Entry) {
 		return
 	}
 
-	// Stack pointer + Flag-Rekonstruktion aus Stack-Writes ($01xx, RW=0)
+	// Stack pointer and flag reconstruction from stack writes ($01xx, RW=0)
 	if e.Address >= 0x0100 && e.Address <= 0x01FF {
 		t.state.SP = uint8(e.Address & 0xFF)
-		// Bei IRQ/BRK/NMI schreibt der 6502 PCH, PCL, P (Status) auf den Stack.
-		// Wir tracken die letzen 3 Stack-Writes — der dritte ist P.
+		// On IRQ/BRK/NMI the 6502 pushes PCH, PCL and P (status) onto the stack.
+		// Track the last three stack writes — the third one is P.
 		if !e.RW {
 			t.stackWriteBuf[0] = t.stackWriteBuf[1]
 			t.stackWriteBuf[1] = t.stackWriteBuf[2]
 			t.stackWriteBuf[2] = e.Data
 			t.stackWriteCount++
 			if t.stackWriteCount >= 3 {
-				// stackWriteBuf[2] ist das Status-Register
+				// stackWriteBuf[2] is the status register
 				t.state.Status = t.stackWriteBuf[2]
 			}
 		}
@@ -139,9 +139,9 @@ func (t *Tracker) Feed(e debug.Entry) {
 	if e.PHI2 && !e.RW {
 		t.recordIO(e.Address, e.Data, true)
 		t.synced = true
-		// Laufenden Fetch NICHT abbrechen: JSR schreibt PCH/PCL auf den Stack
-		// während es noch AddrHi liest — fetchPhase=1 darf nicht zurückgesetzt
-		// werden, sonst wird AddrHi als neuer Opcode interpretiert.
+		// Do NOT abandon a fetch in progress: JSR pushes PCH/PCL onto the stack
+		// while it is still reading AddrHi — clearing fetchPhase=1 here would
+		// make AddrHi look like a new opcode.
 		if t.fetchPhase == 0 {
 			t.pendingLen = 0
 		}
@@ -168,10 +168,10 @@ func (t *Tracker) Feed(e debug.Entry) {
 		return
 	}
 
-	// Bestimmte Reads sind niemals Opcode-Fetches:
-	//   $0100-$01FF  Stack-Reads (RTI/RTS zieht PCH/PCL/P zurück)
-	//   $FFFA-$FFFF  IRQ/NMI/RST Vektorreads (nach Stack-Push des IRQ)
-	// Diese überspringen, synced bleibt true.
+	// Some reads are never opcode fetches:
+	//   $0100-$01FF  stack reads (RTI/RTS pulls PCH/PCL/P back)
+	//   $FFFA-$FFFF  IRQ/NMI/RST vector reads (after the IRQ's stack push)
+	// Skip those; synced stays true.
 	if (e.Address >= 0x0100 && e.Address <= 0x01FF) ||
 		e.Address >= 0xFFFA {
 		return
@@ -228,16 +228,16 @@ func (t *Tracker) commitInstruction() {
 	result, _ := disasm.Disassemble(t.pendingAddr, raw)
 	t.state.InstrCount++
 
-	// Kernal/BIOS ROM ($E000-$FFFF) und BASIC ROM ($A000-$BFFF) nicht in den
-	// Disassembly-Puffer aufnehmen — sie überfluten sonst den Trace mit
-	// IRQ-Handler-Code und verbergen das eigentliche Programm.
+	// Keep KERNAL/BIOS ROM ($E000-$FFFF) and BASIC ROM ($A000-$BFFF) out of
+	// the disassembly buffer — they flood the trace with IRQ handler code and
+	// bury the program actually being watched.
 	isROM := t.pendingAddr >= 0xA000 && t.pendingAddr <= 0xBFFF ||
 		t.pendingAddr >= 0xE000
 	if isROM {
 		return
 	}
 
-	// PC nur auf RAM-Adressen setzen, damit Kernal-IRQs den sichtbaren PC nicht überschreiben
+	// Only track the PC in RAM, so KERNAL IRQs do not overwrite the visible PC
 	t.state.PC = t.pendingAddr
 
 	t.instrBuf = append(t.instrBuf, DisasmLine{Result: result, IsCurrent: true})
@@ -297,8 +297,8 @@ func (t *Tracker) IOAccesses() []IOAccess {
 	return out
 }
 
-// WatchTriggered gibt true zurück wenn eine Watchpoint-Bedingung ausgelöst hat.
-// Setzt das Flag danach zurück.
+// WatchTriggered reports whether a watchpoint condition fired, and clears
+// the flag.
 func (t *Tracker) WatchTriggered() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()

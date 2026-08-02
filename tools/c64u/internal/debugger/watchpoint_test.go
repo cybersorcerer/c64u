@@ -57,14 +57,14 @@ func TestWatchListAddRemove(t *testing.T) {
 
 func TestWatchListRemoveOutOfBounds(t *testing.T) {
 	wl := NewWatchList()
-	// Remove auf leerer Liste darf nicht paniken
+	// Remove on an empty list must not panic
 	wl.Remove(-1)
 	wl.Remove(0)
 	wl.Remove(5)
 
 	wp, _ := ParseWatchpoint("D020")
 	wl.Add(wp)
-	// Remove mit Index = len darf nicht paniken
+	// Remove with index = len must not panic
 	wl.Remove(1)
 	if len(wl.All()) != 1 {
 		t.Errorf("expected list unchanged, got %d elements", len(wl.All()))
@@ -90,7 +90,7 @@ func TestWatchListCheckCondition(t *testing.T) {
 	wp, _ := ParseWatchpoint("D020=05")
 	wl.Add(wp)
 
-	// Falscher Wert — kein Condition-Hit, aber normaler Hit
+	// Wrong value — no condition hit, but still a plain hit
 	hit, cond := wl.Check(0xD020, 0x03, true)
 	if !hit {
 		t.Error("expected address hit")
@@ -102,7 +102,7 @@ func TestWatchListCheckCondition(t *testing.T) {
 		t.Error("condition should not be met for value 03")
 	}
 
-	// Richtiger Wert — Condition-Hit
+	// Matching value — condition hit
 	hit, cond = wl.Check(0xD020, 0x05, true)
 	if !hit {
 		t.Error("expected address hit")
@@ -120,7 +120,7 @@ func TestTrackerWatchpointHit(t *testing.T) {
 	wp, _ := ParseWatchpoint("D020")
 	tr.Watches.Add(wp)
 
-	// Simuliere einen Schreib-Zugriff auf $D020
+	// Simulate a write access to $D020
 	tr.Feed(debug.Entry{PHI2: true, RW: false, Address: 0xD020, Data: 0x02, BA: true})
 
 	wps := tr.Watches.All()
@@ -134,19 +134,19 @@ func TestTrackerConditionTriggersPause(t *testing.T) {
 	wp, _ := ParseWatchpoint("D020=02")
 	tr.Watches.Add(wp)
 
-	// Falscher Wert — kein Pause
+	// Wrong value — no pause
 	tr.Feed(debug.Entry{PHI2: true, RW: false, Address: 0xD020, Data: 0x05, BA: true})
 	if tr.WatchTriggered() {
 		t.Error("should not trigger for value 05")
 	}
 
-	// Richtiger Wert — Pause
+	// Matching value — pause
 	tr.Feed(debug.Entry{PHI2: true, RW: false, Address: 0xD020, Data: 0x02, BA: true})
 	if !tr.WatchTriggered() {
 		t.Error("should trigger for value 02")
 	}
 
-	// Doppelter Aufruf — Flag ist bereits zurückgesetzt
+	// Second call — the flag has already been cleared
 	if tr.WatchTriggered() {
 		t.Error("should not trigger on second call (flag must be reset)")
 	}

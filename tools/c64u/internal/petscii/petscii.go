@@ -5,12 +5,12 @@ import (
 	"strings"
 )
 
-// Encode konvertiert einen ASCII+Escape-String zu PETSCII-Bytes.
-// Unterstützte Escape-Sequenzen: \n \f1-\f8 \clr \del \stop \home \cup \cdn \cleft \cright
-// Gibt Fehler zurück bei: leerem String, unbekannten Zeichen, unbekannten Escape-Sequenzen.
+// Encode converts an ASCII string with escapes into PETSCII bytes.
+// Supported escapes: \n \f1-\f8 \clr \del \stop \home \cup \cdn \cleft \cright
+// Returns an error for an empty string, an unknown character or an unknown escape.
 func Encode(s string) ([]byte, error) {
 	if s == "" {
-		return nil, fmt.Errorf("leerer String")
+		return nil, fmt.Errorf("empty string")
 	}
 
 	var result []byte
@@ -18,7 +18,7 @@ func Encode(s string) ([]byte, error) {
 	for i < len(s) {
 		if s[i] == '\\' {
 			if i+1 >= len(s) {
-				return nil, fmt.Errorf("unvollständige Escape-Sequenz am Stringende")
+				return nil, fmt.Errorf("incomplete escape sequence at end of string")
 			}
 			rest := s[i+1:]
 			var b byte
@@ -63,7 +63,7 @@ func Encode(s string) ([]byte, error) {
 				if len(short) > 4 {
 					short = short[:4]
 				}
-				return nil, fmt.Errorf("unbekannte Escape-Sequenz: \\%s", short)
+				return nil, fmt.Errorf("unknown escape sequence: \\%s", short)
 			}
 			result = append(result, b)
 			i += 1 + consumed
@@ -103,5 +103,5 @@ func asciiToPetscii(c byte) (byte, error) {
 	case c == ']':
 		return 0x5D, nil
 	}
-	return 0, fmt.Errorf("unbekanntes Zeichen: %q", c)
+	return 0, fmt.Errorf("unknown character: %q", c)
 }

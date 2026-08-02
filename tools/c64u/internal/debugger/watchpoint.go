@@ -7,17 +7,17 @@ import (
 	"sync"
 )
 
-// Watchpoint beschreibt eine überwachte Speicheradresse.
+// Watchpoint describes a watched memory address.
 type Watchpoint struct {
 	Address        uint16
 	HasCondition   bool
 	ConditionValue uint8
 	HitCount       uint64
 	LastValue      uint8
-	ConditionMet   bool // true wenn beim letzten Hit die Bedingung erfüllt war
+	ConditionMet   bool // true if the condition held on the last hit
 }
 
-// ParseWatchpoint parst einen Ausdruck der Form "ADDR" oder "ADDR=VAL" (hex).
+// ParseWatchpoint parses an expression of the form "ADDR" or "ADDR=VAL" (hex).
 func ParseWatchpoint(expr string) (Watchpoint, error) {
 	parts := strings.SplitN(expr, "=", 2)
 	addrStr := strings.TrimSpace(parts[0])
@@ -38,25 +38,25 @@ func ParseWatchpoint(expr string) (Watchpoint, error) {
 	return wp, nil
 }
 
-// WatchList verwaltet eine thread-sichere Liste von Watchpoints.
+// WatchList is a thread-safe list of watchpoints.
 type WatchList struct {
 	mu  sync.RWMutex
 	wps []Watchpoint
 }
 
-// NewWatchList erstellt eine leere WatchList.
+// NewWatchList creates an empty WatchList.
 func NewWatchList() *WatchList {
 	return &WatchList{}
 }
 
-// Add fügt einen Watchpoint hinzu.
+// Add appends a watchpoint.
 func (wl *WatchList) Add(wp Watchpoint) {
 	wl.mu.Lock()
 	defer wl.mu.Unlock()
 	wl.wps = append(wl.wps, wp)
 }
 
-// Remove entfernt den Watchpoint am Index i.
+// Remove deletes the watchpoint at index i.
 func (wl *WatchList) Remove(i int) {
 	wl.mu.Lock()
 	defer wl.mu.Unlock()
@@ -66,7 +66,7 @@ func (wl *WatchList) Remove(i int) {
 	wl.wps = append(wl.wps[:i], wl.wps[i+1:]...)
 }
 
-// All gibt eine Kopie aller Watchpoints zurück.
+// All returns a copy of every watchpoint.
 func (wl *WatchList) All() []Watchpoint {
 	wl.mu.RLock()
 	defer wl.mu.RUnlock()
@@ -75,9 +75,9 @@ func (wl *WatchList) All() []Watchpoint {
 	return out
 }
 
-// Check prüft ob die Adresse/Wert-Kombination einen Watchpoint trifft.
-// Gibt hit=true zurück wenn mindestens ein Watchpoint zutrifft,
-// conditionMet=true wenn zusätzlich eine Wert-Bedingung erfüllt ist.
+// Check tests whether an address/value pair hits a watchpoint. It reports
+// hit=true when at least one watchpoint matches, and conditionMet=true when
+// a value condition holds as well.
 // TODO: filter by write direction once TUI exposes read/write mode selection
 func (wl *WatchList) Check(addr uint16, data uint8, write bool) (hit bool, conditionMet bool) {
 	wl.mu.Lock()
@@ -98,8 +98,8 @@ func (wl *WatchList) Check(addr uint16, data uint8, write bool) (hit bool, condi
 	return hit, conditionMet
 }
 
-// ConditionTriggered gibt true zurück wenn mindestens ein Watchpoint
-// eine erfüllte Bedingung hat (für Auto-Pause-Logik).
+// ConditionTriggered reports whether at least one watchpoint has a
+// satisfied condition, which is what drives the automatic pause.
 func (wl *WatchList) ConditionTriggered() bool {
 	wl.mu.RLock()
 	defer wl.mu.RUnlock()
@@ -111,7 +111,7 @@ func (wl *WatchList) ConditionTriggered() bool {
 	return false
 }
 
-// ClearConditions setzt alle ConditionMet-Flags zurück.
+// ClearConditions resets every ConditionMet flag.
 func (wl *WatchList) ClearConditions() {
 	wl.mu.Lock()
 	defer wl.mu.Unlock()

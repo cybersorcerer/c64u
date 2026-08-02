@@ -129,10 +129,10 @@ type Model struct {
 	// Scroll offset — 0 = follow newest (only from UI goroutine)
 	scroll int
 
-	// Watchpoint-Eingabemodus
-	watchInput    bool   // true = Eingabefeld aktiv
-	watchInputBuf string // aktuell getippter Text
-	watchInputErr string // Fehlermeldung bei ungültigem Ausdruck
+	// Watchpoint entry
+	watchInput    bool   // true while the input field is active
+	watchInputBuf string // text typed so far
+	watchInputErr string // error message for an invalid expression
 
 	lastErr  string
 	pktCount atomic.Uint64
@@ -169,7 +169,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 
 	case tea.KeyMsg:
-		// Watchpoint-Eingabemodus fängt alle Tasten ab
+		// watchpoint input mode swallows every key
 		if m.watchInput {
 			switch msg.String() {
 			case "enter":
@@ -197,7 +197,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.watchInputBuf = m.watchInputBuf[:len(m.watchInputBuf)-1]
 				}
 			default:
-				// Nur druckbare ASCII-Zeichen annehmen
+				// accept printable ASCII only
 				if len(msg.String()) == 1 {
 					m.watchInputBuf += strings.ToUpper(msg.String())
 				}
@@ -262,7 +262,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "W":
 			wps := m.tracker.Watches.All()
 			if len(wps) > 0 {
-				// Letzten Watchpoint entfernen
+				// remove the last watchpoint
 				m.tracker.Watches.Remove(len(wps) - 1)
 			}
 		}
@@ -375,7 +375,7 @@ func decode1541(w uint32) debug.Entry {
 		Clock:     w&(1<<28) != 0,
 		Sync:      w&(1<<27) != 0,
 		ByteReady: w&(1<<26) != 0,
-		IRQ:       w&(1<<25) == 0, // IRQ# ist aktiv-low
+		IRQ:       w&(1<<25) == 0, // IRQ# is active low
 		RW:        w&(1<<24) != 0,
 		Data:      uint8((w >> 16) & 0xFF),
 		Address:   uint16(w & 0xFFFF),
@@ -505,14 +505,14 @@ func (m *Model) renderDisasm(instrs []DisasmLine, width, height int, paused bool
 		return panelStyle.Width(panelInnerW(width)).Height(panelInnerH(height)).Render(title)
 	}
 
-	// currentPos: Position des aktuellen Eintrags im virtuellen Gesamtstrom.
-	// Der Puffer rotiert mit fester Größe instrMax=200, aber state.InstrCount
-	// zählt wie viele Instruktionen insgesamt gesehen wurden. Das Fenster muss
-	// sich mit jeder neuen Instruktion bewegen — deshalb basieren wir windowStart
-	// auf InstrCount, nicht auf n (das ist immer 200).
-	// Live-Modus: letzte innerH Einträge, neuester ganz unten, kein Balken.
-	// Pause-Modus: Fenster einfrieren, scroll geht rückwärts, letzter Eintrag
-	//              bekommt den Pfeil damit man sieht wo der PC war.
+	// currentPos: where the current entry sits in the virtual overall stream.
+	// The buffer rotates at a fixed instrMax=200, but state.InstrCount counts
+	// how many instructions have been seen in total. The window has to move
+	// with every new instruction, so windowStart is derived from InstrCount
+	// rather than from n (which is always 200).
+	// Live mode: the last innerH entries, newest at the bottom, no scrollbar.
+	// Paused mode: freeze the window, scrolling runs backwards, and the last
+	//              entry keeps the arrow so the PC's position stays visible.
 	windowStart := n - innerH
 	if paused {
 		windowStart = n - innerH - m.scroll
@@ -525,7 +525,7 @@ func (m *Model) renderDisasm(instrs []DisasmLine, width, height int, paused bool
 	for i := range lines {
 		lines[i] = ""
 	}
-	// Leerzeilen oben wenn Puffer noch nicht voll
+	// pad at the top while the buffer is not full yet
 	offset := innerH - (n - windowStart)
 	if offset < 0 {
 		offset = 0
@@ -653,7 +653,7 @@ func (m *Model) renderWatchPanel(width, height int) string {
 		if m.watchInputErr != "" {
 			lines = append(lines, errStyle.Render("  "+m.watchInputErr))
 		}
-		lines = append(lines, hintStyle.Render("  Format: D020  oder  D020=05"))
+		lines = append(lines, hintStyle.Render("  Format: D020  or  D020=05"))
 		lines = append(lines, hintStyle.Render("  Enter: OK   Esc: Abbrechen"))
 	}
 
