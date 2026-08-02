@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -82,5 +84,25 @@ func TestTabSurvivesRestart(t *testing.T) {
 
 	if second.viewState != ViewStreams {
 		t.Errorf("restarted model shows %v, want ViewStreams", second.viewState)
+	}
+}
+
+// The video stream is spawned as a child process. Naming it "c64u" looked the
+// binary up on PATH, so it failed whenever c64u was not installed — running
+// ./build/c64u, for instance.
+func TestSelfPathIsAnExecutableFile(t *testing.T) {
+	p := selfPath()
+	if p == "" {
+		t.Fatal("selfPath returned nothing")
+	}
+	if !filepath.IsAbs(p) {
+		t.Errorf("selfPath returned %q, want an absolute path", p)
+	}
+	info, err := os.Stat(p)
+	if err != nil {
+		t.Fatalf("selfPath returned %q, which does not exist: %v", p, err)
+	}
+	if info.Mode()&0o111 == 0 {
+		t.Errorf("selfPath returned %q, which is not executable", p)
 	}
 }

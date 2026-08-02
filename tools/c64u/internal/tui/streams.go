@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -135,6 +136,17 @@ func (m *StreamsModel) stopCmd(s *streamEntry) tea.Cmd {
 	}
 }
 
+// selfPath returns this binary, so a stream runs the build the user actually
+// started. Naming the child "c64u" looked it up on PATH instead, which fails
+// outright when the binary is not installed — running ./build/c64u, say — and
+// would otherwise silently start a different version.
+func selfPath() string {
+	if exe, err := os.Executable(); err == nil {
+		return exe
+	}
+	return os.Args[0]
+}
+
 func (m *StreamsModel) startCmd(s *streamEntry) tea.Cmd {
 	return func() tea.Msg {
 		localIP, err := network.LocalIP(m.host)
@@ -146,12 +158,12 @@ func (m *StreamsModel) startCmd(s *streamEntry) tea.Cmd {
 		case "video":
 			// video.Listen uses Ebiten which requires the main thread on macOS.
 			// Spawn as a child process so the TUI stays alive.
+			self := selfPath()
 			args := []string{"streams", "listen", "video", "--host", m.host}
-			cmd := exec.Command("c64u", args...)
+			cmd := exec.Command(self, args...)
 			s.proc = cmd
 			if err := cmd.Start(); err != nil {
-				// fallback: try with full path from os.Executable
-				return streamErrMsg{s.id, fmt.Errorf("cannot start video stream: %w", err)}
+				return streamErrMsg{s.id, fmt.Errorf("cannot start %s: %w", self, err)}
 			}
 			// Watch for process exit in background
 			go func() {
