@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -26,8 +27,15 @@ This mode provides a visual interface for:
 			return
 		}
 
+		// Carries a failed stream's error into the status line of the TUI that
+		// is started afterwards; the stream writes to a screen the TUI wipes.
+		var status string
+
 		for {
 			model := tui.NewMainModel(apiClient, host)
+			model.InitialStatus = status
+			status = ""
+
 			if err := model.Run(); err != nil {
 				fmt.Fprintf(os.Stderr, "Error running TUI: %v\n", err)
 				os.Exit(1)
@@ -47,14 +55,24 @@ This mode provides a visual interface for:
 				streamArgs = []string{"streams", "listen", pending, "--host", host}
 			}
 
-			cmd := exec.Command(os.Args[0], streamArgs...)
-			cmd.Stdin = os.Stdin
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			cmd.Run() //nolint:errcheck
+			streamCmd := exec.Command(os.Args[0], streamArgs...)
+			streamCmd.Stdin = os.Stdin
+			streamCmd.Stdout = os.Stdout
+			streamCmd.Stderr = os.Stderr
+			if err := streamCmd.Run(); err != nil && !endedBySignal(err) {
+				status = fmt.Sprintf("Error: %s stream ended: %v", pending, err)
+			}
 			// After stream exits, loop restarts TUI
 		}
 	},
+}
+
+// endedBySignal reports whether a child process was terminated by a signal,
+// which is how a user normally leaves a stream viewer (Ctrl+C) and therefore
+// not worth reporting as an error.
+func endedBySignal(err error) bool {
+	var exitErr *exec.ExitError
+	return errors.As(err, &exitErr) && !exitErr.Exited()
 }
 
 func init() {

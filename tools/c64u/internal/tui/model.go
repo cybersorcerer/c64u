@@ -69,6 +69,10 @@ type MainModel struct {
 
 	// Set before tea.Quit to signal ui.go to launch a blocking stream
 	PendingStream string
+
+	// Shown in the status line once the TUI starts. Used by ui.go to report
+	// what went wrong in a stream it ran while the TUI was suspended.
+	InitialStatus string
 }
 
 // NewMainModel creates the initial model
@@ -89,10 +93,15 @@ func NewMainModel(client *api.Client, host string) *MainModel {
 }
 
 func (m *MainModel) Init() tea.Cmd {
-	return tea.Batch(
+	cmds := []tea.Cmd{
 		m.browser.Init(),
 		m.fetchDeviceInfoCmd(),
-	)
+	}
+	if m.InitialStatus != "" {
+		status := m.InitialStatus
+		cmds = append(cmds, func() tea.Msg { return statusMsg(status) })
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m *MainModel) fetchDeviceInfoCmd() tea.Cmd {
