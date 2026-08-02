@@ -24,7 +24,10 @@ var (
 			Bold(true)
 
 	StatusBarStyle = lipgloss.NewStyle().
-			Reverse(true) // Use reverse video to adapt to any theme
+			Foreground(lipgloss.Color("0")). // Black text
+			Background(themeSecondary).      // Bright Blue background — matches HeaderStyle
+			Padding(0, 1).
+			Bold(true)
 
 	// List Styles
 	ItemStyle = lipgloss.NewStyle().
@@ -35,9 +38,7 @@ var (
 	SelectedItemStyle = lipgloss.NewStyle().
 				PaddingLeft(1).
 				Bold(true).
-				Reverse(true).
-				Foreground(themeSecondary). // Color gets inverted
-				SetString("▶ ")
+				Reverse(true)
 
 	// Box Styles
 	BoxStyle = lipgloss.NewStyle().
@@ -66,17 +67,15 @@ var (
 
 	// Tab bar styles
 	TabBarStyle = lipgloss.NewStyle().
-			Background(themePrimary).
-			Foreground(lipgloss.Color("7")).
-			Padding(0, 0)
+			Foreground(lipgloss.Color("8"))
 
 	TabStyle = lipgloss.NewStyle().
-			Padding(0, 2).
-			Foreground(lipgloss.Color("7"))
+			Padding(0, 1).
+			Foreground(lipgloss.Color("8"))
 
 	TabActiveStyle = lipgloss.NewStyle().
-			Padding(0, 2).
+			Padding(0, 1).
 			Bold(true).
-			Reverse(true).
-			Foreground(themeSecondary)
+			Foreground(lipgloss.Color("15")).
+			Underline(true)
 )

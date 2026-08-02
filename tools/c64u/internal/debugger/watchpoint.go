@@ -23,14 +23,14 @@ func ParseWatchpoint(expr string) (Watchpoint, error) {
 	addrStr := strings.TrimSpace(parts[0])
 	addrVal, err := strconv.ParseUint(addrStr, 16, 16)
 	if err != nil {
-		return Watchpoint{}, fmt.Errorf("ungültige Adresse %q: %w", addrStr, err)
+		return Watchpoint{}, fmt.Errorf("invalid address %q: %w", addrStr, err)
 	}
 	wp := Watchpoint{Address: uint16(addrVal)}
 	if len(parts) == 2 {
 		valStr := strings.TrimSpace(parts[1])
 		val, err := strconv.ParseUint(valStr, 16, 8)
 		if err != nil {
-			return Watchpoint{}, fmt.Errorf("ungültiger Wert %q: %w", valStr, err)
+			return Watchpoint{}, fmt.Errorf("invalid value %q: %w", valStr, err)
 		}
 		wp.HasCondition = true
 		wp.ConditionValue = uint8(val)

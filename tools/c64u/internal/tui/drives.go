@@ -239,6 +239,7 @@ func (m *DrivesModel) performActionCmd(action string) tea.Cmd {
 
 func (m *DrivesModel) View() string {
 	if m.actionSelector != nil {
+		m.actionSelector.width = m.width
 		return m.actionSelector.View()
 	}
 

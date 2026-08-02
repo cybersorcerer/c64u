@@ -80,9 +80,10 @@ var (
 			Foreground(colorGreen)
 
 	statusStyle = lipgloss.NewStyle().
-			Foreground(colorWhite).
-			Background(colorPrimary).
-			Padding(0, 1)
+			Foreground(lipgloss.Color("0")). // black text
+			Background(colorBright).
+			Padding(0, 1).
+			Bold(true)
 
 	statusPausedStyle = lipgloss.NewStyle().
 				Foreground(colorWhite).
@@ -419,10 +420,10 @@ func (m *Model) View() string {
 		remaining = 5
 	}
 
-	// Each bordered panel renders 2 columns wider than its set width, so the two
-	// columns' set widths must sum to m.width-4 to fit exactly side by side.
-	disasmW := (m.width - 4) * 55 / 100
-	rightW := (m.width - 4) - disasmW
+	// disasmW and rightW are the TOTAL column widths (incl. each panel's border
+	// and padding); they sum to m.width so the two columns fill the row exactly.
+	disasmW := m.width * 55 / 100
+	rightW := m.width - disasmW
 	ioH := remaining * 60 / 100
 	watchH := remaining - ioH
 
@@ -443,18 +444,18 @@ func (m *Model) View() string {
 func (m *Model) renderHeader(state CPUState, paused bool) string {
 	pauseStr := ""
 	if paused {
-		pauseStr = "  ⏸ PAUSIERT"
+		pauseStr = "  ⏸ PAUSED"
 	}
-	title := fmt.Sprintf(" C64 Disassembler%s  •  PC: %s  •  Pakete: %d  •  Instruktionen: %d ",
+	title := fmt.Sprintf(" C64 Disassembler%s  •  PC: %s  •  Packets: %d  •  Instructions: %d ",
 		pauseStr,
 		pcStyle.Render(fmt.Sprintf("$%04X", state.PC)),
 		m.pktCount.Load(),
 		state.InstrCount,
 	)
 	if paused {
-		return pausedHeaderStyle.Width(m.width - 2).Render(title)
+		return pausedHeaderStyle.Width(m.width).Render(title)
 	}
-	return headerStyle.Width(m.width - 2).Render(title)
+	return headerStyle.Width(m.width).Render(title)
 }
 
 func (m *Model) renderRegisters(state CPUState) string {
@@ -489,7 +490,7 @@ func (m *Model) renderRegisters(state CPUState) string {
 		labelStyle.Render("SR:"),
 		strings.Join(flagParts, ""),
 	)
-	return panelStyle.Width(m.width - 4).Render(content)
+	return panelStyle.Width(panelInnerW(m.width)).Render(content)
 }
 
 func (m *Model) renderDisasm(instrs []DisasmLine, width, height int, paused bool) string {
@@ -500,8 +501,8 @@ func (m *Model) renderDisasm(instrs []DisasmLine, width, height int, paused bool
 
 	n := len(instrs)
 	if n == 0 {
-		title := headerStyle.Render(" Disassembly — warte auf Daten... ")
-		return panelStyle.Width(width).Height(panelInnerH(height)).Render(title)
+		title := headerStyle.Render(" Disassembly — waiting for data... ")
+		return panelStyle.Width(panelInnerW(width)).Height(panelInnerH(height)).Render(title)
 	}
 
 	// currentPos: Position des aktuellen Eintrags im virtuellen Gesamtstrom.
@@ -566,17 +567,31 @@ func (m *Model) renderDisasm(instrs []DisasmLine, width, height int, paused bool
 	if paused {
 		title = pausedHeaderStyle.Render(fmt.Sprintf(" Disassembly  -%d ", m.scroll))
 	}
-	return panelStyle.Width(width).Height(panelInnerH(height)).Render(title + "\n" + strings.Join(lines, "\n"))
+	return panelStyle.Width(panelInnerW(width)).Height(panelInnerH(height)).Render(title + "\n" + strings.Join(lines, "\n"))
 }
 
-// panelInnerH returns the content height to pass to a bordered panelStyle so the
-// rendered panel (including its top+bottom border) occupies exactly `height` rows.
-func panelInnerH(height int) int {
-	h := height - 2
+// Lipgloss Style.Width/Height set the size INCLUDING padding but EXCLUDING the
+// border; the border is drawn on top. So to make a bordered panel occupy exactly
+// `total` cells we pass total minus only the border size (2 per axis here).
+const panelBorderX = 2
+const panelBorderY = 2
+
+// panelInnerH returns the Height value so the rendered panel occupies `total` rows.
+func panelInnerH(total int) int {
+	h := total - panelBorderY
 	if h < 1 {
 		h = 1
 	}
 	return h
+}
+
+// panelInnerW returns the Width value so the rendered panel occupies `total` cols.
+func panelInnerW(total int) int {
+	w := total - panelBorderX
+	if w < 1 {
+		w = 1
+	}
+	return w
 }
 
 func (m *Model) renderIOLog(accesses []IOAccess, width, height int) string {
@@ -608,8 +623,8 @@ func (m *Model) renderIOLog(accesses []IOAccess, width, height int) string {
 		lines = append(lines, "")
 	}
 
-	title := headerStyle.Render(" I/O Zugriffe ")
-	return panelStyle.Width(width).Height(panelInnerH(height)).Render(title + "\n" + strings.Join(lines, "\n"))
+	title := headerStyle.Render(" I/O Access ")
+	return panelStyle.Width(panelInnerW(width)).Height(panelInnerH(height)).Render(title + "\n" + strings.Join(lines, "\n"))
 }
 
 func (m *Model) renderWatchPanel(width, height int) string {
@@ -632,7 +647,7 @@ func (m *Model) renderWatchPanel(width, height int) string {
 	lines := make([]string, 0, innerH)
 
 	if m.watchInput {
-		prompt := promptStyle.Render("Adresse> ")
+		prompt := promptStyle.Render("Address> ")
 		input := m.watchInputBuf + "█"
 		lines = append(lines, prompt+input)
 		if m.watchInputErr != "" {
@@ -659,8 +674,8 @@ func (m *Model) renderWatchPanel(width, height int) string {
 	}
 
 	if len(wps) == 0 && !m.watchInput {
-		lines = append(lines, labelStyle.Render("  (keine Watchpoints)"))
-		lines = append(lines, labelStyle.Render("  w: Watchpoint hinzufügen"))
+		lines = append(lines, labelStyle.Render("  (no watchpoints)"))
+		lines = append(lines, labelStyle.Render("  w: add watchpoint"))
 	}
 
 	for len(lines) < innerH {
@@ -671,23 +686,23 @@ func (m *Model) renderWatchPanel(width, height int) string {
 	}
 
 	title := headerStyle.Render(fmt.Sprintf(" Watchpoints (%d) ", len(wps)))
-	return panelStyle.Width(width).Height(panelInnerH(height)).Render(title + "\n" + strings.Join(lines, "\n"))
+	return panelStyle.Width(panelInnerW(width)).Height(panelInnerH(height)).Render(title + "\n" + strings.Join(lines, "\n"))
 }
 
 func (m *Model) renderStatusBar(paused bool) string {
 	var text string
 	if paused {
-		text = "PAUSIERT  ↑/k: zurück  ↓/j: vor  fn+↑/u: Seite zurück  fn+↓/d: Seite vor  Space: Fortsetzen  q: Beenden"
+		text = "PAUSED  ↑/k: back  ↓/j: forward  fn+↑/u: page up  fn+↓/d: page down  Space: resume  q: quit"
 	} else {
-		text = "Space: Pausieren  w: Watch hinzufügen  W: Watch entfernen  q/Ctrl+C: Beenden"
+		text = "Space: pause  w: add watch  W: remove watch  q/Ctrl+C: quit"
 	}
 	if m.lastErr != "" {
-		text = "FEHLER: " + m.lastErr
+		text = "ERROR: " + m.lastErr
 	}
 	if paused {
-		return statusPausedStyle.Width(m.width - 2).Render(text)
+		return statusPausedStyle.Width(m.width).Render(text)
 	}
-	return statusStyle.Width(m.width - 2).Render(text)
+	return statusStyle.Width(m.width).Render(text)
 }
 
 // Run starts the debugger TUI.

@@ -41,8 +41,11 @@ func (m *ViewerModel) SetContent(filename string, content []byte, width, height 
 	m.width = width
 	m.height = height
 
-	// Create viewport sized for content area (header + footer take ~4 lines)
-	vpHeight := height - 4
+	// Create viewport sized for content area (viewer own header + footer = 2 lines)
+	vpHeight := height - 2
+	if vpHeight < 1 {
+		vpHeight = 1
+	}
 	if vpHeight < 5 {
 		vpHeight = 5
 	}
@@ -104,7 +107,7 @@ func (m *ViewerModel) View() string {
 	// Footer
 	scrollPct := fmt.Sprintf("%3.f%%", m.viewport.ScrollPercent()*100)
 	footer := fmt.Sprintf("Tab: toggle view • ↑/↓/PgUp/PgDn: scroll • %s • Esc: back", scrollPct)
-	b.WriteString(StatusBarStyle.Render(footer))
+	b.WriteString(StatusBarStyle.Width(m.width).Render(footer))
 
 	return b.String()
 }
