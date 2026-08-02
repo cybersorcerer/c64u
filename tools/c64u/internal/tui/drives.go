@@ -25,6 +25,14 @@ type DrivesModel struct {
 	selectedDrive  string // "a" or "b"
 }
 
+// The SoftIEC drive is listed among the drives but is enabled through the
+// device configuration rather than the drives endpoint.
+const (
+	softIECDrive    = "softiec"
+	softIECCategory = "SoftIEC Drive Settings"
+	softIECItem     = "IEC Drive"
+)
+
 // DriveItem represents a row in the drive list
 type DriveItem struct {
 	Name        string
@@ -170,6 +178,18 @@ func (m *DrivesModel) openActionMenu(drive DriveItem) {
 	// Build actions based on state
 	var actions []SelectorItem
 
+	if drive.Letter == softIECDrive {
+		// SoftIEC is DOS emulation, not a floppy: no image, no ROM, no mode.
+		if drive.Enabled {
+			actions = append(actions, SelectorItem{Label: "Disable", Value: "off", Description: "Turn off SoftIEC"})
+		} else {
+			actions = append(actions, SelectorItem{Label: "Enable", Value: "on", Description: "Turn on SoftIEC"})
+		}
+		m.actionSelector = NewSelector(fmt.Sprintf("%s Actions", drive.Name), actions)
+		m.actionSelector.PreventQuit = true
+		return
+	}
+
 	if drive.Enabled {
 		if drive.Mounted != "" {
 			actions = append(actions, SelectorItem{Label: "Unmount", Value: "unmount", Description: "Eject disk"})
@@ -197,6 +217,20 @@ func (m *DrivesModel) performActionCmd(action string) tea.Cmd {
 		if action == "loadrom" {
 			DebugLog("DrivesModel: Emit FilePickerRequestMsg for %s", drive)
 			return FilePickerRequestMsg{Drive: drive}
+		}
+
+		// SoftIEC is switched through the device configuration. The drives
+		// endpoint accepts /v1/drives/softiec:on and answers success, but the
+		// drive stays disabled.
+		if drive == softIECDrive && (action == "on" || action == "off") {
+			value := "Enabled"
+			if action == "off" {
+				value = "Disabled"
+			}
+			if err := m.client.SetConfigItem(softIECCategory, softIECItem, value); err != nil {
+				return statusMsg("Error: " + err.Error())
+			}
+			return statusMsg("SoftIEC " + strings.ToLower(value))
 		}
 
 		var resp *api.Response

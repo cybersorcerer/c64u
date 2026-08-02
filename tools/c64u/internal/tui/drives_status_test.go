@@ -54,6 +54,27 @@ func TestDrivesFooterSurvivesStatusClear(t *testing.T) {
 	}
 }
 
+// SoftIEC is DOS emulation: mounting, ROMs and drive modes do not apply to it.
+func TestSoftIECActionMenuOnlyToggles(t *testing.T) {
+	m := NewDrivesModel(nil)
+
+	m.openActionMenu(DriveItem{Name: "IEC Drive", Letter: softIECDrive, Enabled: false})
+	if len(m.actionSelector.Items) != 1 || m.actionSelector.Items[0].Value != "on" {
+		t.Errorf("disabled SoftIEC offers %+v, want a single Enable entry", m.actionSelector.Items)
+	}
+
+	m.openActionMenu(DriveItem{Name: "IEC Drive", Letter: softIECDrive, Enabled: true})
+	if len(m.actionSelector.Items) != 1 || m.actionSelector.Items[0].Value != "off" {
+		t.Errorf("enabled SoftIEC offers %+v, want a single Disable entry", m.actionSelector.Items)
+	}
+
+	// A real floppy keeps the full action list.
+	m.openActionMenu(DriveItem{Name: "Drive A", Letter: "a", Enabled: true})
+	if len(m.actionSelector.Items) < 2 {
+		t.Errorf("drive A offers only %d actions", len(m.actionSelector.Items))
+	}
+}
+
 func TestDriveActionResultReportsAPIErrors(t *testing.T) {
 	if got := driveActionResult(&api.Response{Errors: []string{"no such drive"}}, nil, "Drive X enabled"); got != "Error: no such drive" {
 		t.Errorf("API error reported as %q", got)
