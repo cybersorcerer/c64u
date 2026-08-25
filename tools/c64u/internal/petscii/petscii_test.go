@@ -48,23 +48,31 @@ func TestEncodeEscapeReturn(t *testing.T) {
 	}
 }
 
-func TestEncodeEscapeF1(t *testing.T) {
-	got, err := Encode(`\f1`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+// Function key codes are interleaved because F2, F4, F6 and F8 are the shifted
+// variants of F1, F3, F5 and F7. Assigning 0x85-0x8C in order is wrong for
+// everything except F1 and F8, so all eight are checked here.
+func TestEncodeEscapeFunctionKeys(t *testing.T) {
+	cases := []struct {
+		escape string
+		want   byte
+	}{
+		{`\f1`, 0x85},
+		{`\f2`, 0x89},
+		{`\f3`, 0x86},
+		{`\f4`, 0x8A},
+		{`\f5`, 0x87},
+		{`\f6`, 0x8B},
+		{`\f7`, 0x88},
+		{`\f8`, 0x8C},
 	}
-	if len(got) != 1 || got[0] != 0x85 {
-		t.Errorf("got %X, want [85]", got)
-	}
-}
-
-func TestEncodeEscapeF8(t *testing.T) {
-	got, err := Encode(`\f8`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(got) != 1 || got[0] != 0x8C {
-		t.Errorf("got %X, want [8C]", got)
+	for _, c := range cases {
+		got, err := Encode(c.escape)
+		if err != nil {
+			t.Fatalf("%s: unexpected error: %v", c.escape, err)
+		}
+		if len(got) != 1 || got[0] != c.want {
+			t.Errorf("%s: got %X, want [%02X]", c.escape, got, c.want)
+		}
 	}
 }
 

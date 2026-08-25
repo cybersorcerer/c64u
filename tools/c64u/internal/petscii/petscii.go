@@ -26,20 +26,22 @@ func Encode(s string) ([]byte, error) {
 			switch {
 			case strings.HasPrefix(rest, "n"):
 				b, consumed = 0x0D, 1
+			// Function key codes are interleaved, not sequential: F2, F4, F6
+			// and F8 are the shifted variants of F1, F3, F5 and F7.
 			case strings.HasPrefix(rest, "f1"):
 				b, consumed = 0x85, 2
 			case strings.HasPrefix(rest, "f2"):
-				b, consumed = 0x86, 2
-			case strings.HasPrefix(rest, "f3"):
-				b, consumed = 0x87, 2
-			case strings.HasPrefix(rest, "f4"):
-				b, consumed = 0x88, 2
-			case strings.HasPrefix(rest, "f5"):
 				b, consumed = 0x89, 2
-			case strings.HasPrefix(rest, "f6"):
+			case strings.HasPrefix(rest, "f3"):
+				b, consumed = 0x86, 2
+			case strings.HasPrefix(rest, "f4"):
 				b, consumed = 0x8A, 2
-			case strings.HasPrefix(rest, "f7"):
+			case strings.HasPrefix(rest, "f5"):
+				b, consumed = 0x87, 2
+			case strings.HasPrefix(rest, "f6"):
 				b, consumed = 0x8B, 2
+			case strings.HasPrefix(rest, "f7"):
+				b, consumed = 0x88, 2
 			case strings.HasPrefix(rest, "f8"):
 				b, consumed = 0x8C, 2
 			case strings.HasPrefix(rest, "cright"):
