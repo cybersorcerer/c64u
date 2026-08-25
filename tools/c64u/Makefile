@@ -6,7 +6,7 @@
 # It no longer comes from `git describe`, which reported the last tag plus a
 # commit count (v0.8.1-42-g38f783c) rather than the version being worked on.
 # The commit is reported separately, so a build stays identifiable either way.
-RELEASE := v0.9.1
+RELEASE := v0.9.2
 DIRTY := $(shell git diff --quiet HEAD 2>/dev/null || echo "-dirty")
 VERSION := $(RELEASE)$(DIRTY)
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
