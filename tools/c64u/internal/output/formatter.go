@@ -423,13 +423,24 @@ func FormatFileSize(bytes uint64) string {
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
+// fileExt returns the lowercased extension including the dot, or "" when the
+// name has none. Files on the C64 Ultimate filesystem frequently have no
+// extension, and slicing from an unguarded LastIndex panics on those.
+func fileExt(filename string) string {
+	idx := strings.LastIndex(filename, ".")
+	if idx < 0 {
+		return ""
+	}
+	return strings.ToLower(filename[idx:])
+}
+
 // GetFileIcon returns a minimal symbol for file type
 func GetFileIcon(filename string, isDir bool) string {
 	if isDir {
 		return "▸"
 	}
 
-	ext := strings.ToLower(filename[strings.LastIndex(filename, "."):])
+	ext := fileExt(filename)
 
 	// Disk images
 	if strings.HasSuffix(ext, ".d64") || strings.HasSuffix(ext, ".d71") ||
@@ -484,7 +495,7 @@ func GetFileTypeStyle(filename string, isDir bool) lipgloss.Style {
 			Bold(true)
 	}
 
-	ext := strings.ToLower(filename[strings.LastIndex(filename, "."):])
+	ext := fileExt(filename)
 
 	// Disk images: Magenta
 	if strings.HasSuffix(ext, ".d64") || strings.HasSuffix(ext, ".d71") ||
@@ -525,7 +536,7 @@ func GetFileTypeLabel(filename string, isDir bool) string {
 		return "DIR"
 	}
 
-	ext := strings.ToLower(filename[strings.LastIndex(filename, "."):])
+	ext := fileExt(filename)
 
 	switch {
 	case strings.HasSuffix(ext, ".d64"):
