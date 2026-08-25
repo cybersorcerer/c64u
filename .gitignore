@@ -1,5 +1,6 @@
 .vscode
-.claude
+.claude/*
+!.claude/skills/
 monitor.log
 build
 dist

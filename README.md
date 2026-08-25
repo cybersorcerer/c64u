@@ -15,6 +15,7 @@ A command-line interface for controlling the [Commodore C64 Ultimate](https://co
 - **Debug Logging**: Built-in debug mode for troubleshooting
 - **Cross-Platform**: Builds for macOS, Linux, and Windows
 - **Easy Integration**: Works seamlessly with c64.nvim, VSCode, and scripts
+- **Agent Skills**: Portable C64 knowledge packs for AI coding agents — Claude Code, opencode, pi, Hermes and others
 
 ## Installation
 
@@ -172,7 +173,7 @@ File viewer:
 Starting a stream from the Streams tab suspends the TUI, hands the terminal to
 the stream viewer, and returns you to the same tab when it exits.
 
-#### Data Streams (U64 Only)
+#### Data Streams (C64 Ultimate Only)
 
 ```bash
 # Live listeners — auto-detect local IP, start stream, stop on Ctrl+C
@@ -409,6 +410,15 @@ tools/c64u/
 ├── go.mod
 ├── Makefile
 └── README.md
+
+skills/                # Agent Skills knowledge packs (see skills/README.md)
+├── c64-knowledge/     # C64 hardware, 6502, graphics, disk formats, toolchain
+│   ├── SKILL.md       # Entry point: frontmatter and routing table
+│   ├── references/    # One quickref per topic, loaded on demand
+│   └── examples/      # Kick Assembler sources, verified on real hardware
+└── c64u-cli/          # Driving the device with this CLI
+    ├── SKILL.md
+    └── references/
 ```
 
 ## Integration
@@ -432,6 +442,42 @@ require("c64").setup({
 java -jar kickass.jar -o program.prg program.asm
 c64u runners run-prg-upload program.prg
 ```
+
+### With AI Coding Agents
+
+`skills/` contains knowledge packs in the [Agent Skills](https://agentskills.io/) open format,
+so a coding agent gives grounded answers on register addresses and bit layouts instead of
+plausible guesses:
+
+- **`c64-knowledge`** — memory map and banking, VIC-II, CIA, SID, PETSCII and screen codes,
+  6502 opcodes with cycle counts, graphics and bitmap formats, disk image layout, BASIC
+  pitfalls, Kick Assembler, REU programming, plus assembler examples verified on real hardware
+- **`c64u-cli`** — driving the device from the command line: every command, workflows that end
+  in a verification step, and the limits of DMA and keystroke injection
+
+The format is portable across agents; only the discovery directory differs per tool. This
+repository ships symlinks for both standard project paths, so a clone is enough for Claude Code,
+Codex CLI, opencode and pi:
+
+```
+.agents/skills/c64-knowledge -> ../../skills/c64-knowledge
+.claude/skills/c64-knowledge -> ../../skills/c64-knowledge
+```
+
+To install them user-wide instead, take the archive from any release:
+
+```bash
+curl -L -o skills.tar.gz \
+  https://github.com/cybersorcerer/c64u/releases/latest/download/c64u-skills.tar.gz
+mkdir -p ~/.agents/skills
+tar xzf skills.tar.gz -C ~/.agents/skills
+```
+
+ChatGPT takes a zip upload in Settings instead of a directory — use the per-skill archive
+`c64-knowledge.zip` from the same release.
+
+See [skills/README.md](skills/README.md) for the per-tool directory table, the Hermes
+configuration, and how to verify or package the skills yourself.
 
 ## Building
 
@@ -461,8 +507,13 @@ The GitHub Action builds automatically for all platforms and creates a GitHub Re
 - **macOS** (Intel + Apple Silicon): built on `macos-latest` with CGO — includes video and audio stream
 - **Linux** (x86_64 + ARM64): built on `ubuntu-latest` without CGO
 - **Windows** (x86_64): built on `ubuntu-latest` without CGO
+- **Agent skills**: `c64u-skills.tar.gz`, `c64u-skills.zip`, plus one zip per skill, platform independent
 
 > **Note:** Video and audio stream features are only available in the macOS binaries, as they require native frameworks (Metal, CoreAudio).
+
+The skill archives are built by the same tag push. That job downloads Kick Assembler and
+assembles every example first, so a broken example fails the release instead of shipping. Build
+them locally with `make -C skills dist`.
 
 ## Troubleshooting
 
