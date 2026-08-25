@@ -29,7 +29,7 @@ all: build
 .PHONY: build
 build: $(BUILD_DIR)/$(BINARY_NAME)
 
-$(BUILD_DIR)/$(BINARY_NAME): $(GO_FILES)
+$(BUILD_DIR)/$(BINARY_NAME): $(GO_FILES) Makefile
 	@echo "Building $(BINARY_NAME) $(VERSION)..."
 	@mkdir -p $(BUILD_DIR)
 	@test -d ./cmd/c64u || (echo "Error: ./cmd/c64u directory not found" && exit 1)
