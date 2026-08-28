@@ -1,6 +1,6 @@
 ---
 name: c64-knowledge
-description: Commodore 64 hardware and toolchain reference - memory map and banking, VIC-II, CIA keyboard/joystick/timers, SID, PETSCII and screen codes, 6502 opcodes and cycle counts, graphics and bitmap formats, disk image layout, BASIC pitfalls, Kick Assembler syntax, and REU/RAM Expansion programming. Use when writing, reviewing, or debugging C64 code in BASIC or 6502 assembly, when picking register addresses or bit values, when counting cycles for raster timing, when converting text to screen codes or images to bitmaps, or when computing SID frequencies.
+description: Commodore 64 hardware and toolchain reference - memory map and banking, VIC-II, CIA keyboard/joystick/timers, SID, PETSCII and screen codes, 6502 opcodes and cycle counts, graphics and bitmap formats, disk image layout, BASIC pitfalls, Kick Assembler syntax, REU/RAM Expansion programming, and the Ultimate Command Interface. Use when writing, reviewing, or debugging C64 code in BASIC or 6502 assembly, when picking register addresses or bit values, when counting cycles for raster timing, when converting text to screen codes or images to bitmaps, or when computing SID frequencies.
 ---
 
 # C64 Knowledge
@@ -25,6 +25,7 @@ Do not read them all; each is a standalone quickref.
 | Tokenizer, line format, quote mode, variable-name traps, memory limits | `references/basic-pitfalls.md` |
 | Directives, macros, pseudocommands, segments, `BasicUpstart2`, CLI options | `references/kickassembler.md` |
 | REC registers `$DF00-$DF0A`, STASH/FETCH/SWAP/VERIFY, detection, DMA traps | `references/reu.md` |
+| Talking to the Ultimate from a running C64 program: UCI registers, targets, DOS/network/control commands | `references/uci.md` |
 
 `references/opcodes.md` is generated from the disassembler's own table in `tools/c64u`;
 regenerate it with `make -C skills/c64-knowledge opcodes` rather than editing it.
@@ -52,6 +53,7 @@ Preferring `build then run` over `read` keeps them out of context entirely.
 | `examples/sid-note.asm` | Triangle note with best-practice ADSR, PAL/NTSC frequency pick |
 | `examples/charset-copy.asm` | Copy character ROM to RAM, repoint `$D018` |
 | `examples/hires-bitmap.asm` | 320x200 bitmap mode, colour map, plotted sine curve |
+| `examples/uci-identify.asm` | Full Ultimate Command Interface round trip from the C64 side |
 | `examples/reu-detect.asm` | Probe for a RAM Expansion Unit without triggering a DMA |
 | `examples/reu-screen-stash.asm` | Save and restore screen RAM through STASH/FETCH |
 
@@ -92,5 +94,7 @@ limits that catch people out.
 ## Sources
 
 Written from the *Commodore 64 Programmer's Reference Guide*, *Mapping the Commodore 64*
-(Sheldon Leemon), the Kick Assembler manual (Mads Nielsen), and the REU article at
-retro-programming.de. No text was copied from those sources.
+(Sheldon Leemon), the Kick Assembler manual (Mads Nielsen), the REU article at
+retro-programming.de, and the *Ultimate Documentation* (Gideon Zweijtzer) for the Command
+Interface. No text was copied from those sources; register values and protocol behaviour were
+checked against real hardware where possible.
