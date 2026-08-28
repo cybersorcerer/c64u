@@ -16,6 +16,38 @@ A command-line interface for controlling the [Commodore C64 Ultimate](https://co
 - **Cross-Platform**: Builds for macOS, Linux, and Windows
 - **Easy Integration**: Works seamlessly with c64.nvim, VSCode, and scripts
 - **Agent Skills**: Portable C64 knowledge packs for AI coding agents — Claude Code, opencode, pi, Hermes and others
+- **Ultimate Wedge**: A cartridge that adds `@$`, `/LOAD` and `↑LOAD+RUN` to stock BASIC, straight onto the Ultimate filesystem
+
+## The Ultimate Wedge
+
+A C64 out of the box cannot reach the Ultimate filesystem from the `READY`
+prompt. You browse it from the device menu, or you build a disk image. The wedge
+in [`c64/wedge`](c64/wedge/README.md) removes that detour:
+
+```
+@$          list the current directory
+@CD:NAME    change directory
+/NAME       load
+↑NAME       load and run
+```
+
+It ships as a cartridge, so it is there from power-on — the Ultimate has no
+boot-PRG setting — and it uses the [Ultimate Command Interface](skills/c64-knowledge/references/uci.md)
+rather than SoftIEC, so all four commands act on the same directory. Listing
+does not overwrite the BASIC program in memory the way `LOAD"$"` does.
+
+It is a Magic Desk cartridge that unmaps itself once installed, so BASIC still
+reports all 38911 bytes free. On a JiffyDOS machine, where `@`, `/` and `↑` are
+already taken, it detects that at boot and moves its commands behind `&` — both
+can be installed at once.
+
+```sh
+make -C c64/wedge run       # try it, until the next reboot
+make -C c64/wedge install   # copy it into /flash/carts
+```
+
+See [`c64/wedge/README.md`](c64/wedge/README.md) for installation, the JiffyDOS
+question, and what was verified on real hardware.
 
 ## Installation
 
@@ -441,6 +473,10 @@ skills/                # Agent Skills knowledge packs (see skills/README.md)
 └── c64u-cli/          # Driving the device with this CLI
     ├── SKILL.md
     └── references/
+
+c64/wedge/             # BASIC wedge cartridge (see c64/wedge/README.md)
+├── wedge.asm          # Magic Desk cartridge, installs itself into $C000
+└── Makefile           # make / make run / make install
 ```
 
 ## Integration
