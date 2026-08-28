@@ -16,7 +16,7 @@ A command-line interface for controlling the [Commodore C64 Ultimate](https://co
 - **Cross-Platform**: Builds for macOS, Linux, and Windows
 - **Easy Integration**: Works seamlessly with c64.nvim, VSCode, and scripts
 - **Agent Skills**: Portable C64 knowledge packs for AI coding agents — Claude Code, opencode, pi, Hermes and others
-- **Ultimate Wedge**: A cartridge that adds `@$`, `/LOAD` and `↑LOAD+RUN` to stock BASIC, straight onto the Ultimate filesystem
+- **Ultimate Wedge**: A cartridge that adds directory, load, save and disk-mount commands to stock BASIC, straight onto the Ultimate filesystem
 
 ## The Ultimate Wedge
 
@@ -34,7 +34,7 @@ in [`c64/wedge`](c64/wedge/README.md) removes that detour:
 
 It ships as a cartridge, so it is there from power-on — the Ultimate has no
 boot-PRG setting — and it uses the [Ultimate Command Interface](skills/c64-knowledge/references/uci.md)
-rather than SoftIEC, so all four commands act on the same directory. Listing
+rather than SoftIEC, so every command acts on the same directory. Listing
 does not overwrite the BASIC program in memory the way `LOAD"$"` does.
 
 It is a Magic Desk cartridge that unmaps itself once installed, so BASIC still
