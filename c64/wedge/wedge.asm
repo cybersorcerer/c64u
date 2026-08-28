@@ -12,16 +12,22 @@
 // Why $C000: the KERNAL and BASIC never touch that 4 KB, so the resident part
 // survives RUN/STOP+RESTORE and NEW.
 //
-// Commands:
-//   @$        directory of the Ultimate filesystem, straight to the screen
-//   @CD:NAME  change directory
-//   /NAME     load
-//   ^NAME     load and run  (^ is the up arrow, PETSCII $5E)
+// Commands (^ is the up arrow, PETSCII $5E):
+//   @$ &$              directory, straight to the screen
+//   @CD:NAME &CD:NAME  change directory
+//   /NAME &/NAME       load
+//   ^NAME &^NAME       load and run
+//
+// The prefix depends on the machine. JiffyDOS claims '@', '/' and the up arrow
+// and intercepts them before BASIC's dispatcher, so on such a machine those
+// forms never reach this code. The cartridge detects JiffyDOS at boot and, when
+// it is present, answers only to '&' - which JiffyDOS leaves alone. '&' always
+// works; the classic prefixes work on a stock KERNAL.
 //
 // Everything goes through the Ultimate Command Interface, so it all works on
-// the directory shown by @$ - no SoftIEC, no disk image, no second notion of a
-// current directory. @$ prints with CHROUT and, unlike LOAD"$", leaves the
-// BASIC program in memory untouched.
+// the directory the listing just showed - no SoftIEC, no disk image, no second
+// notion of a current directory. Listing prints with CHROUT and, unlike
+// LOAD"$", leaves the BASIC program in memory untouched.
 
 // ---------------------------------------------------------------- constants
 
@@ -69,6 +75,7 @@
 // .encoding is in force, and the default screencode_mixed turns '@' into $00 -
 // which compares against the wrong byte and truncates strings.
 .const CH_AT      = $40
+.const CH_AMP     = $26
 .const CH_DOLLAR  = $24
 .const CH_C       = $43
 // BASIC tokenises operators before a line is executed, so by the time the
@@ -183,6 +190,8 @@ install:
         lda #>KERNAL_IRQ
         sta IRQVEC + 1
 
+        jsr detectJiffy
+
         lda #<wedgeHandler
         sta IGONE
         lda #>wedgeHandler
@@ -214,7 +223,47 @@ bannerOnce:
         ldy #>bannerText
         jsr printString
 
+        // Show the prefix that is actually usable on this machine.
+        ldx #<helpStock
+        ldy #>helpStock
+        lda jiffyPresent
+        beq !show+
+        ldx #<helpJiffy
+        ldy #>helpJiffy
+!show:
+        jsr printString
+
         jmp (IMAIN)
+
+// JiffyDOS claims '@', '/' and the up arrow for its own wedge and intercepts
+// them before BASIC's dispatcher ever runs, so on such a machine those prefixes
+// are unreachable here. Scanning the KERNAL for its banner string is a more
+// durable test than checking a fixed address, which moves between versions.
+detectJiffy:
+        lda #$00
+        sta jiffyPresent
+        lda #<$e000
+        sta STRPTR
+        lda #>$e000
+        sta STRPTR + 1
+scanLoop:
+        ldy #$00
+!compare:
+        lda (STRPTR),y
+        cmp jiffySig,y
+        bne !advance+
+        iny
+        cpy #jiffySigEnd - jiffySig
+        bne !compare-
+        lda #$ff
+        sta jiffyPresent
+        rts
+!advance:
+        inc STRPTR
+        bne scanLoop
+        inc STRPTR + 1
+        bne scanLoop                    // stop after wrapping past $FFFF
+        rts
 
 // Called by BASIC instead of the statement dispatcher. The default does CHRGET
 // and falls into the dispatcher, so anything not ours must end up there too.
@@ -225,30 +274,50 @@ bannerOnce:
 wedgeHandler:
         jsr CHRGET
         php
+        sta cmdChar
+
+        // '&' always belongs to the wedge, on either kind of machine.
+        cmp #CH_AMP
+        beq !ours+
+
+        // The classic prefixes are only ours when JiffyDOS is not present.
+        ldx jiffyPresent
+        bne !notOurs+
+
         cmp #CH_AT
-        beq !at+
+        beq !ours+
         cmp #TOK_SLASH
-        beq !load+
+        beq !ours+
         cmp #TOK_ARROWUP
-        beq !loadRun+
+        beq !ours+
+!notOurs:
         plp
         jmp BASIC_DISPATCH
-!at:
+!ours:
         plp
-        jmp atCommand
-!load:
-        plp
-        jmp doLoad
-!loadRun:
-        plp
-        jmp doLoadRun
+        jmp wedgeCommand
 
-atCommand:
-        jsr CHRGET                      // the character after '@'
+// '&' and '@' are prefixes and carry the command in the next character; '/' and
+// the up arrow are commands in their own right.
+wedgeCommand:
+        lda cmdChar
+        cmp #CH_AMP
+        beq !prefix+
+        cmp #CH_AT
+        bne !dispatch+
+!prefix:
+        jsr CHRGET
+        sta cmdChar
+!dispatch:
+        lda cmdChar
         cmp #CH_DOLLAR
         beq doDirectory
         cmp #CH_C
         beq doChangeDir
+        cmp #TOK_SLASH
+        beq doLoad
+        cmp #TOK_ARROWUP
+        beq doLoadRun
 
         ldx #<errText
         ldy #>errText
@@ -731,6 +800,8 @@ printString:
 origMain:     .word $0000
 entryAttr:    .byte $00
 runAfterLoad: .byte $00
+cmdChar:      .byte $00
+jiffyPresent: .byte $00
 headerCount:  .byte $00
 loadAddr:     .word $0000
 runLine:      .byte TOK_RUN, $00      // a tokenised "RUN", executed after load
@@ -743,13 +814,23 @@ statusBuf:    .fill STATUS_MAX + 1, 0
 
 bannerText: .byte 13
             .text "C64U ULTIMATE WEDGE BY CYBERSORCERER"
-            .byte 13
-            .text "@$ DIR  @CD:NAME  /LOAD  "
+            .byte 13, 0
+
+helpStock:  .text "@$ DIR  @CD:NAME  /LOAD  "
             .byte $5e                   // up arrow, no ASCII equivalent
             .text "LOAD+RUN"
             .byte 13, 0
+
+// JiffyDOS owns @, / and the up arrow, so everything moves behind '&'.
+helpJiffy:  .text "&$ DIR  &CD:NAME  &/LOAD  &"
+            .byte $5e
+            .text "LOADRUN"
+            .byte 13, 0
 dirText:    .text "  <DIR>"
             .byte 0
+jiffySig:   .text "JIFFYDOS"
+jiffySigEnd:
+
 errText:    .text "?UNKNOWN WEDGE COMMAND"
             .byte 13, 0
 noNameText: .text "?MISSING FILENAME"

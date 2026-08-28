@@ -5,11 +5,30 @@ filesystem is usable from the READY prompt without a disk image and without
 JiffyDOS.
 
 ```
-@$          list the current directory
-@CD:NAME    change directory
-/NAME       load
-↑NAME       load and run
+@$    &$          list the current directory
+@CD:  &CD:NAME    change directory
+/NAME &/NAME      load
+↑NAME &↑NAME      load and run
 ```
+
+## Two prefixes, because of JiffyDOS
+
+JiffyDOS claims `@`, `/` and the up arrow for its own wedge and intercepts them
+**before** BASIC's statement dispatcher, so on a JiffyDOS machine those forms
+never reach this cartridge at all.
+
+The cartridge detects JiffyDOS at boot, by scanning the KERNAL for its banner
+string rather than checking a fixed address, and adapts:
+
+| Machine | Classic `@` `/` `↑` | `&` prefix |
+|---|---|---|
+| Stock KERNAL | wedge | wedge |
+| JiffyDOS | JiffyDOS | wedge |
+
+`&` therefore always reaches the wedge, and the banner shows which prefix is
+live on the machine it just booted on. The two can be installed together:
+JiffyDOS keeps making disk loading fast, the wedge reaches the Ultimate
+filesystem.
 
 Everything goes through the Ultimate Command Interface, so all four commands act
 on the same directory - the one `@$` just showed. No SoftIEC, no disk image, and
@@ -93,13 +112,24 @@ BASIC rather than entering the RUN routine.
 
 ## Verified
 
-All four commands were run on a C64 Ultimate with the **stock** KERNAL:
+On a C64 Ultimate with the **stock** KERNAL:
 
 ```
 @$            -> SPRITE.PRG / VOID.RAIDER.PRG
 @CD:USB0      -> 00,OK
 /SPRITE.PRG   -> LOADED, and LIST shows "10 SYS2062"
 ↑SPRITE.PRG   -> program runs: $07F8=$30, $D015=$01, $D027 low nibble $E
+&$            -> same listing, so '&' works there too
+```
+
+On the same machine with the **JiffyDOS** KERNAL:
+
+```
+&$            -> SPRITE.PRG / VOID.RAIDER.PRG
+&/SPRITE.PRG  -> LOADED
+&↑SPRITE.PRG  -> program runs, $07F8=$30
+/SPRITE.PRG   -> "SEARCHING FOR SPRITE.PRG", ?FILE NOT FOUND
+                 (JiffyDOS handled it, as intended)
 ```
 
 The loaded bytes were compared against the source file and matched exactly.
@@ -107,9 +137,20 @@ Normal BASIC was checked alongside: `PRINT 6*7` gives 42, and a typed program
 lists and runs. BASIC reported 38911 bytes free, and `$8000` accepted writes,
 confirming the cartridge had unmapped itself.
 
-## Note for JiffyDOS machines
+## Do you still need JiffyDOS?
 
-JiffyDOS intercepts `@` before BASIC's statement dispatcher, so its own wedge
-answers instead of this one. That is harmless - JiffyDOS already provides `@$`,
-`@CD:` and `/NAME` - but it means the commands here only take effect on a
-machine running the stock KERNAL.
+They solve different problems and overlap less than it looks.
+
+JiffyDOS speeds up loading over the **serial bus** - it patches both the C64
+KERNAL and the drive ROM. That helps every program that loads through the
+KERNAL from device 8 or 9, including games pulling their own data off a mounted
+D64, without anyone typing a command. This cartridge does nothing there: it
+reads the Ultimate filesystem, not the contents of a disk image.
+
+This cartridge reaches that filesystem directly, with subdirectories and one
+consistent current directory for listing, changing and loading - which JiffyDOS
+cannot do at all.
+
+So: keep JiffyDOS if you run software from disk images. Use the wedge for your
+own files on the Ultimate filesystem. With the `&` prefix both are installed at
+the same time without getting in each other's way.
