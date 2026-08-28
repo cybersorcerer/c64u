@@ -12,11 +12,16 @@
 // Why $C000: the KERNAL and BASIC never touch that 4 KB, so the resident part
 // survives RUN/STOP+RESTORE and NEW.
 //
-// Commands (^ is the up arrow, PETSCII $5E):
-//   @$ &$              directory, straight to the screen
-//   @CD:NAME &CD:NAME  change directory
-//   /NAME &/NAME       load
-//   ^NAME &^NAME       load and run
+// Commands (^ is the up arrow, PETSCII $5E; & replaces @ under JiffyDOS):
+//   @          current path
+//   @$         directory, straight to the screen
+//   @CD:NAME   change directory        @MD:NAME  create directory
+//   @RM:NAME   delete file             @SV:NAME  save the BASIC program
+//   @MT9:NAME  mount a disk image      @SW9      swap to the next disk
+//   /NAME      load                    ^NAME     load and run
+//
+// The digit in @MT and @SW is the drive bus id and may be left out; drive A is
+// not always 8.
 //
 // The prefix depends on the machine. JiffyDOS claims '@', '/' and the up arrow
 // and intercepts them before BASIC's dispatcher, so on such a machine those
@@ -35,12 +40,14 @@
 .const RAM_CODE       = $c000
 .const STRPTR         = $fb             // zero page scratch, free for user code
 .const DESTPTR        = $fd             // load destination, also zero page
+.const SRCPTR         = $a3             // save source, free during our commands
+.const KWPTR          = $a5             // keyword table walk
 .const BASIC_START    = $0801
 .const STATUS_MAX     = 38              // one screen line, minus room for CR
 
 // Pages copied from ROM to $C000 at boot. The assert below fails if the
 // resident part outgrows this.
-.const RESIDENT_PAGES = 6
+.const RESIDENT_PAGES = 8
 
 // Ultimate Command Interface
 .const UCI_CONTROL    = $df1c           // write
@@ -63,11 +70,24 @@
 .const DOS_OPEN_FILE  = $02
 .const DOS_CLOSE_FILE = $03
 .const DOS_READ_DATA  = $04
+.const DOS_DELETE_FILE = $09
 .const DOS_CHANGE_DIR = $11
+.const DOS_GET_PATH   = $12
 .const DOS_OPEN_DIR   = $13
 .const DOS_READ_DIR   = $14
+.const DOS_CREATE_DIR = $16
+.const DOS_MOUNT_DISK = $23
+.const DOS_SWAP_DISK  = $25
+.const DOS_WRITE_DATA = $05
 
-.const FA_READ        = $01             // open mode flag
+.const FA_READ        = $01             // open mode flags
+.const FA_WRITE       = $02
+.const FA_CREATE_NEW  = $04
+.const FA_CREATE_ALWAYS = $08
+
+.const DEFAULT_DRIVE_ID = 8             // the Ultimate falls back to the last
+                                        // drive mounted on when 8 is absent
+.const SAVE_CHUNK     = 128             // bytes per WRITE_DATA packet
 
 .const ATTR_DIR       = $10             // FAT attribute bit
 
@@ -78,6 +98,14 @@
 .const CH_AMP     = $26
 .const CH_DOLLAR  = $24
 .const CH_C       = $43
+.const CH_D       = $44
+.const CH_M       = $4d
+.const CH_R       = $52
+.const CH_S       = $53
+.const CH_T       = $54
+.const CH_V       = $56
+.const CH_W       = $57
+.const CH_COLON   = $3a
 // BASIC tokenises operators before a line is executed, so by the time the
 // dispatcher sees the line, '/' has become $AD and the up arrow $AE. Comparing
 // against $2F and $5E never matches. '@' is not an operator and survives as is.
@@ -100,6 +128,7 @@
 .const TXTTAB   = $2b                   // start of BASIC program
 .const VARTAB   = $2d                   // end of program / start of variables
 .const BASIC_RELINK = $a533             // rebuild BASIC line links
+.const BASIC_KEYWORDS = $a09e           // token $80 is the first entry
 .const IGONE    = $0308                 // BASIC statement dispatch vector
 .const IMAIN    = $0302                 // BASIC main loop vector
 .const IRQVEC   = $0314                 // KERNAL IRQ vector
@@ -310,15 +339,66 @@ wedgeCommand:
         sta cmdChar
 !dispatch:
         lda cmdChar
+        bne !notPath+
+        jmp doPath                      // prefix alone: where am I?
+!notPath:
         cmp #CH_DOLLAR
-        beq doDirectory
-        cmp #CH_C
-        beq doChangeDir
+        bne !notDir+
+        jmp doDirectory
+!notDir:
         cmp #TOK_SLASH
-        beq doLoad
+        bne !notLoad+
+        jmp doLoad
+!notLoad:
         cmp #TOK_ARROWUP
-        beq doLoadRun
+        bne !notRun+
+        jmp doLoadRun
+!notRun:
 
+        // Everything else is a two-letter command.
+        jsr CHRGET
+        sta cmdChar2
+        lda cmdChar
+
+        cmp #CH_C
+        beq !c+
+        cmp #CH_M
+        beq !m+
+        cmp #CH_R
+        beq !r+
+        cmp #CH_S
+        beq !s+
+        jmp unknownCommand
+!c:
+        lda cmdChar2
+        cmp #CH_D
+        bne unknownCommand
+        jmp doChangeDir
+!m:
+        lda cmdChar2
+        cmp #CH_D
+        bne !notMd+
+        jmp doMakeDir
+!notMd:
+        cmp #CH_T
+        bne unknownCommand
+        jmp doMount
+!r:
+        lda cmdChar2
+        cmp #CH_M
+        bne unknownCommand
+        jmp doRemove
+!s:
+        lda cmdChar2
+        cmp #CH_V
+        bne !notSv+
+        jmp doSave
+!notSv:
+        cmp #CH_W
+        bne unknownCommand
+        jmp doSwap
+
+unknownCommand:
         ldx #<errText
         ldy #>errText
         jsr printString
@@ -329,7 +409,34 @@ doDirectory:
         jmp endOfCommand
 
 doChangeDir:
-        jsr changeDir
+        lda #DOS_CHANGE_DIR
+        jsr simpleNameCommand
+        jmp endOfCommand
+
+doMakeDir:
+        lda #DOS_CREATE_DIR
+        jsr simpleNameCommand
+        jmp endOfCommand
+
+doRemove:
+        lda #DOS_DELETE_FILE
+        jsr simpleNameCommand
+        jmp endOfCommand
+
+doPath:
+        jsr currentPath
+        jmp endOfCommand
+
+doMount:
+        jsr mountImage
+        jmp endOfCommand
+
+doSwap:
+        jsr swapDisk
+        jmp endOfCommand
+
+doSave:
+        jsr saveProgram
         jmp endOfCommand
 
 // "/NAME" loads, "^NAME" loads and starts.
@@ -346,9 +453,18 @@ doLoadRun:
 // BASIC carries on interpreting whatever is left of the line, so the remainder
 // has to be consumed - otherwise "@$" is followed by a ?SYNTAX ERROR for the
 // characters the wedge already dealt with.
+// Hands the line back to BASIC as an empty one.
+//
+// Consuming the rest with CHRGET is not enough: a command that already read the
+// terminator would make CHRGET step past it and into the leftovers of whatever
+// longer line was typed before, which BASIC then tries to execute. Pointing the
+// text pointer at a zero byte of our own makes the next CHRGET return end of
+// line whatever the command did.
 endOfCommand:
-        jsr CHRGET
-        bne endOfCommand
+        lda #<(lineEnd - 1)
+        sta TXTPTR
+        lda #>(lineEnd - 1)
+        sta TXTPTR + 1
         jmp BASIC_LOOP
 
 // ------------------------------------------------------------ UCI plumbing
@@ -547,14 +663,8 @@ loadCommand:
         sta UCI_CMD_DATA
 
         // The command length defines the filename length, so no terminator.
-        ldx #$00
-!copy:
-        jsr CHRGET
-        beq !send+
-        sta UCI_CMD_DATA
-        inx
-        jmp !copy-
-!send:
+        jsr advanceText
+        jsr sendFilename
         cpx #$00
         bne !named+
         ldx #<noNameText
@@ -723,7 +833,360 @@ startProgram:
 !machineCode:
         jmp (loadAddr)
 
-// ------------------------------------------------------------- @CD:NAME
+// --------------------------------------------------------- name handling
+
+// Sends the rest of the BASIC line to the command queue as a filename.
+//
+// Two details matter. The bytes are read straight through the text pointer
+// rather than with CHRGET, because CHRGET skips spaces and filenames may
+// contain them. And BASIC may have tokenised parts of the name: after '@' it
+// leaves the line alone, but after '&' it does not, so "PRINTER" arrives as the
+// PRINT token followed by "ER". Tokens are expanded back into their keywords.
+//
+// Returns with X non-zero when at least one character was sent.
+sendFilename:
+        ldx #$00
+!loop:
+        ldy #$00
+        lda (TXTPTR),y
+        beq !done+
+
+        inc TXTPTR
+        bne !advanced+
+        inc TXTPTR + 1
+!advanced:
+        cmp #$80
+        bcc !plain+
+        jsr sendToken
+        inx
+        jmp !loop-
+!plain:
+        sta UCI_CMD_DATA
+        inx
+        jmp !loop-
+!done:
+        rts
+
+// Expands one BASIC token in A into its keyword and sends the letters.
+// The keyword table starts at $A09E; each entry ends with a byte whose high
+// bit is set, and token $80 is the first entry.
+sendToken:
+        sec
+        sbc #$80
+        tax
+        lda #<BASIC_KEYWORDS
+        sta KWPTR
+        lda #>BASIC_KEYWORDS
+        sta KWPTR + 1
+
+!skipEntry:
+        cpx #$00
+        beq !emit+
+!skipChar:
+        ldy #$00
+        lda (KWPTR),y
+        jsr advanceKeyword
+        and #$80
+        beq !skipChar-
+        dex
+        jmp !skipEntry-
+
+!emit:
+        ldy #$00
+        lda (KWPTR),y
+        pha
+        and #$7f
+        sta UCI_CMD_DATA
+        jsr advanceKeyword
+        pla
+        and #$80
+        beq !emit-
+        rts
+
+advanceKeyword:
+        inc KWPTR
+        bne !out+
+        inc KWPTR + 1
+!out:
+        rts
+
+// CHRGET leaves the text pointer on the character it just returned, so the
+// direct reads below would see it again. Step past it once.
+advanceText:
+        inc TXTPTR
+        bne !out+
+        inc TXTPTR + 1
+!out:
+        rts
+
+// An optional drive number right after the command, as in "&MT9:NAME". Drive A
+// is not always bus 8 - on this machine it answers on 9 - so the id has to be
+// selectable. Without one, DEFAULT_DRIVE_ID is used and the Ultimate falls back
+// to the drive last mounted on.
+readDriveId:
+        lda #DEFAULT_DRIVE_ID
+        sta driveId
+        ldy #$00
+        lda (TXTPTR),y
+        cmp #CH_ZERO
+        bcc !out+
+        cmp #CH_ZERO + 10
+        bcs !out+
+        sec
+        sbc #CH_ZERO
+        sta driveId
+        jsr advanceText
+!out:
+        rts
+
+// Skips a ':' separator if the command has one.
+skipSeparator:
+        ldy #$00
+        lda (TXTPTR),y
+        cmp #CH_COLON
+        bne !out+
+        inc TXTPTR
+        bne !out+
+        inc TXTPTR + 1
+!out:
+        rts
+
+// Commands shaped "<code> <name>": change directory, create directory, delete.
+// A is the DOS command byte.
+simpleNameCommand:
+        sta dosCommand
+        jsr uciPresent
+        bcc !go+
+        rts
+!go:
+        jsr advanceText
+        jsr skipSeparator
+
+        lda #TARGET_DOS
+        sta UCI_CMD_DATA
+        lda dosCommand
+        sta UCI_CMD_DATA
+        jsr sendFilename
+        cpx #$00
+        beq !noName+
+
+        lda #PUSH_CMD
+        sta UCI_CONTROL
+        jsr uciWait
+        jsr printStatus
+        jsr uciAccept
+        rts
+!noName:
+        ldx #<noNameText
+        ldy #>noNameText
+        jsr printString
+        rts
+
+// ------------------------------------------------- @ current path, @MT, @SW
+
+// "Get Path" returns the current directory on the data channel.
+currentPath:
+        jsr uciPresent
+        bcc !go+
+        rts
+!go:
+        lda #TARGET_DOS
+        sta UCI_CMD_DATA
+        lda #DOS_GET_PATH
+        sta UCI_CMD_DATA
+        lda #PUSH_CMD
+        sta UCI_CONTROL
+        jsr uciWait
+
+!chars:
+        lda UCI_STATUS
+        and #ST_DATA_AV
+        beq !done+
+        lda UCI_RESP_DATA
+        jsr toPetscii
+        jsr CHROUT
+        jmp !chars-
+!done:
+        lda #13
+        jsr CHROUT
+        jsr uciDrainStatus
+        jsr uciAccept
+        rts
+
+// Mounts a disk image on the drive with the given IEC id. Passing the id of a
+// drive that does not exist makes the Ultimate use the last one mounted on.
+mountImage:
+        jsr uciPresent
+        bcc !go+
+        rts
+!go:
+        jsr advanceText
+        jsr readDriveId
+        jsr skipSeparator
+
+        lda #TARGET_DOS
+        sta UCI_CMD_DATA
+        lda #DOS_MOUNT_DISK
+        sta UCI_CMD_DATA
+        lda driveId
+        sta UCI_CMD_DATA
+        jsr sendFilename
+        cpx #$00
+        beq !noName+
+
+        lda #PUSH_CMD
+        sta UCI_CONTROL
+        jsr uciWait
+        jsr printStatus
+        jsr uciAccept
+        rts
+!noName:
+        ldx #<noNameText
+        ldy #>noNameText
+        jsr printString
+        rts
+
+// The same action as holding the menu button to swap to the next disk.
+swapDisk:
+        jsr uciPresent
+        bcc !go+
+        rts
+!go:
+        jsr advanceText
+        jsr readDriveId
+
+        lda #TARGET_DOS
+        sta UCI_CMD_DATA
+        lda #DOS_SWAP_DISK
+        sta UCI_CMD_DATA
+        lda driveId
+        sta UCI_CMD_DATA
+        lda #PUSH_CMD
+        sta UCI_CONTROL
+        jsr uciWait
+        jsr printStatus
+        jsr uciAccept
+        rts
+
+// ------------------------------------------------------------- @SV:NAME
+
+// Writes the BASIC program in memory to a file, load address first, so the
+// result is a .prg that loads back with /NAME.
+//
+// The command queue holds 896 bytes, so the program is sent in chunks well
+// inside that. FA_WRITE + FA_CREATE_NEW truncates an existing file rather than
+// appending to it.
+saveProgram:
+        jsr uciPresent
+        bcc !go+
+        rts
+!go:
+        jsr advanceText
+        jsr skipSeparator
+
+        lda #TARGET_DOS
+        sta UCI_CMD_DATA
+        lda #DOS_OPEN_FILE
+        sta UCI_CMD_DATA
+        lda #FA_WRITE | FA_CREATE_NEW | FA_CREATE_ALWAYS
+        sta UCI_CMD_DATA
+        jsr sendFilename
+        cpx #$00
+        bne !named+
+        ldx #<noNameText
+        ldy #>noNameText
+        jsr printString
+        rts
+!named:
+        lda #PUSH_CMD
+        sta UCI_CONTROL
+        jsr uciWait
+        jsr uciReadStatus
+        jsr uciAccept
+        jsr uciReportError
+        bcc !opened+
+        rts
+!opened:
+        // Source pointer starts at the beginning of the BASIC program.
+        lda TXTTAB
+        sta SRCPTR
+        lda TXTTAB + 1
+        sta SRCPTR + 1
+
+        // First packet carries the two load address bytes.
+        lda #TARGET_DOS
+        sta UCI_CMD_DATA
+        lda #DOS_WRITE_DATA
+        sta UCI_CMD_DATA
+        lda #$00
+        sta UCI_CMD_DATA                // two alignment bytes
+        sta UCI_CMD_DATA
+        lda TXTTAB
+        sta UCI_CMD_DATA
+        lda TXTTAB + 1
+        sta UCI_CMD_DATA
+
+        ldy #$00
+!bytes:
+        jsr sourceAtEnd
+        bcs !flush+
+        ldy #$00
+        lda (SRCPTR),y
+        sta UCI_CMD_DATA
+        inc SRCPTR
+        bne !counted+
+        inc SRCPTR + 1
+!counted:
+        inc chunkCount
+        lda chunkCount
+        cmp #SAVE_CHUNK
+        bne !bytes-
+
+        // Chunk full: push it and start the next one.
+        jsr saveFlush
+        lda #TARGET_DOS
+        sta UCI_CMD_DATA
+        lda #DOS_WRITE_DATA
+        sta UCI_CMD_DATA
+        lda #$00
+        sta UCI_CMD_DATA
+        sta UCI_CMD_DATA
+        jmp !bytes-
+
+!flush:
+        jsr saveFlush
+        jsr closeFile
+
+        ldx #<savedText
+        ldy #>savedText
+        jsr printString
+        rts
+
+saveFlush:
+        lda #$00
+        sta chunkCount
+        lda #PUSH_CMD
+        sta UCI_CONTROL
+        jsr uciWait
+        jsr uciDrainStatus
+        jsr uciAccept
+        rts
+
+// Carry set once the source pointer has reached the end of the program.
+sourceAtEnd:
+        lda SRCPTR + 1
+        cmp VARTAB + 1
+        bcc !more+
+        bne !end+
+        lda SRCPTR
+        cmp VARTAB
+        bcc !more+
+!end:
+        sec
+        rts
+!more:
+        clc
+        rts
 
 changeDir:
         jsr uciPresent
@@ -801,10 +1264,15 @@ origMain:     .word $0000
 entryAttr:    .byte $00
 runAfterLoad: .byte $00
 cmdChar:      .byte $00
+cmdChar2:     .byte $00
+dosCommand:   .byte $00
+chunkCount:   .byte $00
+driveId:      .byte $00
 jiffyPresent: .byte $00
 headerCount:  .byte $00
 loadAddr:     .word $0000
 runLine:      .byte TOK_RUN, $00      // a tokenised "RUN", executed after load
+lineEnd:      .byte $00, $00          // an empty line to hand back to BASIC
 statusBuf:    .fill STATUS_MAX + 1, 0
 
 // These strings go to CHROUT, which takes PETSCII. Kick Assembler's default
@@ -818,13 +1286,17 @@ bannerText: .byte 13
 
 helpStock:  .text "@$ DIR  @CD:NAME  /LOAD  "
             .byte $5e                   // up arrow, no ASCII equivalent
-            .text "LOAD+RUN"
+            .text "LOADRUN"
+            .byte 13
+            .text "@SV: @MD: @RM: @MT: @SW   @=PATH"
             .byte 13, 0
 
 // JiffyDOS owns @, / and the up arrow, so everything moves behind '&'.
 helpJiffy:  .text "&$ DIR  &CD:NAME  &/LOAD  &"
             .byte $5e
             .text "LOADRUN"
+            .byte 13
+            .text "&SV: &MD: &RM: &MT: &SW   &=PATH"
             .byte 13, 0
 dirText:    .text "  <DIR>"
             .byte 0
@@ -836,6 +1308,8 @@ errText:    .text "?UNKNOWN WEDGE COMMAND"
 noNameText: .text "?MISSING FILENAME"
             .byte 13, 0
 readyText:  .text "LOADED"
+            .byte 13, 0
+savedText:  .text "SAVED"
             .byte 13, 0
 noUciText:  .text "?COMMAND INTERFACE DISABLED"
             .byte 13, 0

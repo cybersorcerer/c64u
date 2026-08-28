@@ -5,11 +5,21 @@ filesystem is usable from the READY prompt without a disk image and without
 JiffyDOS.
 
 ```
-@$    &$          list the current directory
-@CD:  &CD:NAME    change directory
-/NAME &/NAME      load
-↑NAME &↑NAME      load and run
+@             show the current path
+@$            list the current directory
+@CD:NAME      change directory        @MD:NAME   create directory
+@RM:NAME      delete a file           @SV:NAME   save the BASIC program
+@MT9:NAME     mount a disk image      @SW9       swap to the next disk
+/NAME         load                    ↑NAME      load and run
 ```
+
+The digit in `@MT` and `@SW` is the drive's bus id and may be left out. It is
+worth giving: drive A is not always 8 — on the machine this was developed
+against it answers on 9, and mounting without the id reports
+`90,DRIVE NOT PRESENT`.
+
+`@MT` and `@SW` are the part no other wedge offers, because they are device
+control rather than file access.
 
 ## Two prefixes, because of JiffyDOS
 
@@ -110,6 +120,18 @@ the stack, so `jsr $A659` never comes back properly. The pointers it would set
 are written directly instead, and a load-and-run hands a tokenised `RUN` line to
 BASIC rather than entering the RUN routine.
 
+**`@` suppresses tokenisation, `&` does not.** Measured on hardware:
+`@CD:PRINTER` reaches the dispatcher as plain text, while `&CD:PRINTER` arrives
+as the PRINT token followed by `ER`. `%` behaves like `@`, but JiffyDOS claims it
+too. So filenames are expanded back from the keyword table at `$A09E` before
+being sent - otherwise every file whose name contains a BASIC keyword would be
+unreachable under the `&` prefix.
+
+**CHRGET leaves the pointer on the character it returned.** Mixing CHRGET with
+direct reads through `$7A` re-reads that byte - which turned `@MD:TESTDIR` into
+a request to create `D:TESTDIR`. Filenames are read directly rather than with
+CHRGET anyway, because CHRGET also skips spaces.
+
 ## Verified
 
 On a C64 Ultimate with the **stock** KERNAL:
@@ -125,11 +147,25 @@ On a C64 Ultimate with the **stock** KERNAL:
 On the same machine with the **JiffyDOS** KERNAL:
 
 ```
-&$            -> SPRITE.PRG / VOID.RAIDER.PRG
-&/SPRITE.PRG  -> LOADED
-&↑SPRITE.PRG  -> program runs, $07F8=$30
-/SPRITE.PRG   -> "SEARCHING FOR SPRITE.PRG", ?FILE NOT FOUND
-                 (JiffyDOS handled it, as intended)
+&$              -> SPRITE.PRG / VOID.RAIDER.PRG
+&/SPRITE.PRG    -> LOADED
+&↑SPRITE.PRG    -> program runs, $07F8=$30
+/SPRITE.PRG     -> "SEARCHING FOR SPRITE.PRG", ?FILE NOT FOUND
+                   (JiffyDOS handled it, as intended)
+&MD:TESTDIR     -> created; &CD:TESTDIR then &  ->  /USB0/TEMP/TESTDIR/
+&CD:..          -> 00,OK      &RM:TESTDIR  -> 00,OK
+&MT9:WEDGE.D64  -> 00,OK, and "drives list" shows it on drive A
+&SW9            -> 00,OK
+```
+
+The save/load round trip was run with a filename that contains a BASIC keyword,
+which is where the token expansion earns its keep:
+
+```
+10 PRINT"WEDGE OK"
+&SV:PRINTER.PRG   -> SAVED, 20 bytes on the device, named PRINTER.PRG
+NEW
+&/PRINTER.PRG     -> LOADED; LIST shows the line; RUN prints WEDGE OK
 ```
 
 The loaded bytes were compared against the source file and matched exactly.

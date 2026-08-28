@@ -25,10 +25,11 @@ prompt. You browse it from the device menu, or you build a disk image. The wedge
 in [`c64/wedge`](c64/wedge/README.md) removes that detour:
 
 ```
-@$          list the current directory
-@CD:NAME    change directory
-/NAME       load
-↑NAME       load and run
+@             show the current path      @$         list the directory
+@CD:NAME      change directory           @MD:NAME   create directory
+@RM:NAME      delete a file              @SV:NAME   save the BASIC program
+@MT9:NAME     mount a disk image         @SW9       swap to the next disk
+/NAME         load                       ↑NAME      load and run
 ```
 
 It ships as a cartridge, so it is there from power-on — the Ultimate has no
