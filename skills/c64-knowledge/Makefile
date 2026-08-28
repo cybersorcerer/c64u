@@ -14,7 +14,13 @@ EXAMPLES := $(wildcard examples/*.asm)
 BUILD    := build
 PRGS     := $(patsubst examples/%.asm,$(BUILD)/%.prg,$(EXAMPLES))
 
-.PHONY: check all clean assembler opcodes
+.PHONY: check check-hw all clean assembler opcodes
+
+# Assembling proves the examples are valid 6502. This proves the addresses and
+# bit values in the reference files are right, by running them on a real device
+# and reading back what they changed. Skipped when no device answers.
+check-hw: all
+	@sh check-hw.sh
 
 # references/opcodes.md is generated from the disassembler's opcode table so the
 # two cannot disagree. Run this after changing that table.

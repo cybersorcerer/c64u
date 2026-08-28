@@ -164,12 +164,19 @@ developer mode or `git config core.symlinks true`; otherwise copy the directory.
 ## Verifying and packaging
 
 ```sh
-make -C skills check    # assemble every example in every skill
-make -C skills dist     # build dist/c64u-skills-<version>.{tar.gz,zip}
+make -C skills check                   # verify every skill
+make -C skills dist                    # build the release archives
+make -C skills/c64-knowledge check-hw  # run the examples on a real device
 ```
 
-`check` runs each skill's own Makefile. `dist` runs `check` first, so a broken example fails the
-packaging rather than shipping.
+`check` runs each skill's own Makefile: `c64-knowledge` assembles every example, `c64u-cli`
+walks the CLI's command tree and confirms that every command its reference documents still
+exists. `dist` runs `check` first, so a broken skill fails the packaging rather than shipping.
+
+`check-hw` goes further and proves the reference values themselves. Assembling shows an example
+is valid 6502; only running it on hardware and reading back what it changed shows that the
+addresses and bit patterns in the reference files are right. It is skipped, not failed, when no
+device answers.
 
 Documentation that states a register value or a byte encoding should be verified against real
 behaviour before being written down. The `c64-knowledge` references were checked against a
