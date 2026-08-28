@@ -104,6 +104,14 @@ func asciiToPetscii(c byte) (byte, error) {
 		return 0x5B, nil
 	case c == ']':
 		return 0x5D, nil
+	// The C64 has no caret. '^' is the closest ASCII stand-in for the up arrow
+	// at 0x5E, which BASIC tokenises as the power operator and DOS wedges use
+	// as their load-and-run prefix.
+	case c == '^':
+		return 0x5E, nil
+	// Likewise '_' stands in for the left arrow at 0x5F.
+	case c == '_':
+		return 0x5F, nil
 	}
 	return 0, fmt.Errorf("unknown character: %q", c)
 }

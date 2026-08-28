@@ -95,6 +95,34 @@ BASIC's own start pointer still points there.
 `GOTO` leaves its entry behind; do it often enough in one run and you get `?OUT OF MEMORY`
 with plenty of RAM free.
 
+## Extending BASIC from machine code
+
+Hooking `IGONE` (`$0308`) is the usual way to add commands. Three things go
+wrong there, none of which announce themselves:
+
+**Operators are tokenised too.** By the time a line reaches the dispatcher, `/`
+is `$AD` and the up arrow `$AE` - not `$2F` and `$5E`. `+ - * ^` are likewise
+`$AA $AB $AC $AE`. Comparing against character codes never matches. `@` is not
+an operator and does survive unchanged, which makes `@` commands work while `/`
+silently falls through.
+
+**CHRGET's flags are part of the contract.** The statement executor reads the
+zero and carry flags CHRGET left: zero for end of statement, carry clear for a
+digit. A `cmp` in a hook destroys them, and the result is not a crash but
+misbehaviour - `PRINT` executes as `PRINT#` and reports `?FILE NOT OPEN`, `RUN`
+reports `?UNDEF'D STATEMENT`. Wrap comparisons in `php`/`plp`.
+
+**Some ROM routines are not subroutines.** `CLR` at `$A659` ends in
+`PLA/TAY/PLA`; `jsr $A659` does not return to the caller. Set `VARTAB`,
+`ARYTAB` and `STREND` directly instead. To start a freshly loaded program, point
+`TXTPTR` at a one-byte tokenised `RUN` line (`$8A, $00`) and let BASIC execute
+it, rather than jumping into the RUN routine and having to reproduce the flag
+state it expects.
+
+**After loading a BASIC program**, set `VARTAB`/`ARYTAB`/`STREND` to the end
+address and call the relink routine at `$A533`, or `LIST` and `RUN` both
+misbehave.
+
 ## Useful POKEs
 
 | Address | Effect |

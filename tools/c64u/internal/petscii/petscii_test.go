@@ -48,6 +48,28 @@ func TestEncodeEscapeReturn(t *testing.T) {
 	}
 }
 
+// The up arrow and left arrow have no ASCII equivalent, so '^' and '_' stand in
+// for them. Without the up arrow a DOS wedge's load-and-run prefix cannot be
+// typed at all.
+func TestEncodeArrows(t *testing.T) {
+	cases := []struct {
+		in   string
+		want byte
+	}{
+		{"^", 0x5E},
+		{"_", 0x5F},
+	}
+	for _, c := range cases {
+		got, err := Encode(c.in)
+		if err != nil {
+			t.Fatalf("%q: unexpected error: %v", c.in, err)
+		}
+		if len(got) != 1 || got[0] != c.want {
+			t.Errorf("%q: got %X, want [%02X]", c.in, got, c.want)
+		}
+	}
+}
+
 // Function key codes are interleaved because F2, F4, F6 and F8 are the shifted
 // variants of F1, F3, F5 and F7. Assigning 0x85-0x8C in order is wrong for
 // everything except F1 and F8, so all eight are checked here.
