@@ -25,7 +25,8 @@ prompt. You browse it from the device menu, or you build a disk image. The wedge
 in [`c64/wedge`](c64/wedge/README.md) removes that detour:
 
 ```
-@             show the current path      @$         list the directory
+@?            show the command table     @          show the current path
+@$            list the directory
 @CD:NAME      change directory           @MD:NAME   create directory
 @RM:NAME      delete a file              @SV:NAME   save the BASIC program
 @MT9:NAME     mount a disk image         @SW9       swap to the next disk
@@ -46,6 +47,11 @@ can be installed at once.
 make -C c64/wedge run       # try it, until the next reboot
 make -C c64/wedge install   # copy it into /flash/carts
 ```
+
+`@?` prints the command table — here on a machine running JiffyDOS, where the
+wedge has detected it and moved itself behind `&`:
+
+![The wedge help table on a C64 Ultimate running JiffyDOS](docs/images/wedge-help.png)
 
 See [`c64/wedge/README.md`](c64/wedge/README.md) for installation, the JiffyDOS
 question, and what was verified on real hardware.
