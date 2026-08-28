@@ -82,14 +82,40 @@ BASIC's own start pointer still points there.
 
 ## Common runtime errors
 
-| Message | Real cause |
+The complete set, with the cause that actually produces each one in practice -
+which is often not the obvious reading of the message:
+
+| Message | What it means, and what usually causes it |
 |---|---|
-| `?SYNTAX ERROR` | Often a keyword hidden inside a variable name |
-| `?UNDEF'D STATEMENT` | `GOTO`/`GOSUB` to a line number that does not exist |
-| `?OUT OF MEMORY` | Frequently a `FOR` without `NEXT` or a `GOSUB` without `RETURN` filling the stack |
-| `?REDIM'D ARRAY` | An array was used before `DIM`, which auto-dimensioned it to 10 |
-| `?ILLEGAL QUANTITY` | An argument out of range, e.g. `POKE` with a value above 255 |
+| `?BAD DATA` | String data read from a file where the program expected a number |
+| `?BAD SUBSCRIPT` | Array index outside the range given to `DIM` |
+| `?BREAK` | RUN/STOP was pressed. Not an error |
+| `?CAN'T CONTINUE` | `CONT` after an error, an edit, or before any `RUN` |
+| `?DEVICE NOT PRESENT` | No answer from the device in `OPEN`/`CLOSE`/`PRINT#`/`INPUT#`/`GET#` |
 | `?DIVISION BY ZERO` | Also produced by underflow in some expressions |
+| `?EXTRA IGNORED` | More items typed than the `INPUT` asked for; the surplus was dropped |
+| `?FILE NOT FOUND` | No such file on disk, or end of tape |
+| `?FILE NOT OPEN` | The file number in `CLOSE`/`PRINT#`/`INPUT#`/`GET#` was never opened |
+| `?FILE OPEN` | `OPEN` reused a file number that is already in use |
+| `?FORMULA TOO COMPLEX` | A string expression or parenthesis nesting the parser cannot hold; split it |
+| `?ILLEGAL DIRECT` | `INPUT` used in direct mode - it only works inside a program |
+| `?ILLEGAL QUANTITY` | Argument out of range, e.g. `POKE` above 255 |
+| `?LOAD` | The program on tape is damaged |
+| `?NEXT WITHOUT FOR` | Mismatched loop variable, or loops nested in the wrong order |
+| `?NOT INPUT FILE` | Reading from a file opened for output |
+| `?NOT OUTPUT FILE` | Writing to a file opened for input |
+| `?OUT OF DATA` | `READ` with no `DATA` left |
+| `?OUT OF MEMORY` | Often nested `FOR` or pending `GOSUB` filling the stack, not exhausted RAM |
+| `?OVERFLOW` | Result above 1.70141884E+38 |
+| `?REDIM'D ARRAY` | The array was used before `DIM`, which auto-dimensioned it to 10 |
+| `?REDO FROM START` | Text typed where `INPUT` wanted a number. Retype; the program continues |
+| `?RETURN WITHOUT GOSUB` | A `RETURN` with no matching `GOSUB` |
+| `?STRING TOO LONG` | Strings hold at most 255 characters |
+| `?SYNTAX ERROR` | Often a keyword hidden inside a variable name - see above |
+| `?TYPE MISMATCH` | A number used where a string belongs, or the reverse |
+| `?UNDEF'D FUNCTION` | `FN` used without a `DEF FN` |
+| `?UNDEF'D STATEMENT` | `GOTO`/`GOSUB`/`RUN` to a line number that does not exist |
+| `?VERIFY` | The file does not match what is in memory |
 
 `FOR` and `GOSUB` state lives on the 6502 stack at `$0100-$01FF`. Jumping out of a loop with
 `GOTO` leaves its entry behind; do it often enough in one run and you get `?OUT OF MEMORY`

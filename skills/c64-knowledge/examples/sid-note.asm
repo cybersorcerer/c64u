@@ -13,8 +13,10 @@
 .const NTSC_CLOCK   = 1022727
 .const NOTE_HZ      = 440               // A4
 
+// Truncated, not rounded: that is what the official note tables do, so the
+// values here match a printed listing exactly.
 .function sidFreq(hz, clock) {
-        .return round(hz * 16777216 / clock)
+        .return floor(hz * 16777216 / clock)
 }
 
 .const FREQ_PAL  = sidFreq(NOTE_HZ, PAL_CLOCK)

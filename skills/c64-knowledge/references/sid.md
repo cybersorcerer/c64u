@@ -57,15 +57,25 @@ Fout = (Fn * Fclk) / 16777216        ->        Fn = Hz * 16777216 / Fclk
 | PAL | 985248 Hz | 17.02842 |
 | NTSC | 1022727 Hz | 16.40439 |
 
-So A4 = 440 Hz is `$1D45` (7493) on PAL and `$1C32` (7218) on NTSC - a difference of about
+**Truncate, do not round.** The note table in the official C64 Ultimate user guide (appendix J)
+takes the floor of the result. Checked against all 95 entries: flooring reproduces every PAL
+value exactly, while rounding disagrees on 43 of them by one. The audible difference is
+nothing - one unit is about 0.01% - but code that rounds will not match published tables, and
+that costs time when comparing against a listing.
+
+So A4 = 440 Hz is `$1D44` (7492) on PAL and `$1C31` (7217) on NTSC - a difference of about
 two thirds of a semitone.
+
+```
+Fn = floor(Hz * 16777216 / Fclk)
+```
 **Always branch on `$02A6` or assemble both tables.** See `examples/sid-note.asm`.
 
 In Kick Assembler, compute the table at assemble time rather than hand-typing it:
 
 ```asm
 .function sidFreq(hz, clock) {
-    .return round(hz * 16777216 / clock)
+    .return floor(hz * 16777216 / clock)
 }
 .const A4_PAL = sidFreq(440, 985248)
 ```
