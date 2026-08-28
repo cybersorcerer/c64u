@@ -14,6 +14,20 @@ var softiecCmd = &cobra.Command{
 	Long: `Control the SoftIEC drive, which serves a directory of the C64 Ultimate
 filesystem over the IEC bus.
 
+This is the alternative to disk images. With SoftIEC enabled, the C64 loads
+straight from the Ultimate filesystem — no .d64 to create, fill and mount:
+
+  LOAD"$",11 : LIST      directory of the served path
+  LOAD"NAME",11,1        load a program, honouring its load address
+
+With a JiffyDOS or CMD wedge in the C64, the short forms work too and, unlike
+LOAD"$", listing does not overwrite the BASIC program in memory:
+
+  @#11                   direct the wedge at SoftIEC
+  @$                     list the directory
+  @CD:SUBDIR             change directory
+  /NAME                  load
+
 SoftIEC is not a floppy drive. Enabling it and its bus ID are configuration
 settings, and the served directory is changed with a CBM DOS command typed on
 the C64, so the C64 has to be at the BASIC prompt for 'softiec root'.

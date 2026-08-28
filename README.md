@@ -6,7 +6,7 @@ A command-line interface for controlling the [Commodore C64 Ultimate](https://co
 
 - **Complete REST API Coverage**: All C64 Ultimate API endpoints supported
 - **Interactive TUI**: Full-screen terminal UI with a dual-pane file browser, drive, machine and config views
-- **SoftIEC Control**: Enable the DOS emulation drive, set its device number, and point it at a directory
+- **SoftIEC Control**: Load from the Ultimate filesystem at the BASIC prompt — no disk image needed; enable the DOS emulation drive, set its device number, and point it at a directory
 - **Live Video Stream**: Display C64 video output in a native window with keyboard forwarding — type into BASIC, load and run programs from your Mac keyboard (BASIC/KERNAL input only; games that poll the keyboard matrix directly are not supported)
 - **Live Audio Stream**: Play back C64 audio in real time
 - **FTP Integration**: Access the C64 Ultimate filesystem
@@ -323,6 +323,28 @@ c64u drives set-mode <drive> <mode>            # 1541 / 1571 / 1581
 
 SoftIEC serves a directory of the C64 Ultimate filesystem over the IEC bus, so
 the C64 can `LOAD"$",11` straight into it without a disk image.
+
+**This is usually what you want instead of building a `.d64`.** Upload files with
+`c64u fs upload` and they show up in the next directory listing — nothing to
+create, fill, mount or rebuild. It is **disabled by default**, so check
+`c64u drives softiec status` before concluding it does not work.
+
+From the BASIC prompt:
+
+```basic
+LOAD"$",11 : LIST      REM directory
+LOAD"NAME",11,1        REM load, honouring the load address
+```
+
+With a JiffyDOS or CMD wedge in the C64 the short forms work as well, and
+listing does not overwrite the BASIC program the way `LOAD"$"` does:
+
+```
+@#11          point the wedge at SoftIEC
+@$            list the directory
+@CD:SUBDIR    change directory
+/NAME         load
+```
 
 ```bash
 c64u drives softiec status                     # State, device number, directory

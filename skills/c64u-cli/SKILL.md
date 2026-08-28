@@ -56,6 +56,11 @@ If `c64u info` fails, nothing else will. Check that before debugging anything do
 4. **`sendkey` fills a 10-byte buffer.** It drives BASIC and the KERNAL, not games. Long input
    is chunked automatically, but the machine has to consume it between chunks.
 
+5. **Disk images are usually the wrong tool.** SoftIEC serves a directory of the Ultimate
+   filesystem as an IEC device, so the C64 can `LOAD` from it at the BASIC prompt without any
+   `.d64` being built or mounted. It ships disabled — check `c64u drives softiec status` first.
+   See `references/workflows.md`.
+
 ## Leaving the machine clean
 
 `c64u machine reset` returns to a BASIC prompt. Anything that ran before it is gone, including

@@ -80,6 +80,40 @@ c64u machine read-mem 0400 --to 07e7 --raw > screen.bin     # 1000 bytes of scre
 c64u machine read-mem d800 --to dbe7 --raw > colour.bin     # low nibble is the colour
 ```
 
+## Work from the BASIC prompt without disk images
+
+Reach for this before building a `.d64`. SoftIEC serves a directory of the Ultimate filesystem
+as an IEC device, so the C64 loads from it directly.
+
+```sh
+c64u drives softiec status                       # is it on, and what does it serve?
+c64u drives softiec enable --bus-id 11
+c64u drives softiec root /Usb0/development       # needs the C64 at the READY prompt
+```
+
+Then, on the C64:
+
+```basic
+LOAD"$",11 : LIST      REM directory
+LOAD"NAME",11,1        REM load, honouring the load address
+```
+
+With a JiffyDOS or CMD wedge the short forms work, and listing does **not** destroy the BASIC
+program the way `LOAD"$"` does:
+
+```
+@#11          direct the wedge at SoftIEC
+@$            list
+@CD:SUBDIR    change directory
+/NAME         load
+```
+
+Copy files in with `c64u fs upload`, and they appear in the next directory listing. No image to
+rebuild, no remount.
+
+**Check whether it is switched on before concluding it does not work** — `IEC Drive` defaults to
+disabled, and a disabled SoftIEC simply does not answer on the bus.
+
 ## Build and mount a disk image
 
 ```sh
