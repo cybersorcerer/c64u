@@ -5,6 +5,7 @@ filesystem is usable from the READY prompt without a disk image and without
 JiffyDOS.
 
 ```
+@?            show this table
 @             show the current path
 @$            list the current directory
 @CD:NAME      change directory        @MD:NAME   create directory
@@ -35,12 +36,14 @@ string rather than checking a fixed address, and adapts:
 | Stock KERNAL | wedge | wedge |
 | JiffyDOS | JiffyDOS | wedge |
 
-`&` therefore always reaches the wedge, and the banner shows which prefix is
-live on the machine it just booted on. The two can be installed together:
+`&` therefore always reaches the wedge. The start-up banner is a single line
+plus `TYPE &? FOR HELP`, naming the prefix that is live on the machine it just
+booted on; `@?` or `&?` prints the command table above, drawn with PETSCII box
+characters. The two can be installed together:
 JiffyDOS keeps making disk loading fast, the wedge reaches the Ultimate
 filesystem.
 
-Everything goes through the Ultimate Command Interface, so all four commands act
+Everything goes through the Ultimate Command Interface, so every command acts
 on the same directory - the one `@$` just showed. No SoftIEC, no disk image, and
 no second notion of a "current directory" to get confused by.
 

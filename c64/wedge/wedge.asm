@@ -47,7 +47,7 @@
 
 // Pages copied from ROM to $C000 at boot. The assert below fails if the
 // resident part outgrows this.
-.const RESIDENT_PAGES = 8
+.const RESIDENT_PAGES = 12
 
 // Ultimate Command Interface
 .const UCI_CONTROL    = $df1c           // write
@@ -106,10 +106,22 @@
 .const CH_V       = $56
 .const CH_W       = $57
 .const CH_COLON   = $3a
+.const CH_QUESTION = $3f
+.const CH_SPACE    = $20
+
+// PETSCII box drawing, as CHROUT expects it.
+.const CH_HBAR      = $c0
+.const CH_VBAR      = $dd
+.const CH_CORNER_TL = $b0
+.const CH_CORNER_TR = $ae
+.const CH_CORNER_BL = $ad
+.const CH_CORNER_BR = $bd
+.const HELP_WIDTH   = 40
 // BASIC tokenises operators before a line is executed, so by the time the
 // dispatcher sees the line, '/' has become $AD and the up arrow $AE. Comparing
 // against $2F and $5E never matches. '@' is not an operator and survives as is.
 .const TOK_RUN     = $8a          // the RUN keyword, as BASIC stores it
+.const TOK_PRINT   = $99          // what '?' becomes when BASIC tokenises
 .const TOK_SLASH   = $ad
 .const TOK_ARROWUP = $ae
 .const CH_ZERO    = $30
@@ -253,12 +265,14 @@ bannerOnce:
         jsr printString
 
         // Show the prefix that is actually usable on this machine.
-        ldx #<helpStock
-        ldy #>helpStock
+        ldx #<hintStock
+        ldy #>hintStock
         lda jiffyPresent
         beq !show+
-        ldx #<helpJiffy
-        ldy #>helpJiffy
+        lda #CH_AMP
+        sta prefixChar
+        ldx #<hintJiffy
+        ldy #>hintJiffy
 !show:
         jsr printString
 
@@ -354,6 +368,16 @@ wedgeCommand:
         bne !notRun+
         jmp doLoadRun
 !notRun:
+        // "?" reaches us as $3F after '@', which suppresses tokenisation, and as
+        // the PRINT token after '&', which does not. Accept both.
+        cmp #CH_QUESTION
+        bne !notHelp+
+        jmp doHelp
+!notHelp:
+        cmp #TOK_PRINT
+        bne !notHelp2+
+        jmp doHelp
+!notHelp2:
 
         // Everything else is a two-letter command.
         jsr CHRGET
@@ -426,6 +450,90 @@ doRemove:
 doPath:
         jsr currentPath
         jmp endOfCommand
+
+doHelp:
+        jsr printHelp
+        jmp endOfCommand
+
+// ------------------------------------------------------------------- help
+
+// Draws the command table. The rows carry no prefix character; it is printed in
+// front of each one from prefixChar, so a single table serves both the stock
+// '@' and the JiffyDOS '&'.
+printHelp:
+        jsr helpBorderTop
+
+        lda #<helpRows
+        sta STRPTR
+        lda #>helpRows
+        sta STRPTR + 1
+
+!row:
+        ldy #$00
+        lda (STRPTR),y
+        beq !done+                      // empty row ends the table
+
+        lda #CH_VBAR
+        jsr CHROUT
+        lda #CH_SPACE
+        jsr CHROUT
+        lda prefixChar
+        jsr CHROUT
+        lda #$03
+        sta helpCol                     // bar, space, prefix
+
+!chars:
+        ldy #$00
+        lda (STRPTR),y
+        jsr advanceHelp
+        cmp #$00
+        beq !pad+
+        jsr CHROUT
+        inc helpCol
+        jmp !chars-
+
+!pad:
+        lda helpCol
+        cmp #HELP_WIDTH - 1
+        bcs !close+
+        lda #CH_SPACE
+        jsr CHROUT
+        inc helpCol
+        jmp !pad-
+!close:
+        lda #CH_VBAR
+        jsr CHROUT
+        jmp !row-
+
+!done:
+        jsr helpBorderBottom
+        rts
+
+advanceHelp:
+        inc STRPTR
+        bne !out+
+        inc STRPTR + 1
+!out:
+        rts
+
+helpBorderTop:
+        lda #CH_CORNER_TL
+        ldx #CH_CORNER_TR
+        jmp helpBorder
+helpBorderBottom:
+        lda #CH_CORNER_BL
+        ldx #CH_CORNER_BR
+helpBorder:
+        stx helpRightCorner
+        jsr CHROUT
+        ldx #HELP_WIDTH - 2
+!line:
+        lda #CH_HBAR
+        jsr CHROUT
+        dex
+        bne !line-
+        lda helpRightCorner
+        jmp CHROUT
 
 doMount:
         jsr mountImage
@@ -1268,6 +1376,9 @@ cmdChar2:     .byte $00
 dosCommand:   .byte $00
 chunkCount:   .byte $00
 driveId:      .byte $00
+prefixChar:   .byte CH_AT
+helpCol:      .byte $00
+helpRightCorner: .byte $00
 jiffyPresent: .byte $00
 headerCount:  .byte $00
 loadAddr:     .word $0000
@@ -1284,20 +1395,36 @@ bannerText: .byte 13
             .text "C64U ULTIMATE WEDGE BY CYBERSORCERER"
             .byte 13, 0
 
-helpStock:  .text "@$ DIR  @CD:NAME  /LOAD  "
-            .byte $5e                   // up arrow, no ASCII equivalent
-            .text "LOADRUN"
-            .byte 13
-            .text "@SV: @MD: @RM: @MT: @SW   @=PATH"
+hintStock:  .text "TYPE @? FOR HELP"
             .byte 13, 0
 
 // JiffyDOS owns @, / and the up arrow, so everything moves behind '&'.
-helpJiffy:  .text "&$ DIR  &CD:NAME  &/LOAD  &"
-            .byte $5e
-            .text "LOADRUN"
-            .byte 13
-            .text "&SV: &MD: &RM: &MT: &SW   &=PATH"
+hintJiffy:  .text "TYPE &? FOR HELP"
             .byte 13, 0
+
+// One row per command, without the prefix; printHelp puts it in front.
+helpRows:   .text "$        DIRECTORY"
+            .byte 0
+            .text "         CURRENT PATH"
+            .byte 0
+            .text "CD:NAME  CHANGE DIRECTORY"
+            .byte 0
+            .text "MD:NAME  CREATE DIRECTORY"
+            .byte 0
+            .text "RM:NAME  DELETE FILE"
+            .byte 0
+            .text "SV:NAME  SAVE BASIC PROGRAM"
+            .byte 0
+            .text "/NAME    LOAD"
+            .byte 0
+            .byte $5e
+            .text "NAME    LOAD AND RUN"
+            .byte 0
+            .text "MT9:NAME MOUNT DISK IMAGE"
+            .byte 0
+            .text "SW9      SWAP TO NEXT DISK"
+            .byte 0
+            .byte 0                     // empty row: end of table
 dirText:    .text "  <DIR>"
             .byte 0
 jiffySig:   .text "JIFFYDOS"
