@@ -1,0 +1,3 @@
+.label residentSource=$8022
+.label coldStart=$8009
+.label resident=$c000
