@@ -197,49 +197,97 @@ Examples:
 
 		if jsonOut {
 			formatter.PrintData(info)
-		} else {
-			formatter.PrintHeader(fmt.Sprintf("%s / %s", category, item))
-			fmt.Println()
-
-			for key, value := range info {
-				// Format value properly based on type
-				var valueStr string
-				switch v := value.(type) {
-				case string:
-					valueStr = v
-				case bool:
-					if v {
-						valueStr = "● true"
-					} else {
-						valueStr = "○ false"
-					}
-				case float64:
-					// Check if it's an integer value
-					if v == float64(int64(v)) {
-						valueStr = fmt.Sprintf("%d", int64(v))
-					} else {
-						valueStr = fmt.Sprintf("%.2f", v)
-					}
-				case []interface{}:
-					// Format arrays/lists
-					if len(v) == 0 {
-						valueStr = "[]"
-					} else {
-						var items []string
-						for _, item := range v {
-							items = append(items, fmt.Sprintf("%v", item))
-						}
-						valueStr = strings.Join(items, ", ")
-					}
-				case nil:
-					valueStr = "─ (not set)"
-				default:
-					valueStr = fmt.Sprintf("%v", v)
-				}
-				formatter.PrintKeyValue(key, valueStr)
-			}
+			return
 		}
+
+		formatter.PrintHeader(fmt.Sprintf("%s / %s", category, item))
+		fmt.Println()
+		printConfigItems(info)
 	},
+}
+
+// printConfigItems renders the reply of GET /v1/configs/<category>/<item>,
+// which nests category → item → attributes:
+//
+//	{"Drive A Settings": {"Drive Bus ID": {"current": 9, "min": 8, ...}}}
+//
+// Wildcards may match several categories and items, so every level is walked.
+// Keys are sorted because Go randomises map iteration order.
+func printConfigItems(info map[string]interface{}) {
+	found := false
+
+	for _, category := range sortedKeys(info) {
+		if category == "errors" {
+			continue
+		}
+		items, ok := info[category].(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		for _, item := range sortedKeys(items) {
+			attrs, ok := items[item].(map[string]interface{})
+			if !ok {
+				// A plain value rather than an attribute block.
+				formatter.PrintKeyValue(item, formatConfigValue(items[item]))
+				found = true
+				continue
+			}
+
+			fmt.Printf("%s / %s\n", category, item)
+			for _, attr := range sortedKeys(attrs) {
+				formatter.PrintKeyValue("  "+attr, formatConfigValue(attrs[attr]))
+			}
+			fmt.Println()
+			found = true
+		}
+	}
+
+	if !found {
+		formatter.Info("No matching configuration item")
+	}
+}
+
+func sortedKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func formatConfigValue(value interface{}) string {
+	switch v := value.(type) {
+	case string:
+		if v == "" {
+			return "─ (empty)"
+		}
+		return v
+	case bool:
+		if v {
+			return "● true"
+		}
+		return "○ false"
+	case float64:
+		if v == float64(int64(v)) {
+			return fmt.Sprintf("%d", int64(v))
+		}
+		return fmt.Sprintf("%.2f", v)
+	case []interface{}:
+		if len(v) == 0 {
+			return "[]"
+		}
+		items := make([]string, 0, len(v))
+		for _, item := range v {
+			items = append(items, fmt.Sprintf("%v", item))
+		}
+		return strings.Join(items, ", ")
+	case nil:
+		return "─ (not set)"
+	default:
+		return fmt.Sprintf("%v", v)
+	}
 }
 
 // ============================================================================
