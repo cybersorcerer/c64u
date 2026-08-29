@@ -520,14 +520,17 @@ plausible guesses:
 - **`c64u-cli`** — driving the device from the command line: every command, workflows that end
   in a verification step, and the limits of DMA and keystroke injection
 
-The format is portable across agents; only the discovery directory differs per tool. This
-repository ships symlinks for both standard project paths, so a clone is enough for Claude Code,
-Codex CLI, opencode and pi:
+The format is portable across agents; only the discovery directory differs per tool. No
+harness-specific directory is tracked here, so point yours at the checkout once — one link under
+`.agents/skills/` covers Codex CLI, opencode and pi together:
 
+```sh
+mkdir -p .agents/skills
+ln -s ../../skills/c64-knowledge .agents/skills/c64-knowledge
+ln -s ../../skills/c64u-cli      .agents/skills/c64u-cli
 ```
-.agents/skills/c64-knowledge -> ../../skills/c64-knowledge
-.claude/skills/c64-knowledge -> ../../skills/c64-knowledge
-```
+
+Claude Code reads `.claude/skills/` instead; the same two links go there.
 
 To install them user-wide instead, take the archive from any release:
 

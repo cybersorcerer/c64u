@@ -49,26 +49,28 @@ harness that simply concatenates everything still works, it just gives up the sa
 
 ## Making the skills available to a harness
 
-### This repository, already wired
+### Pointing a tool at this checkout
 
-Two tracked symlinks point at the canonical `skills/` directory:
+No harness-specific directories are tracked here - `.claude/` and `.agents/` are ignored, so a
+fresh clone contains `skills/` and nothing else. Link it into whichever directory your tool
+scans, once per checkout:
 
+```sh
+# Codex CLI, opencode, pi - the vendor-neutral path
+mkdir -p .agents/skills
+ln -s ../../skills/c64-knowledge .agents/skills/c64-knowledge
+ln -s ../../skills/c64u-cli      .agents/skills/c64u-cli
+
+# Claude Code
+mkdir -p .claude/skills
+ln -s ../../skills/c64-knowledge .claude/skills/c64-knowledge
+ln -s ../../skills/c64u-cli      .claude/skills/c64u-cli
 ```
-.agents/skills/c64-knowledge -> ../../skills/c64-knowledge
-.claude/skills/c64-knowledge -> ../../skills/c64-knowledge
-```
 
-`.agents/skills/` is the vendor-neutral path from the specification, read by Codex CLI, opencode
-and pi. `.claude/skills/` is what Claude Code scans. Cloning this repository is therefore enough
-for all four - no setup.
+Symlinks keep the skill and the checkout in step, so `git pull` is all an update takes.
 
-`.claude/` also holds per-user settings, so the repository ignores it except for the skills
-subtree:
-
-```gitignore
-.claude/*
-!.claude/skills/
-```
+Installing them user-wide instead means they apply in every project, not just this one - see
+below.
 
 ### Where each tool looks
 
@@ -87,8 +89,8 @@ subtree:
 [hermes]: https://hermes-agent.nousresearch.com/docs/developer-guide/creating-skills
 [gpt]: https://help.openai.com/en/articles/20001066-skills-in-chatgpt
 
-Claude Code, Codex CLI, opencode and pi therefore pick these skills up from a plain `git clone`
-with no further setup - all four read one of the two symlinked paths above.
+One symlink at `.agents/skills/` therefore covers Codex CLI, opencode and pi at once; Claude
+Code needs its own under `.claude/skills/`.
 
 Hermes keeps a single source of truth under `~/.hermes/skills/` and needs either an entry in
 `skills.external_dirs` or an installed copy.
