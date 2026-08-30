@@ -24,9 +24,34 @@ For C64 hardware questions - register addresses, screen codes, SID frequencies -
 Resolution order, highest first:
 
 1. Flags: `--host 192.168.1.100 --port 80`
-2. Environment: `C64U_HOST`, `C64U_PORT`
-3. Config file: `~/.config/c64u/config.toml`
-4. Defaults: `localhost:80`
+2. Environment: `C64U_HOST`, `C64U_PORT`, `C64U_DEVICE`
+3. `-D, --device NAME`, naming an entry in the config file
+4. Config file: `~/.config/c64u/config.toml`
+5. Port defaults to 80
+
+**There is no default host.** With nothing configured the command stops and
+says so - the device is never this machine, so guessing `localhost` would only
+produce a confusing timeout.
+
+Several machines can live in the config file under names, and `--device` picks
+one per command:
+
+```toml
+default = "living-room"
+
+[devices.living-room]
+host = "192.168.1.100"
+
+[devices.attic]
+host = "c64u-attic.local"
+```
+
+```sh
+c64u -D attic info
+```
+
+`c64u cli-config show` lists them and marks the one in use. An undefined name is
+an error that lists the defined ones; it never falls back to another machine.
 
 ```sh
 c64u info            # device identity - the cheapest reachability check

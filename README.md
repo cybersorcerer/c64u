@@ -129,12 +129,48 @@ c64u info         # Device information
 
 ## Configuration
 
+### Several Devices
+
+More than one C64 Ultimate can be described in the config file, each under a
+name, and `--device` (short `-D`) picks which one a command talks to:
+
+```toml
+default = "living-room"
+
+[devices.living-room]
+host = "192.168.1.100"
+port = 80
+
+[devices.attic]
+host = "c64u-attic.local"
+```
+
+```bash
+c64u info                        # the "default" entry
+c64u --device attic info         # a specific one
+c64u -D attic runners run-prg-upload game.prg
+C64U_DEVICE=attic c64u info      # for a whole shell session
+```
+
+`c64u cli-config show` lists the configured devices and marks the one in use.
+A name that is not defined stops the command and reports the names that are —
+it never falls back to another machine.
+
+With exactly one device defined, it is used without `default`. A config file
+using the older flat `host = "..."` form keeps working unchanged.
+
 ### Priority Order
 
 1. **CLI Flags** `--host 192.168.1.100 --port 80`
-2. **Environment Variables** `C64U_HOST`, `C64U_PORT`
-3. **Config File** `~/.config/c64u/config.toml`
-4. **Defaults** host=`localhost`, port=`80`
+2. **Environment Variables** `C64U_HOST`, `C64U_PORT`, `C64U_DEVICE`
+3. **`--device`**, naming an entry in the config file
+4. **Config File** `~/.config/c64u/config.toml`
+5. **Default** port=`80`
+
+There is deliberately **no default host**. A C64 Ultimate is always a separate
+machine on the network, so `localhost` could only ever be wrong: with nothing
+configured, `c64u` stops and says so instead of reporting a connection timeout
+against your own computer.
 
 ## Usage
 
@@ -142,6 +178,7 @@ c64u info         # Device information
 
 ```bash
 --host string      C64 Ultimate hostname/IP (env: C64U_HOST)
+--device, -D name  Device defined in the config file (env: C64U_DEVICE)
 --port int         HTTP port, default 80 (env: C64U_PORT)
 --json             Output in JSON format
 --verbose          Show HTTP requests/responses

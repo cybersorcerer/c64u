@@ -7,6 +7,7 @@ Every command accepts the global flags below. `<>` is required, `[]` optional.
 | Flag | Effect |
 |---|---|
 | `--host string` | Device hostname or IP (env `C64U_HOST`) |
+| `-D, --device string` | Name of a device defined in the config file (env `C64U_DEVICE`) |
 | `--port int` | HTTP port, default 80 (env `C64U_PORT`) |
 | `--json` | JSON output - use this for anything a script parses |
 | `--verbose` | Show HTTP requests and responses |
