@@ -21,6 +21,13 @@ GO_FILES := $(shell find . -name '*.go' -type f)
 # Go build flags
 LDFLAGS := -ldflags "-X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)"
 
+# Ebitengine's Metal backend still calls CVDisplayLink, which macOS 15 marked
+# deprecated. The warnings come from that dependency, not from this code, and
+# cannot be fixed here - so they are silenced instead of burying every build in
+# them. Remove this once Ebitengine moves to NSView.displayLink.
+CGO_CFLAGS ?= -Wno-deprecated-declarations
+export CGO_CFLAGS
+
 # Default target
 .PHONY: all
 all: build

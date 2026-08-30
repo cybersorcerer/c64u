@@ -92,6 +92,10 @@ jobs:
           GOOS: darwin
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 1
+          # Ebitengine's Metal backend still calls CVDisplayLink, deprecated in
+          # macOS 15. The warnings come from the dependency and would otherwise
+          # fill the build log on every release.
+          CGO_CFLAGS: -Wno-deprecated-declarations
         run: |
           VERSION=$(git describe --tags --always --dirty)
           COMMIT=$(git rev-parse --short HEAD)
