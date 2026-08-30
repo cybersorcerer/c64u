@@ -5,28 +5,101 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/debug"
 	"github.com/spf13/viper"
 )
 
-// Config holds the application configuration
+// Device is one named C64 Ultimate in the config file.
+type Device struct {
+	Host string `mapstructure:"host"`
+	Port int    `mapstructure:"port"`
+}
+
+// Config holds the application configuration.
+//
+// Host and Port are the resolved values for the device this invocation talks
+// to. Devices and Default carry the file's contents so that `cli-config show`
+// can list them and so an unknown --device can report what does exist.
 type Config struct {
 	Host    string `mapstructure:"host"`
 	Port    int    `mapstructure:"port"`
 	Verbose bool   `mapstructure:"verbose"`
 	JSON    bool   `mapstructure:"json"`
+
+	Devices map[string]Device `mapstructure:"devices"`
+	Default string            `mapstructure:"default"`
+
+	// Device is the name that was selected, empty when the flat top-level
+	// host/port were used.
+	Device string `mapstructure:"-"`
 }
+
+// DeviceNames returns the configured device names in a stable order.
+func (c *Config) DeviceNames() []string {
+	names := make([]string, 0, len(c.Devices))
+	for name := range c.Devices {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// UnknownDeviceError is returned when --device names something the config file
+// does not define. It lists what is available, because the usual cause is a
+// typo and the usual next question is "so what are they called".
+type UnknownDeviceError struct {
+	Name      string
+	Available []string
+}
+
+func (e *UnknownDeviceError) Error() string {
+	if len(e.Available) == 0 {
+		return fmt.Sprintf("unknown device %q: no devices are defined in the config file", e.Name)
+	}
+	return fmt.Sprintf("unknown device %q: defined devices are %s",
+		e.Name, strings.Join(e.Available, ", "))
+}
+
+// ErrNoHost is returned when no host could be determined from flags,
+// environment or config file. Failing here is the point: the alternative is a
+// connection attempt against an address the user never chose.
+var ErrNoHost = errors.New(
+	"no C64 Ultimate configured: pass --host, set C64U_HOST, " +
+		"or add a device to ~/.config/c64u/config.toml (run: c64u cli-config init)")
+
+// ExplicitHost and ExplicitPort tell this package whether the user actually
+// typed --host or --port. Viper cannot answer that: a bound flag with a default
+// always reports as set, so asking it would make every invocation look like an
+// explicit override and no device would ever apply its own address. The command
+// layer sets these from pflag's Changed state.
+var (
+	ExplicitHost bool
+	ExplicitPort bool
+)
 
 // Load loads configuration from file, environment variables, and flags
 // Priority: CLI flags > Environment variables > Config file > Defaults
 func Load() (*Config, error) {
 	debug.Log("Setting default configuration values")
-	// Set default values
-	viper.SetDefault("host", "localhost")
+	// Set default values.
+	//
+	// There is deliberately no default host. A C64 Ultimate is always a
+	// separate machine on the network, so "localhost" can only ever be wrong;
+	// defaulting to it turned "you have not configured a device" into a
+	// connection attempt against this computer and a misleading timeout.
 	viper.SetDefault("port", 80)
 	viper.SetDefault("verbose", false)
 	viper.SetDefault("json", false)
+
+	// Unmarshal only fills keys viper knows about, and AutomaticEnv alone does
+	// not register them. "host" has no default any more, so it has to be bound
+	// explicitly - otherwise C64U_HOST would be read by Get but silently
+	// dropped on the way into the struct.
+	_ = viper.BindEnv("host", "C64U_HOST")
+	_ = viper.BindEnv("device", "C64U_DEVICE")
 
 	// Set exact config file path: ~/.config/c64u/config.toml
 	configFile := ""
@@ -88,9 +161,70 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("error unmarshaling config: %w", err)
 	}
 
-	debug.Log("Final config values: host=%s, port=%d, verbose=%v, json=%v", cfg.Host, cfg.Port, cfg.Verbose, cfg.JSON)
+	if err := cfg.resolveDevice(); err != nil {
+		return nil, err
+	}
+
+	if cfg.Host == "" {
+		return nil, ErrNoHost
+	}
+
+	debug.Log("Final config values: device=%q host=%s, port=%d, verbose=%v, json=%v",
+		cfg.Device, cfg.Host, cfg.Port, cfg.Verbose, cfg.JSON)
 
 	return &cfg, nil
+}
+
+// resolveDevice picks which configured device this invocation talks to and
+// copies its host and port into the top-level fields.
+//
+// Order, first match wins:
+//
+//  1. --host / --port given explicitly, which override a device as well
+//  2. C64U_HOST / C64U_PORT
+//  3. --device NAME, or C64U_DEVICE
+//  4. the "default" key in the config file
+//  5. the only device, when exactly one is defined
+//  6. the flat top-level host/port, so existing config files keep working
+//  7. the built-in localhost:80
+//
+// Steps 1 and 2 are already in cfg.Host/cfg.Port by the time this runs: viper
+// has applied flags and environment over the file.
+func (c *Config) resolveDevice() error {
+	name := viper.GetString("device")
+	if name == "" {
+		name = os.Getenv("C64U_DEVICE")
+	}
+
+	explicitHost := ExplicitHost || os.Getenv("C64U_HOST") != ""
+	explicitPort := ExplicitPort || os.Getenv("C64U_PORT") != ""
+
+	if name == "" {
+		switch {
+		case c.Default != "":
+			name = c.Default
+		case len(c.Devices) == 1:
+			name = c.DeviceNames()[0]
+		default:
+			return nil // flat host/port, or the defaults
+		}
+	}
+
+	device, ok := c.Devices[name]
+	if !ok {
+		return &UnknownDeviceError{Name: name, Available: c.DeviceNames()}
+	}
+
+	c.Device = name
+	// An explicit --host or C64U_HOST outranks the device it would otherwise
+	// have taken, so that a one-off address needs no config change.
+	if !explicitHost && device.Host != "" {
+		c.Host = device.Host
+	}
+	if device.Port != 0 && !explicitPort {
+		c.Port = device.Port
+	}
+	return nil
 }
 
 // CreateDefaultConfig creates a default config file in ~/.config/c64u/
@@ -154,16 +288,34 @@ func CreateDefaultConfig() error {
 	// Default config content
 	defaultConfig := `# c64u Configuration File
 # C64 Ultimate CLI Tool
+#
+# Fill in the address of your C64 Ultimate below. There is no useful default:
+# the device is always a separate machine on the network, so until this is set
+# c64u stops with an explanation rather than guessing.
 
 # C64 Ultimate hostname or IP address
-host = "localhost"
+# host = "192.168.1.100"
 
 # HTTP port (default: 80)
 port = 80
 
-# Example for a specific C64 Ultimate on network:
+# A second "host" line does not add a device - it replaces the one above.
+# For several machines use named entries instead, selected per command with
+# --device NAME (or -D NAME):
+#
+#   c64u --device attic info
+#
+# "default" decides which one is used when --device is left out. With exactly
+# one device defined, it is used and "default" can be left out too.
+#
+# default = "living-room"
+#
+# [devices.living-room]
 # host = "192.168.1.100"
 # port = 80
+#
+# [devices.attic]
+# host = "c64u-attic.local"
 `
 
 	debug.Log("Writing default config (%d bytes)", len(defaultConfig))

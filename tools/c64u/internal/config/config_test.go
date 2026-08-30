@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,19 +13,31 @@ func resetViper() {
 	viper.Reset()
 }
 
-func TestLoad_Defaults(t *testing.T) {
+// With nothing configured, Load must refuse rather than invent a host. The
+// device is never this machine, so the old "localhost" default could only ever
+// send the run somewhere pointless and report a connection timeout.
+func TestLoad_NoHostConfigured(t *testing.T) {
 	resetViper()
 	// Use an isolated HOME so Load() finds no config file
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("C64U_HOST", "")
 	t.Setenv("C64U_PORT", "")
 
+	_, err := Load()
+	if !errors.Is(err, ErrNoHost) {
+		t.Fatalf("Load() error = %v, want ErrNoHost", err)
+	}
+}
+
+func TestLoad_Defaults(t *testing.T) {
+	resetViper()
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("C64U_HOST", "c64u.example")
+	t.Setenv("C64U_PORT", "")
+
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
-	}
-	if cfg.Host != "localhost" {
-		t.Errorf("Host = %q, want %q", cfg.Host, "localhost")
 	}
 	if cfg.Port != 80 {
 		t.Errorf("Port = %d, want 80", cfg.Port)

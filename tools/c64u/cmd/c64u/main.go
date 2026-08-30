@@ -22,6 +22,7 @@ var (
 	// Global flags
 	cfgFile   string
 	host      string
+	device    string
 	port      int
 	verbose   bool
 	jsonOut   bool
@@ -43,11 +44,22 @@ It allows you to control your C64 Ultimate hardware from the command line,
 including uploading and running programs, managing disk images, controlling
 the machine state, and more.
 
+Several C64 Ultimates can be described in the config file, each under a name,
+and --device picks which one a command talks to:
+
+  c64u --device attic info
+  c64u -D attic info
+
+Without --device the "default" entry is used, or the only device when just one
+is defined. "c64u cli-config show" lists them.
+
 Configuration Priority:
   1. CLI flags (--host, --port)
-  2. Environment variables (C64U_HOST, C64U_PORT)
-  3. Config file (~/.config/c64u/config.toml)
-  4. Defaults (host=localhost, port=80)`,
+  2. Environment variables (C64U_HOST, C64U_PORT, C64U_DEVICE)
+  3. --device, naming an entry in the config file
+  4. Config file (~/.config/c64u/config.toml)
+  5. Port defaults to 80. The host has no default - without one, c64u stops
+     and says so, because the device is never this machine.`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// Initialize debug logger first (before anything else)
 		if err := debug.Init(debugMode); err != nil {
@@ -56,6 +68,12 @@ Configuration Priority:
 
 		debug.Log("Command: %s %v", cmd.Name(), args)
 		debug.Log("Loading configuration...")
+
+		// Viper cannot tell a typed flag from its default, so pass on what the
+		// user actually gave; without this a device would never override the
+		// host that the flag's default already put in place.
+		config.ExplicitHost = cmd.Root().PersistentFlags().Changed("host")
+		config.ExplicitPort = cmd.Root().PersistentFlags().Changed("port")
 
 		// Initialize configuration
 		cfg, err := config.Load()
@@ -252,6 +270,17 @@ var cliConfigShowCmd = &cobra.Command{
 			"port":    cfg.Port,
 			"verbose": cfg.Verbose,
 		}
+		if cfg.Device != "" {
+			data["device"] = cfg.Device
+		}
+		if len(cfg.Devices) > 0 {
+			devices := make(map[string]interface{}, len(cfg.Devices))
+			for name, d := range cfg.Devices {
+				devices[name] = map[string]interface{}{"host": d.Host, "port": d.Port}
+			}
+			data["devices"] = devices
+			data["default"] = cfg.Default
+		}
 
 		configPath := config.GetConfigPath()
 		if configPath != "" {
@@ -262,11 +291,33 @@ var cliConfigShowCmd = &cobra.Command{
 			formatter.PrintData(data)
 		} else {
 			fmt.Println("Current Configuration:")
+			if cfg.Device != "" {
+				fmt.Printf("  Device:      %s\n", cfg.Device)
+			}
 			fmt.Printf("  Host:        %s\n", cfg.Host)
 			fmt.Printf("  Port:        %d\n", cfg.Port)
 			fmt.Printf("  Verbose:     %v\n", cfg.Verbose)
 			if configPath != "" {
 				fmt.Printf("  Config File: %s\n", configPath)
+			}
+
+			if len(cfg.Devices) > 0 {
+				fmt.Println()
+				fmt.Println("Defined devices:")
+				for _, name := range cfg.DeviceNames() {
+					d := cfg.Devices[name]
+					marker := " "
+					if name == cfg.Device {
+						marker = "*"
+					}
+					port := d.Port
+					if port == 0 {
+						port = 80
+					}
+					fmt.Printf("  %s %-12s %s:%d\n", marker, name, d.Host, port)
+				}
+				fmt.Println()
+				fmt.Println("  * = used by this invocation. Select with --device NAME.")
 			}
 		}
 	},
@@ -392,6 +443,7 @@ func init() {
 
 	// Global flags
 	rootCmd.PersistentFlags().StringVar(&host, "host", "", "C64 Ultimate hostname or IP address")
+	rootCmd.PersistentFlags().StringVarP(&device, "device", "D", "", "Name of a device defined in the config file")
 	rootCmd.PersistentFlags().IntVar(&port, "port", 80, "HTTP port")
 	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Enable verbose output")
 	rootCmd.PersistentFlags().BoolVar(&jsonOut, "json", false, "Output in JSON format")
@@ -400,6 +452,7 @@ func init() {
 
 	// Bind flags to viper
 	viper.BindPFlag("host", rootCmd.PersistentFlags().Lookup("host"))
+	viper.BindPFlag("device", rootCmd.PersistentFlags().Lookup("device"))
 	viper.BindPFlag("port", rootCmd.PersistentFlags().Lookup("port"))
 	viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
 	viper.BindPFlag("json", rootCmd.PersistentFlags().Lookup("json"))
