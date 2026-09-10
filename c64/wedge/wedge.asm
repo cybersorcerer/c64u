@@ -17,6 +17,7 @@
 //   @$         directory, straight to the screen
 //   @CD:NAME   change directory        @MD:NAME  create directory
 //   @RM:NAME   delete file             @SV:NAME  save the BASIC program
+//   @T:NAME    show a text file        @DR       list the drives
 //   @MT9:NAME  mount a disk image      @SW9      swap to the next disk
 //   /NAME      load                    ^NAME     load and run
 //
@@ -47,7 +48,7 @@
 
 // Pages copied from ROM to $C000 at boot. The assert below fails if the
 // resident part outgrows this.
-.const RESIDENT_PAGES = 12
+.const RESIDENT_PAGES = 13
 
 // Ultimate Command Interface
 .const UCI_CONTROL    = $df1c           // write
@@ -67,6 +68,11 @@
 .const ST_STATE_MORE  = %00110000
 
 .const TARGET_DOS     = $01
+.const TARGET_CONTROL = $04
+.const CTRL_GET_DRVINFO = $29
+.const DRVINFO_MAX    = 8               // sanity limit on the reported count
+.const DRVBUF_SIZE    = 1 + 3 * DRVINFO_MAX
+.const DRIVE_TYPE_ENTRY = 8             // type byte plus seven name characters
 .const DOS_OPEN_FILE  = $02
 .const DOS_CLOSE_FILE = $03
 .const DOS_READ_DATA  = $04
@@ -433,6 +439,8 @@ wedgeCommand:
 
         cmp #CH_C
         beq !c+
+        cmp #CH_D
+        beq !d+
         cmp #CH_M
         beq !m+
         cmp #CH_R
@@ -445,6 +453,11 @@ wedgeCommand:
         cmp #CH_D
         bne unknownCommand
         jmp doChangeDir
+!d:
+        lda cmdChar2
+        cmp #CH_R
+        bne unknownCommand
+        jmp doDriveInfo
 !m:
         lda cmdChar2
         cmp #CH_D
@@ -500,6 +513,10 @@ doPath:
 
 doType:
         jsr typeFile
+        jmp endOfCommand
+
+doDriveInfo:
+        jsr driveInfo
         jmp endOfCommand
 
 doHelp:
@@ -1414,6 +1431,182 @@ swapDisk:
         jsr uciAccept
         rts
 
+// ----------------------------------------------------------------- @DR
+
+// Lists the drives the Ultimate presents on the IEC bus, with the address each
+// one answers on. Without this the id that @MT and @SW take has to be guessed,
+// and the guess is often wrong: drive A is not always 8 - on the machine this
+// was developed against it is 9, and mounting on the wrong id reports
+// "90,DRIVE NOT PRESENT" with nothing to suggest what the right one would be.
+//
+// The reply is a count byte followed by three bytes per drive: type, IEC
+// address, power state. The argument asks for the address the drive actually
+// answers on rather than the configured one.
+driveInfo:
+        jsr uciPresent
+        bcc !go+
+        rts
+!go:
+        lda #TARGET_CONTROL
+        sta UCI_CMD_DATA
+        lda #CTRL_GET_DRVINFO
+        sta UCI_CMD_DATA
+        lda #$01
+        sta UCI_CMD_DATA
+        lda #PUSH_CMD
+        sta UCI_CONTROL
+
+        jsr readDrvInfo
+        lda drvLen
+        beq !out+
+
+        // Trust the bytes that arrived over the count that was announced. The
+        // two need not agree - the reply can be split across packets - and
+        // waiting for a group that is not there would hang the machine.
+        lda drvBuf
+        sta driveCount
+!clamp:
+        lda driveCount
+        beq !out+
+        asl                             // three bytes per drive, plus the count
+        clc
+        adc driveCount
+        clc
+        adc #$01
+        cmp drvLen
+        bcc !fits+
+        beq !fits+
+        dec driveCount
+        jmp !clamp-
+!fits:
+        ldx #<drvHeadText
+        ldy #>drvHeadText
+        jsr printString
+
+        lda #$01
+        sta drvIdx
+!each:
+        ldx drvIdx
+        lda drvBuf,x
+        sta driveType
+        lda drvBuf + 1,x
+        sta driveBus
+        lda drvBuf + 2,x
+        sta drivePower
+        jsr printDrive
+
+        lda drvIdx
+        clc
+        adc #$03
+        sta drvIdx
+        dec driveCount
+        bne !each-
+!out:
+        rts
+
+// Collects the whole reply before anything is printed. A packet has to be
+// accepted before the next one is sent, so reading and formatting cannot be
+// interleaved: a reader that only polls for data spins forever the moment the
+// reply does not fit in one packet.
+readDrvInfo:
+        lda #$00
+        sta drvLen
+!packet:
+        jsr uciWait
+!bytes:
+        lda UCI_STATUS
+        and #ST_DATA_AV
+        beq !packetDone+
+        lda UCI_RESP_DATA
+        ldx drvLen
+        cpx #DRVBUF_SIZE
+        bcs !bytes-                     // buffer full, drop the rest
+        sta drvBuf,x
+        inc drvLen
+        jmp !bytes-
+!packetDone:
+        lda UCI_STATUS
+        and #ST_STATE_MASK
+        cmp #ST_STATE_MORE
+        php
+        jsr uciAccept
+        plp
+        beq !packet-
+        jmp uciDrainStatus
+
+printDrive:
+        lda driveBus
+        jsr printDec2
+        lda #CH_SPACE
+        jsr CHROUT
+        jsr printDriveType
+        lda drivePower
+        beq !off+
+        ldx #<onText
+        ldy #>onText
+        jmp printString
+!off:
+        ldx #<offText
+        ldy #>offText
+        jmp printString
+
+// Each table entry is the type byte followed by seven characters, so every
+// name occupies the same width and the power column stays aligned.
+printDriveType:
+        ldx #$00
+!scan:
+        lda driveTypes,x
+        cmp #$ff
+        beq !unknown+
+        cmp driveType
+        beq !emit+
+        txa
+        clc
+        adc #DRIVE_TYPE_ENTRY
+        tax
+        jmp !scan-
+!emit:
+        inx
+        ldy #DRIVE_TYPE_ENTRY - 1
+!char:
+        lda driveTypes,x
+        jsr CHROUT
+        inx
+        dey
+        bne !char-
+        rts
+!unknown:
+        ldx #$00
+!other:
+        lda unknownTypeText,x
+        jsr CHROUT
+        inx
+        cpx #DRIVE_TYPE_ENTRY - 1
+        bne !other-
+        rts
+
+// Prints A as two characters, space padded, for values below 100.
+printDec2:
+        ldx #CH_ZERO
+!tens:
+        cmp #10
+        bcc !ones+
+        sbc #10
+        inx
+        jmp !tens-
+!ones:
+        pha
+        cpx #CH_ZERO
+        bne !tensDigit+
+        ldx #CH_SPACE                   // no leading zero
+!tensDigit:
+        txa
+        jsr CHROUT
+        pla
+        clc
+        adc #CH_ZERO
+        jmp CHROUT
+
 // ------------------------------------------------------------- @SV:NAME
 
 // Writes the BASIC program in memory to a file, load address first, so the
@@ -1612,6 +1805,13 @@ hookChar:     .byte $00
 byteSink:     .word $0000
 prevByte:     .byte $00
 typeAborted:  .byte $00
+driveCount:   .byte $00
+drvIdx:       .byte $00
+drvLen:       .byte $00
+drvBuf:       .fill DRVBUF_SIZE, 0
+driveType:    .byte $00
+driveBus:     .byte $00
+drivePower:   .byte $00
 nameTail:     .fill 4, 0
 entryAttr:    .byte $00
 runAfterLoad: .byte $00
@@ -1672,6 +1872,8 @@ helpRows:   .text "$        DIRECTORY"
             .byte 0
             .text "SW9      SWAP TO NEXT DISK"
             .byte 0
+            .text "DR       LIST DRIVES"
+            .byte 0
             .byte 0                     // empty row: end of table
 dirText:    .text "  <DIR>"
             .byte 0
@@ -1693,6 +1895,31 @@ prgText:    .text "?NOT TEXT - USE "
 prgText2:   .text " TO LOAD"
             .byte 13, 0
 prgSuffix:  .text ".PRG"
+
+drvHeadText: .text "ID TYPE    POWER"
+            .byte 13, 0
+onText:     .text " ON"
+            .byte 13, 0
+offText:    .text " OFF"
+            .byte 13, 0
+unknownTypeText: .text "?      "
+
+// Type byte, then a seven character name. The values are the ones the Ultimate
+// documents for CTRL_CMD_GET_DRVINFO; $FF ends the table.
+driveTypes:
+            .byte $00
+            .text "1541   "
+            .byte $01
+            .text "1571   "
+            .byte $02
+            .text "1581   "
+            .byte $03
+            .text "UNSET  "
+            .byte $0f
+            .text "SOFTIEC"
+            .byte $50
+            .text "PRINTER"
+            .byte $ff
 residentEnd:
 }
 

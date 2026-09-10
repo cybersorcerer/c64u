@@ -172,6 +172,12 @@ Status strings follow the Commodore convention, `00,OK` on success, and errors s
 | GET_DRIVE_A/B_POWER | `$34` / `$35` | `$04 $34` |
 | GET_MP3_RAMDISKINFO | `$40` | `$04 $40` |
 
+`GET_DRVINFO` answers with a count byte followed by three bytes per drive: type, IEC bus
+address, power state (`$00` off, `$01` on). Types are `$00` 1541, `$01` 1571, `$02` 1581,
+`$03` undecided, `$0F` software IEC, `$50` printer. The argument byte asks for the address
+the drive actually answers on rather than the configured one. The reply may arrive across
+several packets, so a reader that only polls for available data hangs when it does.
+
 `GET_HWINFO` (`$28`) is deprecated.
 
 ## Network (`$03`)
@@ -231,3 +237,7 @@ or `DO_EXCHANGE_RAW` (`$32`); `FREE_ALL` (`$10`) releases every handle.
 `examples/uci-identify.asm` performs the full round trip and was run on a C64 Ultimate
 (core 1.49, firmware 1.1.0). The DOS target answered `ULTIMATE-II DOS V1.2` on the data queue
 and `00,OK` on the status queue.
+
+`GET_DRVINFO` was run from the wedge on the same machine and reported bus 9 / 1541 / on and
+bus 10 / 1541 / on, matching the device's own Drive A and Drive B settings. Changing drive B
+to a disabled 1581 changed the reply to `$02` and power `$00`.

@@ -10,7 +10,7 @@ JiffyDOS.
 @$            list the current directory
 @CD:NAME      change directory        @MD:NAME   create directory
 @RM:NAME      delete a file           @SV:NAME   save the BASIC program
-@T:NAME       show a text file
+@T:NAME       show a text file        @DR        list the drives
 @MT9:NAME     mount a disk image      @SW9       swap to the next disk
 /NAME         load                    ↑NAME      load and run
 ```
@@ -18,7 +18,14 @@ JiffyDOS.
 The digit in `@MT` and `@SW` is the drive's bus id and may be left out. It is
 worth giving: drive A is not always 8 — on the machine this was developed
 against it answers on 9, and mounting without the id reports
-`90,DRIVE NOT PRESENT`.
+`90,DRIVE NOT PRESENT`. `@DR` prints the ids rather than leaving them to be
+guessed:
+
+```
+ID TYPE    POWER
+ 9 1541    ON
+10 1541    ON
+```
 
 `@MT` and `@SW` are the part no other wedge offers, because they are device
 control rather than file access.
