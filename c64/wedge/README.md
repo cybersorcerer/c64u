@@ -37,8 +37,9 @@ string rather than checking a fixed address, and adapts:
 | JiffyDOS | JiffyDOS | wedge |
 
 `&` therefore always reaches the wedge. The start-up banner is a single line
-plus `TYPE &? FOR HELP`, naming the prefix that is live on the machine it just
-booted on; `@?` or `&?` prints the command table above, drawn with PETSCII box
+above BASIC's own message, where JiffyDOS puts its own, and ends in `&? FOR HELP`
+or `@? FOR HELP` - whichever prefix is live on the machine it just booted on.
+That command prints the command table above, drawn with PETSCII box
 characters. The two can be installed together:
 JiffyDOS keeps making disk loading fast, the wedge reaches the Ultimate
 filesystem.

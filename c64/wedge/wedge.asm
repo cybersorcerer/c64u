@@ -108,6 +108,7 @@
 .const CH_COLON   = $3a
 .const CH_QUESTION = $3f
 .const CH_SPACE    = $20
+.const CH_CLEAR    = $93          // clear screen, what BASIC prints first
 
 // PETSCII box drawing, as CHROUT expects it.
 .const CH_HBAR      = $c0
@@ -142,7 +143,7 @@
 .const BASIC_RELINK = $a533             // rebuild BASIC line links
 .const BASIC_KEYWORDS = $a09e           // token $80 is the first entry
 .const IGONE    = $0308                 // BASIC statement dispatch vector
-.const IMAIN    = $0302                 // BASIC main loop vector
+.const BSOUT    = $0326                 // KERNAL character output vector
 .const IRQVEC   = $0314                 // KERNAL IRQ vector
 .const KERNAL_IRQ = $ea31               // default IRQ handler
 .const BASIC_COLDSTART = $a000          // vector to the ROM's BASIC cold start
@@ -192,6 +193,25 @@ resident:
         jsr RESTOR
         jsr CINT
 
+        jsr detectJiffy
+
+        // Getting the greeting above BASIC's banner takes a detour. Printing
+        // here is useless: BASIC's start-up clears the screen and wipes it.
+        // JiffyDOS gets away with it because it replaces the KERNAL's start-up
+        // message outright, which a cartridge cannot.
+        //
+        // So hook the character-output vector instead. The clear is the first
+        // thing BASIC prints; the hook lets it through, prints the greeting on
+        // the fresh screen, and steps aside so BASIC's own banner follows below.
+        lda BSOUT
+        sta origBsout
+        lda BSOUT + 1
+        sta origBsout + 1
+        lda #<bannerHook
+        sta BSOUT
+        lda #>bannerHook
+        sta BSOUT + 1
+
         // BASIC's cold start rewrites $0300-$030B, so installing the hook here
         // would achieve nothing. Reproducing the cold start inline is not an
         // option either: it differs between KERNAL revisions - a JiffyDOS
@@ -231,40 +251,60 @@ install:
         lda #>KERNAL_IRQ
         sta IRQVEC + 1
 
-        jsr detectJiffy
-
         lda #<wedgeHandler
         sta IGONE
         lda #>wedgeHandler
         sta IGONE + 1
 
-        // The banner must not be printed from here: BASIC is still writing its
-        // own start-up message and CHROUT would interleave with it. Hook the
-        // main loop instead, which BASIC enters once it is done and idle.
-        lda IMAIN
-        sta origMain
-        lda IMAIN + 1
-        sta origMain + 1
-        lda #<bannerOnce
-        sta IMAIN
-        lda #>bannerOnce
-        sta IMAIN + 1
-
         jmp KERNAL_IRQ
 
-// First pass through the BASIC main loop: print the banner, then get out of the
-// way for good.
-bannerOnce:
-        lda origMain
-        sta IMAIN
-        lda origMain + 1
-        sta IMAIN + 1
+// Sits in the character-output vector for exactly one call: the screen clear
+// that opens BASIC's start-up. The vector is restored first, because printing
+// the greeting goes through CHROUT and would otherwise re-enter this routine.
+// CHROUT is contracted to leave A, X, Y and the carry as it found them, and
+// BASIC's start-up depends on it: the message is printed by $AB24, which keeps
+// the string index in Y and the remaining length in X across every call. The
+// greeting destroys both, so the whole hook saves and restores them - not only
+// the register used to put the vector back.
+bannerHook:
+        sta hookChar
+        txa
+        pha
+        tya
+        pha
 
+        lda origBsout
+        sta BSOUT
+        lda origBsout + 1
+        sta BSOUT + 1
+
+        lda hookChar
+        cmp #CH_CLEAR
+        bne !passThrough+
+
+        jsr CHROUT                      // let the clear happen first
+        php
+        jsr printBanner
+        jmp !done+
+!passThrough:
+        jsr CHROUT
+        php
+!done:
+        plp
+        pla
+        tay
+        pla
+        tax
+        lda hookChar
+        rts
+
+// Prints the greeting.
+printBanner:
         ldx #<bannerText
         ldy #>bannerText
         jsr printString
 
-        // Show the prefix that is actually usable on this machine.
+        // Name the prefix that is actually usable on this machine.
         ldx #<hintStock
         ldy #>hintStock
         lda jiffyPresent
@@ -274,9 +314,7 @@ bannerOnce:
         ldx #<hintJiffy
         ldy #>hintJiffy
 !show:
-        jsr printString
-
-        jmp (IMAIN)
+        jmp printString
 
 // JiffyDOS claims '@', '/' and the up arrow for its own wedge and intercepts
 // them before BASIC's dispatcher ever runs, so on such a machine those prefixes
@@ -1368,7 +1406,8 @@ printString:
 !done:
         rts
 
-origMain:     .word $0000
+origBsout:    .word $0000
+hookChar:     .byte $00
 entryAttr:    .byte $00
 runAfterLoad: .byte $00
 cmdChar:      .byte $00
@@ -1391,15 +1430,17 @@ statusBuf:    .fill STATUS_MAX + 1, 0
 // round trip but '@' becomes $00 - which silently truncates a string.
 .encoding "petscii_upper"
 
+// The greeting sits above BASIC's own start-up message, so it stays one line:
+// the hint is appended, not put on a line of its own.
 bannerText: .byte 13
-            .text "C64U ULTIMATE WEDGE BY CYBERSORCERER"
-            .byte 13, 0
+            .text "UCI WEDGE BY CYBERSORCERER "
+            .byte 0
 
-hintStock:  .text "TYPE @? FOR HELP"
+hintStock:  .text "@? FOR HELP"
             .byte 13, 0
 
 // JiffyDOS owns @, / and the up arrow, so everything moves behind '&'.
-hintJiffy:  .text "TYPE &? FOR HELP"
+hintJiffy:  .text "&? FOR HELP"
             .byte 13, 0
 
 // One row per command, without the prefix; printHelp puts it in front.
