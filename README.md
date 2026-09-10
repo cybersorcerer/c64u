@@ -16,7 +16,7 @@ A command-line interface for controlling the [Commodore C64 Ultimate](https://co
 - **Cross-Platform**: Builds for macOS, Linux, and Windows
 - **Easy Integration**: Works seamlessly with c64.nvim, VSCode, and scripts
 - **Agent Skills**: Portable C64 knowledge packs for AI coding agents — Claude Code, opencode, pi, Hermes and others
-- **Ultimate Wedge**: A cartridge that adds directory, load, save and disk-mount commands to stock BASIC, straight onto the Ultimate filesystem
+- **Ultimate Wedge**: A cartridge that adds directory, load, save, text-viewing and disk-mount commands to stock BASIC, straight onto the Ultimate filesystem
 
 ## The Ultimate Wedge
 
@@ -26,13 +26,16 @@ in [`c64/wedge`](c64/wedge/README.md) removes that detour:
 
 ```
 @?            show the command table     @          show the current path
-@$            list the directory
+@$            list the directory         @DR        list the drives
 @CD:NAME      change directory           @MD:NAME   create directory
-@RM:NAME      delete a file              @SV:NAME   save the BASIC program
-@T:NAME       show a text file           @DR        list the drives
+@RM:NAME      delete a file              @T:NAME    show a text file
+@SV:NAME      save the BASIC program
+@/NAME        load                       @↑NAME     load and run
 @MT9:NAME     mount a disk image         @SW9       swap to the next disk
-/NAME         load                       ↑NAME      load and run
 ```
+
+On a JiffyDOS machine every `@` above becomes `&` — `&DR`, `&T:NAME`, `&/NAME`.
+The cartridge decides that at boot and prints the live prefix in its own table.
 
 It ships as a cartridge, so it is there from power-on — the Ultimate has no
 boot-PRG setting — and it uses the [Ultimate Command Interface](skills/c64-knowledge/references/uci.md)
@@ -42,7 +45,19 @@ does not overwrite the BASIC program in memory the way `LOAD"$"` does.
 It is a Magic Desk cartridge that unmaps itself once installed, so BASIC still
 reports all 38911 bytes free. On a JiffyDOS machine, where `@`, `/` and `↑` are
 already taken, it detects that at boot and moves its commands behind `&` — both
-can be installed at once.
+can be installed at once, and the wedge announces itself on one line above
+BASIC's own start-up message.
+
+`wedge.crt` ships with every [release](https://github.com/cybersorcerer/c64u/releases),
+so installing it needs no build tools:
+
+```sh
+c64u fs upload wedge.crt /Flash/carts/wedge.crt
+c64u config set "C64 and Cartridge Settings" Cartridge wedge.crt
+c64u config save-to-flash
+```
+
+Building it from source instead needs Kick Assembler and Go:
 
 ```sh
 make -C c64/wedge run       # try it, until the next reboot

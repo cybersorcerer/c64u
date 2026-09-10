@@ -11,8 +11,8 @@ JiffyDOS.
 @CD:NAME      change directory        @MD:NAME   create directory
 @RM:NAME      delete a file           @SV:NAME   save the BASIC program
 @T:NAME       show a text file        @DR        list the drives
+@/NAME        load                    @↑NAME     load and run
 @MT9:NAME     mount a disk image      @SW9       swap to the next disk
-/NAME         load                    ↑NAME      load and run
 ```
 
 The digit in `@MT` and `@SW` is the drive's bus id and may be left out. It is
