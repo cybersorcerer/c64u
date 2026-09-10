@@ -73,6 +73,17 @@ machine code rather than characters.
 `↑` is the up arrow key, PETSCII `$5E`. From the host, `c64u machine sendkey`
 accepts `^` for it.
 
+## Install without building
+
+`wedge.crt` ships with every [release](https://github.com/cybersorcerer/c64u/releases),
+built by CI, so none of the tools below are needed to use it:
+
+```sh
+c64u fs upload wedge.crt /Flash/carts/wedge.crt
+c64u config set "C64 and Cartridge Settings" Cartridge wedge.crt
+c64u config save-to-flash
+```
+
 ## Build
 
 ```sh
