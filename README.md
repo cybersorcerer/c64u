@@ -29,6 +29,7 @@ in [`c64/wedge`](c64/wedge/README.md) removes that detour:
 @$            list the directory
 @CD:NAME      change directory           @MD:NAME   create directory
 @RM:NAME      delete a file              @SV:NAME   save the BASIC program
+@T:NAME       show a text file
 @MT9:NAME     mount a disk image         @SW9       swap to the next disk
 /NAME         load                       ↑NAME      load and run
 ```

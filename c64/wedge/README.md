@@ -10,6 +10,7 @@ JiffyDOS.
 @$            list the current directory
 @CD:NAME      change directory        @MD:NAME   create directory
 @RM:NAME      delete a file           @SV:NAME   save the BASIC program
+@T:NAME       show a text file
 @MT9:NAME     mount a disk image      @SW9       swap to the next disk
 /NAME         load                    ↑NAME      load and run
 ```
@@ -51,6 +52,16 @@ no second notion of a "current directory" to get confused by.
 `@$` prints with CHROUT and, unlike `LOAD"$",8`, leaves the BASIC program in
 memory untouched - which on a stock machine is the whole point. RUN/STOP aborts
 a long listing.
+
+`@T:NAME` prints a text file the same way. What encoding the file is in depends
+on what wrote it - a PC leaves ASCII with LF line endings, the C64 itself leaves
+PETSCII with CR - so one translation covers both: the encodings only part
+company in the letter range, and lowercase is folded to uppercase rather than
+switching the screen to the mixed character set. Bytes below `$20` print as `.`,
+because passing them through would let a file that is not text clear the screen
+or turn on reverse video. A name ending in `.PRG` is refused outright with a
+pointer at `@/`, since a program holds a load address and tokenised BASIC or
+machine code rather than characters.
 
 `↑` is the up arrow key, PETSCII `$5E`. From the host, `c64u machine sendkey`
 accepts `^` for it.

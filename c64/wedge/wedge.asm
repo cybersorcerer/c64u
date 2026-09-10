@@ -109,6 +109,11 @@
 .const CH_QUESTION = $3f
 .const CH_SPACE    = $20
 .const CH_CLEAR    = $93          // clear screen, what BASIC prints first
+.const CH_TAB      = $09
+.const CH_LF       = $0a
+.const CH_CR       = $0d
+.const CH_DOT      = $2e
+.const CH_SLASH    = $2f
 
 // PETSCII box drawing, as CHROUT expects it.
 .const CH_HBAR      = $c0
@@ -416,6 +421,10 @@ wedgeCommand:
         bne !notHelp2+
         jmp doHelp
 !notHelp2:
+        cmp #CH_T
+        bne !notType+
+        jmp doType
+!notType:
 
         // Everything else is a two-letter command.
         jsr CHRGET
@@ -487,6 +496,10 @@ doRemove:
 
 doPath:
         jsr currentPath
+        jmp endOfCommand
+
+doType:
+        jsr typeFile
         jmp endOfCommand
 
 doHelp:
@@ -627,6 +640,15 @@ uciPresent:
         rts
 !ok:
         clc
+        rts
+
+// Discards a command whose bytes are already in the queue but which will never
+// be pushed, as happens when the filename turns out to be missing. Without this
+// the leftovers sit in front of the next command, which then fails with an
+// error that has nothing to do with what was typed.
+abortCommand:
+        lda #ABORT
+        sta UCI_CONTROL
         rts
 
 // Waits for the protocol to leave "command busy".
@@ -813,6 +835,7 @@ loadCommand:
         jsr sendFilename
         cpx #$00
         bne !named+
+        jsr abortCommand
         ldx #<noNameText
         ldy #>noNameText
         jsr printString
@@ -845,7 +868,23 @@ loadCommand:
 readFileIntoMemory:
         lda #$00
         sta headerCount
+        lda #<storeByte
+        sta byteSink
+        lda #>storeByte
+        sta byteSink + 1
+        jmp readFile
 
+// The same stream, printed instead of stored.
+readFileToScreen:
+        lda #$00
+        sta typeAborted
+        sta prevByte
+        lda #<typeByte
+        sta byteSink
+        lda #>typeByte
+        sta byteSink + 1
+
+readFile:
         lda #TARGET_DOS
         sta UCI_CMD_DATA
         lda #DOS_READ_DATA
@@ -864,7 +903,7 @@ packetLoop:
         and #ST_DATA_AV
         beq !packetDone+
         lda UCI_RESP_DATA
-        jsr storeByte
+        jsr callSink
         jmp !bytes-
 !packetDone:
         lda UCI_STATUS
@@ -877,6 +916,11 @@ packetLoop:
 
         jsr uciDrainStatus
         rts
+
+// 6502 has no indirect JSR, so the sink is reached through a JMP whose own RTS
+// returns to the packet loop.
+callSink:
+        jmp (byteSink)
 
 // The first two bytes are the load address; everything after goes to memory.
 storeByte:
@@ -902,6 +946,140 @@ storeByte:
         inc DESTPTR
         bne !out-
         inc DESTPTR + 1
+        rts
+
+// "T:NAME" prints a text file.
+//
+// A .PRG is refused rather than shown: it holds a load address and tokenised
+// BASIC or machine code, so every byte of it would be meaningless on screen.
+typeFile:
+        jsr uciPresent
+        bcc !go+
+        rts
+!go:
+        lda #TARGET_DOS
+        sta UCI_CMD_DATA
+        lda #DOS_OPEN_FILE
+        sta UCI_CMD_DATA
+        lda #FA_READ
+        sta UCI_CMD_DATA
+
+        jsr advanceText
+        jsr skipSeparator
+        jsr sendFilename
+        cpx #$00
+        bne !named+
+        jsr abortCommand
+        ldx #<noNameText
+        ldy #>noNameText
+        jmp printString
+!named:
+        lda #PUSH_CMD
+        sta UCI_CONTROL
+        jsr uciWait
+        jsr uciReadStatus
+        jsr uciAccept
+        jsr uciReportError
+        bcc !opened+
+        rts
+!opened:
+        // The name has already gone into the command queue by this point, so
+        // the suffix is checked after opening rather than before: discarding a
+        // half written command would leave its bytes in the queue.
+        jsr nameIsPrg
+        bcc !show+
+        jsr closeFile
+        ldx #<prgText
+        ldy #>prgText
+        jsr printString
+        lda prefixChar                  // name the load command that does work
+        jsr CHROUT
+        lda #CH_SLASH
+        jsr CHROUT
+        ldx #<prgText2
+        ldy #>prgText2
+        jmp printString
+!show:
+        jsr readFileToScreen
+        jmp closeFile
+
+// Carry set when the name just sent ends in ".PRG".
+nameIsPrg:
+        ldx #$03
+!loop:
+        lda nameTail,x
+        cmp prgSuffix,x
+        bne !no+
+        dex
+        bpl !loop-
+        sec
+        rts
+!no:
+        clc
+        rts
+
+// Prints one byte of a text file.
+//
+// What the encoding is depends on who wrote the file: a PC leaves ASCII with LF
+// line endings, the C64 itself leaves PETSCII with CR. One translation serves
+// both, because the two only part company in the letter range - digits, spaces
+// and punctuation are the same byte in either. Lowercase is folded to uppercase
+// so the screen stays in its start-up character set, and a lone LF becomes a CR
+// while the LF of a CRLF pair is dropped.
+//
+// Bytes below $20 are not passed through: in PETSCII they would clear the
+// screen, switch the character set or turn on reverse video, so a file that is
+// not text could leave the machine in a state the user has to guess their way
+// out of. They print as '.' instead.
+typeByte:
+        ldx typeAborted
+        bne !out+
+        tax                             // the untranslated byte, for prevByte
+
+        cmp #CH_LF
+        bne !notLf+
+        lda prevByte
+        cmp #CH_CR
+        beq !store+                     // second half of a CRLF pair
+        lda #CH_CR
+        jmp !emit+
+!notLf:
+        txa
+        cmp #CH_CR
+        beq !emit+
+        cmp #CH_TAB
+        bne !notTab+
+        lda #CH_SPACE
+        jmp !emit+
+!notTab:
+        cmp #CH_SPACE
+        bcc !dot+                       // any other control byte
+        cmp #$60
+        bcc !emit+                      // $20-$5F is common to both encodings
+        cmp #$61
+        bcc !dot+
+        cmp #$7b
+        bcs !high+
+        and #$df                        // ASCII lowercase
+        jmp !emit+
+!high:
+        cmp #$c1
+        bcc !dot+
+        cmp #$db
+        bcs !dot+
+        and #$7f                        // PETSCII uppercase from the mixed set
+        jmp !emit+
+!dot:
+        lda #CH_DOT
+!emit:
+        jsr CHROUT
+!store:
+        stx prevByte
+        jsr STOPKEY
+        bne !out+
+        lda #$ff
+        sta typeAborted
+!out:
         rts
 
 closeFile:
@@ -991,6 +1169,13 @@ startProgram:
 //
 // Returns with X non-zero when at least one character was sent.
 sendFilename:
+        ldx #$03
+!clearTail:
+        lda #$00
+        sta nameTail,x
+        dex
+        bpl !clearTail-
+
         ldx #$00
 !loop:
         ldy #$00
@@ -1008,6 +1193,19 @@ sendFilename:
         jmp !loop-
 !plain:
         sta UCI_CMD_DATA
+
+        // Keep the last four characters, so a caller can look at the suffix
+        // without buffering the whole name.
+        pha
+        lda nameTail + 1
+        sta nameTail
+        lda nameTail + 2
+        sta nameTail + 1
+        lda nameTail + 3
+        sta nameTail + 2
+        pla
+        sta nameTail + 3
+
         inx
         jmp !loop-
 !done:
@@ -1123,6 +1321,7 @@ simpleNameCommand:
         jsr uciAccept
         rts
 !noName:
+        jsr abortCommand
         ldx #<noNameText
         ldy #>noNameText
         jsr printString
@@ -1187,6 +1386,7 @@ mountImage:
         jsr uciAccept
         rts
 !noName:
+        jsr abortCommand
         ldx #<noNameText
         ldy #>noNameText
         jsr printString
@@ -1239,6 +1439,7 @@ saveProgram:
         jsr sendFilename
         cpx #$00
         bne !named+
+        jsr abortCommand
         ldx #<noNameText
         ldy #>noNameText
         jsr printString
@@ -1408,6 +1609,10 @@ printString:
 
 origBsout:    .word $0000
 hookChar:     .byte $00
+byteSink:     .word $0000
+prevByte:     .byte $00
+typeAborted:  .byte $00
+nameTail:     .fill 4, 0
 entryAttr:    .byte $00
 runAfterLoad: .byte $00
 cmdChar:      .byte $00
@@ -1454,6 +1659,8 @@ helpRows:   .text "$        DIRECTORY"
             .byte 0
             .text "RM:NAME  DELETE FILE"
             .byte 0
+            .text "T:NAME   SHOW TEXT FILE"
+            .byte 0
             .text "SV:NAME  SAVE BASIC PROGRAM"
             .byte 0
             .text "/NAME    LOAD"
@@ -1481,6 +1688,11 @@ savedText:  .text "SAVED"
             .byte 13, 0
 noUciText:  .text "?COMMAND INTERFACE DISABLED"
             .byte 13, 0
+prgText:    .text "?NOT TEXT - USE "
+            .byte 0
+prgText2:   .text " TO LOAD"
+            .byte 13, 0
+prgSuffix:  .text ".PRG"
 residentEnd:
 }
 
