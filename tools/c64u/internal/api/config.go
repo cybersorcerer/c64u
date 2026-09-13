@@ -10,6 +10,17 @@ import (
 // ConfigSettings represents multiple configuration settings
 type ConfigSettings map[string]map[string]interface{}
 
+// escapeConfigPath escapes one path segment of a config endpoint.
+//
+// url.PathEscape alone is not enough: it leaves ':' in place, which is legal in
+// a path segment but is exactly what the Ultimate uses to introduce an action,
+// as in "/v1/configs:save_to_flash". An item whose name carries one - "DMA Load
+// Mimics ID:" is a real example - then comes back as an empty category instead
+// of the item.
+func escapeConfigPath(segment string) string {
+	return strings.ReplaceAll(url.PathEscape(segment), ":", "%3A")
+}
+
 // GetConfigCategories retrieves all configuration categories
 func (c *Client) GetConfigCategories() ([]string, error) {
 	resp, err := c.Get("/v1/configs", nil)
@@ -30,7 +41,7 @@ func (c *Client) GetConfigCategories() ([]string, error) {
 // GetConfigCategory retrieves all settings in a category
 // category supports wildcards (e.g., "drive a*")
 func (c *Client) GetConfigCategory(category string) (map[string]interface{}, error) {
-	endpoint := fmt.Sprintf("/v1/configs/%s", url.PathEscape(category))
+	endpoint := fmt.Sprintf("/v1/configs/%s", escapeConfigPath(category))
 	resp, err := c.Get(endpoint, nil)
 	if err != nil {
 		return nil, err
@@ -48,8 +59,8 @@ func (c *Client) GetConfigCategory(category string) (map[string]interface{}, err
 // Both category and item support wildcards
 func (c *Client) GetConfigItem(category, item string) (map[string]interface{}, error) {
 	endpoint := fmt.Sprintf("/v1/configs/%s/%s",
-		url.PathEscape(category),
-		url.PathEscape(item))
+		escapeConfigPath(category),
+		escapeConfigPath(item))
 	resp, err := c.Get(endpoint, nil)
 	if err != nil {
 		return nil, err
@@ -67,8 +78,8 @@ func (c *Client) GetConfigItem(category, item string) (map[string]interface{}, e
 // Both category and item support wildcards
 func (c *Client) SetConfigItem(category, item, value string) error {
 	endpoint := fmt.Sprintf("/v1/configs/%s/%s?value=%s",
-		url.PathEscape(category),
-		url.PathEscape(item),
+		escapeConfigPath(category),
+		escapeConfigPath(item),
 		url.QueryEscape(value))
 
 	resp, err := c.Put(endpoint, nil)
