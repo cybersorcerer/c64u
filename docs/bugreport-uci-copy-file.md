@@ -115,8 +115,6 @@ Further checks:
   cartridge wedge. Repeated with the stock KERNAL in place of JiffyDOS: the copy reported
   `PATH DOESN'T EXIST` while the rename in the same run, in the same directory, reported
   `00,OK` and renamed the file.
-- The file manager in the Ultimate's own menu copies files on this machine without trouble, so
-  the underlying filesystem operation works — only the command interface path fails.
 
 ## Side observation
 
