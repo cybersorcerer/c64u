@@ -10,16 +10,18 @@ JiffyDOS.
 @$            list the current directory
 @CD:NAME      change directory        @MD:NAME   create directory
 @RM:NAME      delete a file           @SV:NAME   save the BASIC program
-@T:NAME       show a text file        @DR        list the drives
+@RN:OLD=NEW   rename a file
+@T:NAME       show a text file        @DR        list the drive ids
 @/NAME        load                    @↑NAME     load and run
-@MT9:NAME     mount a disk image      @SW9       swap to the next disk
+@MT<id>:NAME  mount a disk image      @UM<id>    unmount the disk
+@SW<id>       swap to the next disk
 ```
 
-The digit in `@MT` and `@SW` is the drive's bus id and may be left out. It is
-worth giving: drive A is not always 8 — on the machine this was developed
-against it answers on 9, and mounting without the id reports
-`90,DRIVE NOT PRESENT`. `@DR` prints the ids rather than leaving them to be
-guessed:
+`<id>` in `@MT`, `@UM` and `@SW` is the drive's bus id and may be left out;
+without one the Ultimate uses the drive it last mounted on. It is worth giving,
+because drive A is not always 8 — on the machine this was developed against it
+answers on 9, and addressing the wrong one reports `90,DRIVE NOT PRESENT`. The
+ids are configurable, so the help table names none; `@DR` prints the live ones:
 
 ```
 ID TYPE    POWER
@@ -27,8 +29,12 @@ ID TYPE    POWER
 10 1541    ON
 ```
 
-`@MT` and `@SW` are the part no other wedge offers, because they are device
-control rather than file access.
+`@MT`, `@UM` and `@SW` are the part no other wedge offers, because they are
+device control rather than file access.
+
+`@RN` takes both names in one line, old first, separated by `=`. Commodore DOS
+writes the same operation the other way round (`R:new=old`), so the order is
+worth a second look before assuming.
 
 ## Two prefixes, because of JiffyDOS
 

@@ -17,12 +17,16 @@
 //   @$         directory, straight to the screen
 //   @CD:NAME   change directory        @MD:NAME  create directory
 //   @RM:NAME   delete file             @SV:NAME  save the BASIC program
+//   @RN:A=B    rename file
 //   @T:NAME    show a text file        @DR       list the drives
-//   @MT9:NAME  mount a disk image      @SW9      swap to the next disk
+//   @MT<id>:NAME  mount a disk image   @UM<id>   unmount the disk
+//   @SW<id>       swap to the next disk
 //   /NAME      load                    ^NAME     load and run
 //
-// The digit in @MT and @SW is the drive bus id and may be left out; drive A is
-// not always 8.
+// @MT, @UM and @SW take an optional drive bus id right after the command, as in
+// @MT9:NAME. Without one the Ultimate uses the drive last mounted on. The ids
+// are configurable and drive A is not always 8, so @DR prints the live ones
+// rather than the help table naming a number that may not apply.
 //
 // The prefix depends on the machine. JiffyDOS claims '@', '/' and the up arrow
 // and intercepts them before BASIC's dispatcher, so on such a machine those
@@ -48,7 +52,7 @@
 
 // Pages copied from ROM to $C000 at boot. The assert below fails if the
 // resident part outgrows this.
-.const RESIDENT_PAGES = 13
+.const RESIDENT_PAGES = 14
 
 // Ultimate Command Interface
 .const UCI_CONTROL    = $df1c           // write
@@ -77,6 +81,9 @@
 .const DOS_CLOSE_FILE = $03
 .const DOS_READ_DATA  = $04
 .const DOS_DELETE_FILE = $09
+.const DOS_RENAME_FILE = $0a            // <old> $00 <new>, firmware 1.1+
+.const DOS_COPY_FILE  = $0b             // <source> $00 <dest>, firmware 1.1+
+.const DOS_UMOUNT_DISK = $24
 .const DOS_CHANGE_DIR = $11
 .const DOS_GET_PATH   = $12
 .const DOS_OPEN_DIR   = $13
@@ -106,7 +113,11 @@
 .const CH_C       = $43
 .const CH_D       = $44
 .const CH_M       = $4d
+.const CH_N       = $4e
+.const CH_P       = $50
 .const CH_R       = $52
+.const CH_U       = $55
+.const CH_EQUALS  = $3d
 .const CH_S       = $53
 .const CH_T       = $54
 .const CH_V       = $56
@@ -136,6 +147,7 @@
 .const TOK_PRINT   = $99          // what '?' becomes when BASIC tokenises
 .const TOK_SLASH   = $ad
 .const TOK_ARROWUP = $ae
+.const TOK_EQUALS  = $b2          // '=' after '&', which BASIC tokenises
 .const CH_ZERO    = $30
 .const CH_LC_A    = $61
 .const CH_LC_Z    = $7a
@@ -447,12 +459,23 @@ wedgeCommand:
         beq !r+
         cmp #CH_S
         beq !s+
+        cmp #CH_U
+        beq !u+
         jmp unknownCommand
 !c:
         lda cmdChar2
         cmp #CH_D
-        bne unknownCommand
+        bne !notCd+
         jmp doChangeDir
+!notCd:
+        cmp #CH_P
+        bne unknownCommand
+        jmp doCopy
+!u:
+        lda cmdChar2
+        cmp #CH_M
+        bne unknownCommand
+        jmp doUnmount
 !d:
         lda cmdChar2
         cmp #CH_R
@@ -470,8 +493,12 @@ wedgeCommand:
 !r:
         lda cmdChar2
         cmp #CH_M
-        bne unknownCommand
+        bne !notRm+
         jmp doRemove
+!notRm:
+        cmp #CH_N
+        bne unknownCommand
+        jmp doRename
 !s:
         lda cmdChar2
         cmp #CH_V
@@ -505,6 +532,25 @@ doMakeDir:
 doRemove:
         lda #DOS_DELETE_FILE
         jsr simpleNameCommand
+        jmp endOfCommand
+
+doRename:
+        lda #DOS_RENAME_FILE
+        jsr twoNameCommand
+        jmp endOfCommand
+
+// @CP works and is reachable, but is deliberately absent from the help table:
+// on firmware 1.1.0 the Ultimate never performs the copy, so advertising it
+// would send people looking for a mistake of their own. Keep it - the day a
+// firmware fixes COPY_FILE, only the help row has to come back.
+doCopy:
+        lda #DOS_COPY_FILE
+        jsr twoNameCommand
+        jmp endOfCommand
+
+doUnmount:
+        lda #DOS_UMOUNT_DISK
+        jsr driveIdCommand
         jmp endOfCommand
 
 doPath:
@@ -1199,6 +1245,17 @@ sendFilename:
         lda (TXTPTR),y
         beq !done+
 
+        // A two-name command stops at '=', which BASIC leaves alone after '@'
+        // but turns into a token after '&'. Off by default, so a name that
+        // happens to contain '=' still reaches every other command intact.
+        ldy splitOnEquals
+        beq !noSplit+
+        cmp #CH_EQUALS
+        beq !split+
+        cmp #TOK_EQUALS
+        beq !split+
+!noSplit:
+
         inc TXTPTR
         bne !advanced+
         inc TXTPTR + 1
@@ -1225,7 +1282,14 @@ sendFilename:
 
         inx
         jmp !loop-
+!split:
+        // Step over the separator and report it, so the caller knows a second
+        // name follows rather than the end of the line.
+        jsr advanceText
+        sec
+        rts
 !done:
+        clc
         rts
 
 // Expands one BASIC token in A into its keyword and sends the letters.
@@ -1344,6 +1408,57 @@ simpleNameCommand:
         jsr printString
         rts
 
+// Commands shaped "<code> <old>=<new>". A is the DOS command byte; the two
+// names go into one command, separated by a zero byte.
+//
+// Rename works. Copy ($0B) is documented with the same shape, and everything
+// measured here says the command leaves correctly - rename over this very
+// routine renames the file - but on firmware 1.1.0 no copy ever appeared: the
+// reply follows whichever name comes first, FILE EXISTS when it is there and
+// FILE DOESN'T EXIST when it is not, in both argument orders and with bare or
+// absolute names. It is kept so the behaviour can be checked at the keyboard.
+twoNameCommand:
+        sta dosCommand
+        jsr uciPresent
+        bcc !go+
+        rts
+!go:
+        jsr advanceText
+        jsr skipSeparator
+
+        lda #TARGET_DOS
+        sta UCI_CMD_DATA
+        lda dosCommand
+        sta UCI_CMD_DATA
+
+        lda #$ff
+        sta splitOnEquals
+        jsr sendFilename
+        php                             // carry: the separator was reached
+        lda #$00
+        sta splitOnEquals
+        plp
+        bcc !noSecond+
+        cpx #$00
+        beq !noSecond+
+
+        lda #$00
+        sta UCI_CMD_DATA                // separates the two names
+        jsr sendFilename
+        cpx #$00
+        beq !noSecond+
+
+        lda #PUSH_CMD
+        sta UCI_CONTROL
+        jsr uciWait
+        jsr printStatus
+        jmp uciAccept
+!noSecond:
+        jsr abortCommand
+        ldx #<twoNameText
+        ldy #>twoNameText
+        jmp printString
+
 // ------------------------------------------------- @ current path, @MT, @SW
 
 // "Get Path" returns the current directory on the data channel.
@@ -1411,6 +1526,14 @@ mountImage:
 
 // The same action as holding the menu button to swap to the next disk.
 swapDisk:
+        lda #DOS_SWAP_DISK
+        // fall through
+
+// Commands shaped "<code> <drive id>": swap and unmount. A is the DOS command
+// byte. The digit is optional; without one the Ultimate uses the drive last
+// mounted on.
+driveIdCommand:
+        sta dosCommand
         jsr uciPresent
         bcc !go+
         rts
@@ -1420,7 +1543,7 @@ swapDisk:
 
         lda #TARGET_DOS
         sta UCI_CMD_DATA
-        lda #DOS_SWAP_DISK
+        lda dosCommand
         sta UCI_CMD_DATA
         lda driveId
         sta UCI_CMD_DATA
@@ -1428,8 +1551,7 @@ swapDisk:
         sta UCI_CONTROL
         jsr uciWait
         jsr printStatus
-        jsr uciAccept
-        rts
+        jmp uciAccept
 
 // ----------------------------------------------------------------- @DR
 
@@ -1812,6 +1934,7 @@ drvBuf:       .fill DRVBUF_SIZE, 0
 driveType:    .byte $00
 driveBus:     .byte $00
 drivePower:   .byte $00
+splitOnEquals: .byte $00
 nameTail:     .fill 4, 0
 entryAttr:    .byte $00
 runAfterLoad: .byte $00
@@ -1849,30 +1972,34 @@ hintJiffy:  .text "&? FOR HELP"
             .byte 13, 0
 
 // One row per command, without the prefix; printHelp puts it in front.
-helpRows:   .text "$        DIRECTORY"
+helpRows:   .text "$           DIRECTORY"
             .byte 0
-            .text "         CURRENT PATH"
+            .text "            CURRENT PATH"
             .byte 0
-            .text "CD:NAME  CHANGE DIRECTORY"
+            .text "CD:NAME     CHANGE DIRECTORY"
             .byte 0
-            .text "MD:NAME  CREATE DIRECTORY"
+            .text "MD:NAME     CREATE DIRECTORY"
             .byte 0
-            .text "RM:NAME  DELETE FILE"
+            .text "RM:NAME     DELETE FILE"
             .byte 0
-            .text "T:NAME   SHOW TEXT FILE"
+            .text "RN:OLD=NEW  RENAME FILE"
             .byte 0
-            .text "SV:NAME  SAVE BASIC PROGRAM"
+            .text "T:NAME      SHOW TEXT FILE"
             .byte 0
-            .text "/NAME    LOAD"
+            .text "SV:NAME     SAVE BASIC PROGRAM"
+            .byte 0
+            .text "/NAME       LOAD"
             .byte 0
             .byte $5e
-            .text "NAME    LOAD AND RUN"
+            .text "NAME       LOAD AND RUN"
             .byte 0
-            .text "MT9:NAME MOUNT DISK IMAGE"
+            .text "MT<ID>:NAME MOUNT DISK IMAGE"
             .byte 0
-            .text "SW9      SWAP TO NEXT DISK"
+            .text "UM<ID>      UNMOUNT DISK"
             .byte 0
-            .text "DR       LIST DRIVES"
+            .text "SW<ID>      SWAP TO NEXT DISK"
+            .byte 0
+            .text "DR          LIST DRIVE IDS"
             .byte 0
             .byte 0                     // empty row: end of table
 dirText:    .text "  <DIR>"
@@ -1883,6 +2010,8 @@ jiffySigEnd:
 errText:    .text "?UNKNOWN WEDGE COMMAND"
             .byte 13, 0
 noNameText: .text "?MISSING FILENAME"
+            .byte 13, 0
+twoNameText: .text "?NEEDS OLD=NEW"
             .byte 13, 0
 readyText:  .text "LOADED"
             .byte 13, 0

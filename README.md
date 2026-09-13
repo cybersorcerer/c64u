@@ -26,13 +26,17 @@ in [`c64/wedge`](c64/wedge/README.md) removes that detour:
 
 ```
 @?            show the command table     @          show the current path
-@$            list the directory         @DR        list the drives
+@$            list the directory         @DR        list the drive ids
 @CD:NAME      change directory           @MD:NAME   create directory
 @RM:NAME      delete a file              @T:NAME    show a text file
-@SV:NAME      save the BASIC program
+@RN:OLD=NEW   rename a file              @SV:NAME   save the BASIC program
 @/NAME        load                       @↑NAME     load and run
-@MT9:NAME     mount a disk image         @SW9       swap to the next disk
+@MT<id>:NAME  mount a disk image         @UM<id>    unmount the disk
+@SW<id>       swap to the next disk
 ```
+
+`<id>` is the drive's bus id and may be left out; it is configurable and drive A
+is not always 8, which is what `@DR` is for.
 
 On a JiffyDOS machine every `@` above becomes `&` — `&DR`, `&T:NAME`, `&/NAME`.
 The cartridge decides that at boot and prints the live prefix in its own table.

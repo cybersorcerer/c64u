@@ -172,6 +172,15 @@ Status strings follow the Commodore convention, `00,OK` on success, and errors s
 | GET_DRIVE_A/B_POWER | `$34` / `$35` | `$04 $34` |
 | GET_MP3_RAMDISKINFO | `$40` | `$04 $40` |
 
+`COPY_FILE` (`$0B`) does not work on firmware 1.1.0, though it is documented exactly like
+`RENAME_FILE` (`$0A`): `$01 $0b <source> $00 <destination>`. Measured on hardware, it never
+produces a copy. The reply follows whichever name comes first - `FILE EXISTS` when that name
+exists, `FILE DOESN'T EXIST` when it does not - in both argument orders, with bare and with
+absolute names, with the destination null terminated or not, and with a blank in place of the
+separator. `RENAME_FILE` over the identical byte stream, differing only in the command byte,
+renames the file. Verified from a 6502 program with the outgoing bytes logged and read back
+over DMA, and by hand at the keyboard. Do not re-derive this; check a newer firmware instead.
+
 `GET_DRVINFO` answers with a count byte followed by three bytes per drive: type, IEC bus
 address, power state (`$00` off, `$01` on). Types are `$00` 1541, `$01` 1571, `$02` 1581,
 `$03` undecided, `$0F` software IEC, `$50` printer. The argument byte asks for the address
