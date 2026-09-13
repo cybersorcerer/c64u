@@ -69,7 +69,13 @@ make -C c64/wedge run       # try it, until the next reboot
 make -C c64/wedge install   # copy it into /flash/carts
 ```
 
-`@?` prints the command table — here on a machine running JiffyDOS, where the
+The cartridge announces itself on one line above BASIC's own start-up message,
+where JiffyDOS puts its banner, and names the prefix that is live on the machine
+it just booted on:
+
+![The wedge start-up banner above the JiffyDOS and BASIC messages](docs/images/wedge-boot.png)
+
+`@?` prints the command table — here on the same JiffyDOS machine, where the
 wedge has detected it and moved itself behind `&`:
 
 ![The wedge help table on a C64 Ultimate running JiffyDOS](docs/images/wedge-help.png)
