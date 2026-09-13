@@ -23,10 +23,11 @@
 //   @SW<id>       swap to the next disk
 //   /NAME      load                    ^NAME     load and run
 //
-// @MT, @UM and @SW take an optional drive bus id right after the command, as in
-// @MT9:NAME. Without one the Ultimate uses the drive last mounted on. The ids
-// are configurable and drive A is not always 8, so @DR prints the live ones
-// rather than the help table naming a number that may not apply.
+// @MT, @UM and @SW take an optional drive bus id right after the command - the
+// 9 in @MT9:NAME is one machine's drive A, not part of the syntax. Without an
+// id the Ultimate uses the drive last mounted on. The ids are set per drive in
+// the Ultimate's configuration, so @DR prints the live ones rather than the
+// help table naming a number that may not apply.
 //
 // The prefix depends on the machine. JiffyDOS claims '@', '/' and the up arrow
 // and intercepts them before BASIC's dispatcher, so on such a machine those

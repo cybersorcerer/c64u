@@ -19,15 +19,22 @@ JiffyDOS.
 
 `<id>` in `@MT`, `@UM` and `@SW` is the drive's bus id and may be left out;
 without one the Ultimate uses the drive it last mounted on. It is worth giving,
-because drive A is not always 8 — on the machine this was developed against it
-answers on 9, and addressing the wrong one reports `90,DRIVE NOT PRESENT`. The
-ids are configurable, so the help table names none; `@DR` prints the live ones:
+and it has to be **your** id: the bus ids are set per drive in the Ultimate's
+own configuration, so drive A is not always 8. Addressing a drive that is not
+there reports `90,DRIVE NOT PRESENT`.
+
+`@DR` prints the ids the machine actually uses. On the machine this was
+developed against it answers as below — yours will differ:
 
 ```
 ID TYPE    POWER
  9 1541    ON
 10 1541    ON
 ```
+
+So on that machine drive A is `@MT9:`, and on a machine left at the factory
+setting it would be `@MT8:`. Run `@DR` first rather than copying a number out
+of this file.
 
 `@MT`, `@UM` and `@SW` are the part no other wedge offers, because they are
 device control rather than file access.
@@ -172,6 +179,10 @@ a request to create `D:TESTDIR`. Filenames are read directly rather than with
 CHRGET anyway, because CHRGET also skips spaces.
 
 ## Verified
+
+What follows is a transcript from one machine, not a set of instructions. Where
+a drive id appears it is the one that machine uses; substitute whatever `@DR`
+reports on yours.
 
 On a C64 Ultimate with the **stock** KERNAL:
 

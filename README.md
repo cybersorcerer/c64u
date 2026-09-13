@@ -35,8 +35,9 @@ in [`c64/wedge`](c64/wedge/README.md) removes that detour:
 @SW<id>       swap to the next disk
 ```
 
-`<id>` is the drive's bus id and may be left out; it is configurable and drive A
-is not always 8, which is what `@DR` is for.
+`<id>` is the drive's bus id and may be left out. It is set per drive in the
+Ultimate's configuration, so it differs between machines and drive A is not
+always 8 — run `@DR` to see the ids yours uses rather than assuming a number.
 
 On a JiffyDOS machine every `@` above becomes `&` — `&DR`, `&T:NAME`, `&/NAME`.
 The cartridge decides that at boot and prints the live prefix in its own table.
