@@ -73,6 +73,19 @@ These need an Ultimate 64, not a 1541 Ultimate II:
 - `c64u machine poweroff`
 - `c64u machine debug-reg`, `debug-reg-set` (register `$D7FF`)
 
+## Video and audio are missing from some builds
+
+`streams listen video` and `listen audio` open a window and use the host's graphics and sound
+libraries, so they are compiled in only where that is possible: the macOS, Windows and Linux
+x86_64 binaries have them, the cross-compiled Linux ARM64 binary does not and answers
+`video stream is not available on linux builds`. `listen debug` is plain output and works in
+every build.
+
+The Linux x86_64 binary is dynamically linked against `libasound.so.2` and `libX11.so.6` as a
+result. It does not start at all where those are missing, not even for `c64u version`. On a
+machine without them, build from source with `CGO_ENABLED=0`: that yields a static binary
+without the two stream commands.
+
 ## Configuration changes are volatile by default
 
 `c64u config set` takes effect at once but is lost on power-off. Follow it with

@@ -196,6 +196,8 @@ almost always. `start`/`stop` are the manual halves for cases where the receiver
 
 Ports: video 11000, audio 11001, debug 11002.
 
+`video` and `audio` need a window and are not in the Linux ARM64 binary; see `limits.md`.
+
 ## CLI configuration and TUI
 
 ```
