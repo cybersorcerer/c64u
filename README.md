@@ -7,7 +7,7 @@ A command-line interface for controlling the [Commodore C64 Ultimate](https://co
 - **Complete REST API Coverage**: All C64 Ultimate API endpoints supported
 - **Interactive TUI**: Full-screen terminal UI with a dual-pane file browser, drive, machine and config views
 - **SoftIEC Control**: Load from the Ultimate filesystem at the BASIC prompt — no disk image needed; enable the DOS emulation drive, set its device number, and point it at a directory
-- **Live Video Stream**: Display C64 video output in a native window with keyboard forwarding — type into BASIC, load and run programs from your Mac keyboard (BASIC/KERNAL input only; games that poll the keyboard matrix directly are not supported)
+- **Live Video Stream**: Display C64 video output in a native window with keyboard forwarding — type into BASIC, load and run programs from your own keyboard (BASIC/KERNAL input only; games that poll the keyboard matrix directly are not supported)
 - **Live Audio Stream**: Play back C64 audio in real time
 - **FTP Integration**: Access the C64 Ultimate filesystem
 - **Flexible Configuration**: Config file, environment variables, or CLI flags
@@ -283,6 +283,10 @@ c64u streams stop <stream>
 ```
 
 **Streams:** `video` (port 11000), `audio` (port 11001), `debug` (port 11002)
+
+`video` and `audio` open a window and need the graphics and sound libraries of the host, so they
+are in the macOS, Windows and Linux x86_64 binaries but not in the cross-compiled Linux ARM64
+one, where they report that they are unavailable. `debug` is plain output and works everywhere.
 
 **Video Stream**: Opens a native 768×544 window (2× scaled) with accurate VIC colors. PAL (384×272) and NTSC (384×240) supported.
 
