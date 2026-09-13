@@ -19,6 +19,13 @@ concluding the CLI failed, ask what code is running on the machine and what it w
 The corollary for reads: a value read back from a register reflects the hardware, not
 necessarily what you wrote.
 
+The other reason a write vanishes is that no RAM is mapped there at the time. `$8000-$9FFF`
+is the cartridge window: after a normal reset it reads and writes as RAM, but in the state
+`runners run-prg` leaves behind it reads back as `$FF` and swallows writes. `$A000-$BFFF` and
+`$E000-$FFFF` read the ROMs, so a write lands in the RAM underneath and the read shows the ROM.
+`write-mem` reports success either way - it confirms that the request was accepted, not that
+the byte is in memory. Read the address back when it matters.
+
 ## Colour registers read back with the upper bits set
 
 VIC colour registers are 4 bits wide and the unused bits read as `1`:
