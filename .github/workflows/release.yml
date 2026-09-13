@@ -14,15 +14,22 @@ jobs:
     strategy:
       matrix:
         include:
+          # Video and audio stream need Ebiten and oto, which on Linux reach X11
+          # and ALSA through cgo. Only the native amd64 build gets them: arm64 is
+          # cross-compiled here, where cgo would need a second toolchain, and the
+          # build tags fall back to the stubs whenever cgo is off.
           - goos: linux
             goarch: amd64
             asset: c64u_Linux_x86_64.tar.gz
+            cgo: 1
           - goos: linux
             goarch: arm64
             asset: c64u_Linux_arm64.tar.gz
+            cgo: 0
           - goos: windows
             goarch: amd64
             asset: c64u_Windows_x86_64.zip
+            cgo: 0
 
     steps:
       - uses: actions/checkout@v4
@@ -33,12 +40,18 @@ jobs:
         with:
           go-version: '1.25'
 
+      - name: Install stream build dependencies
+        if: matrix.cgo == 1
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libgl1-mesa-dev xorg-dev
+
       - name: Build
         working-directory: tools/c64u
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 0
+          CGO_ENABLED: ${{ matrix.cgo }}
         run: |
           VERSION=$(git describe --tags --always --dirty)
           COMMIT=$(git rev-parse --short HEAD)
