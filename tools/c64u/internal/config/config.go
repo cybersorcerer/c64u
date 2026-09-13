@@ -165,8 +165,12 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	// A missing host is reported, but the configuration is still handed back:
+	// commands that never touch the device - "version", and "cli-config init",
+	// which writes the very file whose absence causes this - have to keep
+	// working on a machine where nothing is configured yet.
 	if cfg.Host == "" {
-		return nil, ErrNoHost
+		return &cfg, ErrNoHost
 	}
 
 	debug.Log("Final config values: device=%q host=%s, port=%d, verbose=%v, json=%v",

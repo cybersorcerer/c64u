@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -60,7 +61,7 @@ Configuration Priority:
   4. Config file (~/.config/c64u/config.toml)
   5. Port defaults to 80. The host has no default - without one, c64u stops
      and says so, because the device is never this machine.`,
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// Initialize debug logger first (before anything else)
 		if err := debug.Init(debugMode); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: Failed to initialize debug logging: %v\n", err)
@@ -77,10 +78,17 @@ Configuration Priority:
 
 		// Initialize configuration
 		cfg, err := config.Load()
-		if err != nil {
+		switch {
+		case errors.Is(err, config.ErrNoHost):
+			// Nothing is configured yet. Only a command that actually talks to
+			// the device can fail on that; the rest carry on with an empty host.
+			if needsDevice(cmd) {
+				debug.LogError("Failed to load config: %v", err)
+				return err
+			}
+		case err != nil:
 			debug.LogError("Failed to load config: %v", err)
-			fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 
 		debug.Log("Config loaded successfully: host=%s, port=%d, verbose=%v", cfg.Host, cfg.Port, cfg.Verbose)
@@ -114,15 +122,33 @@ Configuration Priority:
 		apiClient = api.NewClient(cfg.Host, cfg.Port, cfg.Verbose)
 		formatter = output.NewFormatter(cfg.JSON)
 		formatter.SetNoColor(noColor)
+		return nil
 	},
+}
+
+// noDeviceAnnotation marks a command that works without a configured device.
+// It is inherited: marking "cli-config" covers its subcommands.
+const noDeviceAnnotation = "c64u:noDevice"
+
+// needsDevice reports whether the command about to run talks to the Ultimate.
+// Asking the command itself beats keeping a list of names somewhere else, which
+// would silently go stale the first time someone adds a command.
+func needsDevice(cmd *cobra.Command) bool {
+	for c := cmd; c != nil; c = c.Parent() {
+		if _, ok := c.Annotations[noDeviceAnnotation]; ok {
+			return false
+		}
+	}
+	return true
 }
 
 // versionCmd represents the version command
 var versionCmd = &cobra.Command{
-	Use:   "version",
-	Args:  cobra.NoArgs,
-	Short: "Show version information",
-	Long:  `Display the version, build commit, and build date of the c64u CLI tool.`,
+	Use:         "version",
+	Args:        cobra.NoArgs,
+	Short:       "Show version information",
+	Long:        `Display the version, build commit, and build date of the c64u CLI tool.`,
+	Annotations: map[string]string{noDeviceAnnotation: ""},
 	Run: func(cmd *cobra.Command, args []string) {
 		if jsonOut {
 			data := map[string]interface{}{
@@ -224,10 +250,11 @@ var infoCmd = &cobra.Command{
 
 // cliConfigCmd represents the CLI config command group
 var cliConfigCmd = &cobra.Command{
-	Use:   "cli-config",
-	Args:  cobra.NoArgs,
-	Short: "Manage c64u CLI configuration",
-	Long:  `View and manage the c64u CLI configuration file (not C64 Ultimate hardware config).`,
+	Use:         "cli-config",
+	Args:        cobra.NoArgs,
+	Short:       "Manage c64u CLI configuration",
+	Long:        `View and manage the c64u CLI configuration file (not C64 Ultimate hardware config).`,
+	Annotations: map[string]string{noDeviceAnnotation: ""},
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.Help() //nolint:errcheck
 	},
@@ -259,8 +286,10 @@ var cliConfigShowCmd = &cobra.Command{
 	Short: "Show current CLI configuration",
 	Long:  `Display the current c64u CLI configuration settings being used.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		// A missing host is what this command is there to show, not a reason to
+		// refuse to show anything.
 		cfg, err := config.Load()
-		if err != nil {
+		if err != nil && !errors.Is(err, config.ErrNoHost) {
 			formatter.Error("Failed to load config", []string{err.Error()})
 			return
 		}
@@ -474,6 +503,16 @@ func init() {
 	// CLI Config subcommands
 	cliConfigCmd.AddCommand(configInitCmd)
 	cliConfigCmd.AddCommand(cliConfigShowCmd)
+
+	// Cobra builds "completion" itself, so the annotation has to be attached
+	// afterwards. Installing shell completion is something you do before a
+	// device is configured, not after.
+	rootCmd.InitDefaultCompletionCmd()
+	for _, c := range rootCmd.Commands() {
+		if c.Name() == "completion" {
+			c.Annotations = map[string]string{noDeviceAnnotation: ""}
+		}
+	}
 }
 
 func main() {
