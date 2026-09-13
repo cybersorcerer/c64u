@@ -50,8 +50,7 @@ does not overwrite the BASIC program in memory the way `LOAD"$"` does.
 It is a Magic Desk cartridge that unmaps itself once installed, so BASIC still
 reports all 38911 bytes free. On a JiffyDOS machine, where `@`, `/` and `↑` are
 already taken, it detects that at boot and moves its commands behind `&` — both
-can be installed at once, and the wedge announces itself on one line above
-BASIC's own start-up message.
+can be installed at once.
 
 `wedge.crt` ships with every [release](https://github.com/cybersorcerer/c64u/releases),
 so installing it needs no build tools:
