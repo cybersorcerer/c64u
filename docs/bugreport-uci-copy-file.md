@@ -116,6 +116,14 @@ Further checks:
   `PATH DOESN'T EXIST` while the rename in the same run, in the same directory, reported
   `00,OK` and renamed the file.
 
+## Requested outcome
+
+Either the command performs the copy as chapter 12.2 describes, or the documentation stops
+describing it. The current state is the worst of the two: the command is specified in full,
+answers when it is sent, and silently does nothing — so anyone building against the interface
+spends their time looking for a mistake in their own code. A line in the chapter saying that
+`COPY_FILE` is not implemented in this firmware would have saved that entirely.
+
 ## Side observation
 
 A failed `COPY_FILE` appears to leave state behind. A command sent immediately afterwards
