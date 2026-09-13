@@ -156,7 +156,7 @@ func (m *StreamsModel) startCmd(s *streamEntry) tea.Cmd {
 
 		switch s.id {
 		case "video":
-			// video.Listen uses Ebiten which requires the main thread on macOS.
+			// video.Listen uses Ebiten, which has to own the main thread.
 			// Spawn as a child process so the TUI stays alive.
 			self := selfPath()
 			args := []string{"streams", "listen", "video", "--host", m.host}

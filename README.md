@@ -627,10 +627,13 @@ The GitHub Action builds automatically for all platforms and creates a GitHub Re
 
 - **macOS** (Intel + Apple Silicon): built on `macos-latest` with CGO — includes video and audio stream
 - **Linux** (x86_64 + ARM64): built on `ubuntu-latest` without CGO
-- **Windows** (x86_64): built on `ubuntu-latest` without CGO
+- **Windows** (x86_64): built on `ubuntu-latest` without CGO — includes video and audio stream
 - **Agent skills**: `c64u-skills.tar.gz`, `c64u-skills.zip`, plus one zip per skill, platform independent
 
-> **Note:** Video and audio stream features are only available in the macOS binaries, as they require native frameworks (Metal, CoreAudio).
+> **Note:** Video and audio stream are not in the Linux binaries. Ebiten needs X11 and oto needs
+> ALSA there, both through cgo, which the Linux build does not use. Windows needs no cgo for
+> either: Ebiten and oto reach the system libraries directly. Everything else, the TUI and the
+> debugger included, works on all platforms.
 
 The skill archives are built by the same tag push. That job downloads Kick Assembler and
 assembles every example first, so a broken example fails the release instead of shipping. Build

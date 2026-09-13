@@ -1,11 +1,14 @@
-//go:build !darwin
+//go:build !darwin && !windows
 
 package audio
 
-import "fmt"
+import (
+	"fmt"
+	"runtime"
+)
 
 const AudioPort = 11001
 
 func Listen(localIP string, startFn func(ip string) error, stopFn func() error) error {
-	return fmt.Errorf("audio stream is only supported on macOS")
+	return fmt.Errorf("audio stream is not available on %s builds", runtime.GOOS)
 }
