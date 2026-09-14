@@ -44,9 +44,14 @@ $(BUILD_DIR)/$(BINARY_NAME): $(GO_FILES) Makefile
 
 # Install to ~/.local/bin
 .PHONY: install
+# The existing binary is removed rather than overwritten. Copying onto it leaves
+# macOS killing the result with SIGKILL on every start, even though the bytes
+# are identical to the one in build/ and codesign calls the signature valid;
+# clearing the extended attributes does not help, a fresh file does.
 install: build
 	@echo "Installing $(BINARY_NAME)..."
 	@mkdir -p $$HOME/.local/bin
+	@rm -f $$HOME/.local/bin/$(BINARY_NAME)
 	@cp $(BUILD_DIR)/$(BINARY_NAME) $$HOME/.local/bin/
 	@echo "Installed to $$HOME/.local/bin/$(BINARY_NAME)"
 
