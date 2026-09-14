@@ -171,6 +171,10 @@ Status strings follow the Commodore convention, `00,OK` on success, and errors s
 | ENABLE/DISABLE DRIVE B | `$32` / `$33` | `$04 $32` |
 | GET_DRIVE_A/B_POWER | `$34` / `$35` | `$04 $34` |
 | GET_MP3_RAMDISKINFO | `$40` | `$04 $40` |
+| GET_PALETTE | `$51` | `$04 $51` |
+| SET_PALETTE | `$52` | `$04 $52 <48 RGB bytes>` |
+| SET_PALETTE_COLOR | `$53` | `$04 $53 <index> <r> <g> <b>` |
+| RESET_PALETTE | `$54` | `$04 $54` |
 
 `COPY_FILE` (`$0B`) does not work on firmware 1.1.0, though it is documented exactly like
 `RENAME_FILE` (`$0A`): `$01 $0b <source> $00 <destination>`. Measured on hardware, it never
@@ -221,6 +225,15 @@ several packets, so a reader that only polls for available data hangs when it do
 
 `GET_HWINFO` (`$28`) is deprecated.
 
+The four palette commands (`$51`-`$54`) arrived with firmware 3.15 and change the **runtime**
+video palette only - no flash write, no VPL file, and the configuration UI or a reboot can
+replace what they set. `GET_PALETTE` answers with 48 bytes, 16 RGB triples in C64 colour order,
+so colour 15 is bytes 45-47. `SET_PALETTE` wants exactly 48 bytes, making a 50-byte command;
+`SET_PALETTE_COLOR` is exactly six bytes with the index in 0-15. A wrong length or index gives
+`81,INVALID PARAMS` and changes nothing. The documentation lists the Ultimate 64 family
+including the Commodore 64 Ultimate as supported; other products answer `21,UNKNOWN COMMAND`.
+Not verified on the C64U's 1.1.0, which predates 3.15.
+
 ## Network (`$03`)
 
 | Command | Code |
@@ -253,7 +266,8 @@ Bypasses the IEC layer to load, save and access directories directly.
 | `$05 $15 <sec_addr>` | Close |
 | `$05 $16 <sec_addr> $00 <data...>` | Write |
 | `$05 $20 <index> <ident> ':' <path>` | Set partition path |
-| `$05 $22 <channel> <iec_name>` | Convert IEC name |
+| `$05 $22 <channel> <iec_name>` | Resolve the host path an IEC name maps to (GET_FATNAME) |
+| `$05 $23 <fat_name>` | The reverse: IEC name and file type for a host name (GET_IECNAME) |
 
 Status codes are numeric rather than Commodore strings: `$00` OK, `$01` file not found,
 `$02` save error, `$03` no input channel, `$04` unknown command, `$05` IEC module not loaded,
@@ -267,11 +281,21 @@ File types in directory replies: `$00` DEL, `$01` PRG, `$02` SEQ, `$03` USR, `$0
 Builds a request incrementally, then performs the exchange. Headers are managed with
 `HEADER_CREATE` (`$11`), `HEADER_FREE` (`$12`), `HEADER_ADD` (`$13`), `HEADER_QUERY` (`$14`),
 `HEADER_LIST` (`$15`). Bodies are assembled as a JSON tree with `BODY_CREATE` (`$21`),
-typed adders `BODY_ADD_INT` (`$23`), `BODY_ADD_BOOL` (`$24`), `BODY_ADD_STRING` (`$25`),
+`BODY_FREE` (`$22`), the untyped `BODY_ADD` (`$2D`), typed adders `BODY_ADD_INT` (`$23`), `BODY_ADD_BOOL` (`$24`), `BODY_ADD_STRING` (`$25`),
 `BODY_ADD_OBJECT` (`$26`), `BODY_ADD_ARRAY` (`$27`), plus `BODY_UP` (`$28`) to leave the
 current level, and `BODY_QUERY` (`$2A`), `BODY_MOVE` (`$2B`), `BODY_ADD_BINARY` (`$2C`),
 `BODY_REMOVE` (`$29`), `BODY_CLEAR` (`$2E`). The exchange itself is `DO_EXCHANGE_OBJ` (`$31`)
 or `DO_EXCHANGE_RAW` (`$32`); `FREE_ALL` (`$10`) releases every handle.
+
+## Where this comes from
+
+The command tables here follow the Ultimate documentation, which for firmware 3.15 is split
+into one page per target under <https://1541u-documentation.readthedocs.io/en/latest/uci/>.
+The whole set is also downloadable as one PDF from
+<https://1541u-documentation.readthedocs.io/_/downloads/en/latest/pdf/>; a copy lives at
+`docs/1541u-documentation-readthedocs-io-en-latest.pdf`, which `.gitignore` keeps out of the
+repository, so refresh it there when the firmware moves on. Everything marked as measured was
+run on the hardware named next to it.
 
 ## Verified
 
