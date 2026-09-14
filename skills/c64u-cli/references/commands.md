@@ -42,9 +42,34 @@ c64u machine write-mem <address> <hexdata>
 c64u machine write-mem-file <address> <file>
 c64u machine sendkey <string> [--delay ms]
 
+c64u machine input [event...] [--show]         # key matrix and joystick, U64 + firmware 3.15
+c64u machine menu-screen                       # the firmware menu as text, firmware 3.15
+
 c64u machine debug-reg                         # read $D7FF, U64 only
 c64u machine debug-reg-set <value>             # write $D7FF, U64 only
 ```
+
+**`input`** is not a faster `sendkey`, it is a different mechanism. `sendkey` writes PETSCII into
+the KERNAL keyboard buffer at `$0277`, so only programs that read that buffer see it - BASIC and
+the KERNAL. `input` injects at the key matrix and the joystick ports, which is what games, the
+firmware menu and the machine code monitor read. Each argument is one event and one call is one
+batch, applied atomically:
+
+```sh
+c64u machine input tap:commodore+o             # opens the machine code monitor
+c64u machine input press:joy2:up+fire          # held until released
+c64u machine input press:left_shift tap:a release:left_shift
+c64u machine input release-all
+```
+
+A batch holds 1 to 64 events and has to serialise to under 4096 bytes; `restore` must stand
+alone and can only be tapped. Two failure modes are worth telling apart, and the CLI does:
+**404** means the firmware predates 3.15, **501** means the product has no Ultimate 64 input
+hardware - a cartridge in a real C64 never will, because the keyboard is the C64's.
+
+**`menu-screen`** returns the menu as a 40x25 character matrix in ASCII plus a colour matrix.
+Open the menu with `menu-button` first; with no menu on screen the device answers 404. Together
+with `input` it drives and reads the menu without the video stream.
 
 **Addresses** may be written `0400`, `$0400` or `0x0400`.
 

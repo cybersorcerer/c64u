@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -461,6 +462,143 @@ Examples:
 	},
 }
 
+// inputUnavailable turns the two ways this endpoint can be missing into an
+// answer that says which one it is, since both look like a plain failure.
+func inputUnavailable(resp *api.Response) []string {
+	switch resp.StatusCode {
+	case http.StatusNotFound:
+		return []string{
+			"This firmware has no input endpoint - it arrived with firmware 3.15.",
+			"Check the installed version with 'c64u info' and update the Ultimate to use this command.",
+		}
+	case http.StatusNotImplemented:
+		return []string{
+			"This product has no Ultimate 64 input hardware.",
+			"The endpoint exists, but only the Ultimate 64 family can inject key and joystick input;",
+			"on a cartridge in a real C64 the keyboard belongs to the C64. Use 'machine sendkey' instead,",
+			"which reaches programs that read the KERNAL keyboard buffer.",
+		}
+	}
+	return resp.Errors
+}
+
+var machineInputCmd = &cobra.Command{
+	Use:   "input [event...]",
+	Short: "Press, release or tap keys and joystick directions",
+	Long: `Inject keyboard and joystick input at the hardware level.
+
+Unlike 'sendkey', which fills the KERNAL keyboard buffer, this drives the key
+matrix and the joystick ports, so programs that scan the hardware themselves -
+games, the firmware menu, the machine code monitor - see the input too.
+
+Each argument is one event, and one call is one batch that the Ultimate applies
+atomically: if any event is invalid, nothing is applied.
+
+  press:<inputs>     hold until released
+  release:<inputs>   let go
+  tap:<inputs>       press and release
+  release-all        clear every injected input
+  joyN:<inputs>      after a transition, addresses joystick port 1 or 2
+
+Inputs are joined with '+'. A keyboard event takes up to 8 of: letters a-z,
+digits 0-9, f1, f3, f5, f7, left_shift, right_shift, ctrl, commodore, run_stop,
+restore, return, space, inst_del, clr_home, cursor_up_down, cursor_left_right,
+plus, minus, star, slash, equals, comma, period, colon, semicolon, at, pound,
+arrow_up, arrow_left. A joystick event takes up to 7 of: up, down, left, right,
+fire, fire2, fire3. restore has to stand alone and can only be tapped.
+
+A batch holds 1 to 64 events and must serialise to under 4096 bytes.
+
+Requires an Ultimate 64 and firmware 3.15 or newer.
+
+Examples:
+  c64u machine input --show
+  c64u machine input tap:commodore+o
+  c64u machine input press:joy2:up+fire
+  c64u machine input press:left_shift tap:a release:left_shift
+  c64u machine input release-all`,
+	Run: func(cmd *cobra.Command, args []string) {
+		show, _ := cmd.Flags().GetBool("show")
+
+		if show || len(args) == 0 {
+			resp, err := apiClient.MachineInputState()
+			if err != nil {
+				formatter.Error("Failed to read input state", []string{err.Error()})
+				return
+			}
+			if resp.HasErrors() {
+				formatter.Error("Input is not available on this device", inputUnavailable(resp))
+				return
+			}
+			formatter.PrintData(resp.Data)
+			return
+		}
+
+		events := make([]api.InputEvent, 0, len(args))
+		for _, arg := range args {
+			event, err := api.ParseInputEvent(arg)
+			if err != nil {
+				formatter.Error("Invalid event", []string{err.Error()})
+				return
+			}
+			events = append(events, event)
+		}
+
+		resp, err := apiClient.MachineInput(events)
+		if err != nil {
+			formatter.Error("Invalid batch", []string{err.Error()})
+			return
+		}
+		if resp.HasErrors() {
+			formatter.Error("Input is not available on this device", inputUnavailable(resp))
+			return
+		}
+
+		formatter.Success(fmt.Sprintf("Applied %d event(s)", len(events)), nil)
+	},
+}
+
+var machineMenuScreenCmd = &cobra.Command{
+	Use:   "menu-screen",
+	Args:  cobra.NoArgs,
+	Short: "Show the active firmware menu screen",
+	Long: `Read the Ultimate's own menu screen as text.
+
+The device returns a 40x25 character matrix followed by a 40x25 colour matrix,
+so the menu can be inspected without the video stream. Open the menu first with
+'machine menu-button'; with no menu on screen the device answers 404.
+
+Requires firmware 3.15 or newer.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		resp, err := apiClient.MachineMenuScreen()
+		if err != nil {
+			formatter.Error("Failed to read the menu screen", []string{err.Error()})
+			return
+		}
+		if resp.StatusCode == http.StatusNotFound {
+			formatter.Error("No menu screen is active", []string{
+				"Open the Ultimate menu first: c64u machine menu-button",
+				"On firmware older than 3.15 this endpoint does not exist at all.",
+			})
+			return
+		}
+		if resp.HasErrors() {
+			formatter.Error("API returned errors", resp.Errors)
+			return
+		}
+
+		screen, err := api.DecodeMenuScreen(resp.RawBody)
+		if err != nil {
+			formatter.Error("Unexpected menu screen", []string{err.Error()})
+			return
+		}
+
+		for _, row := range screen.Rows {
+			fmt.Println(row)
+		}
+	},
+}
+
 func init() {
 	// Add control commands
 	machineCmd.AddCommand(machineResetCmd)
@@ -470,6 +608,9 @@ func init() {
 	machineCmd.AddCommand(machinePowerOffCmd)
 	machineCmd.AddCommand(machineMenuButtonCmd)
 	machineCmd.AddCommand(machineSendKeyCmd)
+	machineCmd.AddCommand(machineInputCmd)
+	machineInputCmd.Flags().Bool("show", false, "Show the inputs the REST API currently holds")
+	machineCmd.AddCommand(machineMenuScreenCmd)
 	machineSendKeyCmd.Flags().Int("delay", 100, "Delay between chunks in milliseconds")
 
 	// Add memory operation commands
