@@ -240,3 +240,20 @@ cannot do at all.
 So: keep JiffyDOS if you run software from disk images. Use the wedge for your
 own files on the Ultimate filesystem. With the `&` prefix both are installed at
 the same time without getting in each other's way.
+
+## What it does not reach
+
+**The serial bus.** Every command here goes through the Ultimate Command
+Interface to the Ultimate's own filesystems, not over IEC. A real device on the
+bus - an SD2IEC, a printer, a drive of your own - cannot be addressed by any of
+them, and `&DR` does not list it either: `GET_DRVINFO` reports only the drives
+the Ultimate itself provides. `LOAD"NAME",11` still works, because that is the
+KERNAL's job, and on a JiffyDOS machine its `@` covers the command channel of
+such a device.
+
+**The free DOS 5.1 wedge is not a substitute for that on a machine running this
+cartridge.** It loads to `$CC00-$CFFF`, and the resident block here occupies
+`$C000-$CDFF`; loading it overwrites the top of that block and takes over the
+same `$0308` hook, so these commands stop working until the next reset. No
+layout avoids the clash - `$C000-$CFFF` is the only free 4K block and the
+resident code needs most of it.
