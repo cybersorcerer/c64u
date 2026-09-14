@@ -627,6 +627,13 @@ doDriveB:
 // front of each one from prefixChar, so a single table serves both the stock
 // '@' and the JiffyDOS '&'.
 printHelp:
+        // The table lives in the cartridge ROM, not in the resident block, so
+        // it costs no RAM and can grow with the command set. Map the ROM back
+        // in for the duration - it covers BASIC's memory at $8000-$9FFF, which
+        // nothing here touches, and it is gone again before BASIC continues.
+        lda #$00
+        sta MAGICDESK_CTRL
+
         jsr helpBorderTop
 
         lda #<helpRows
@@ -672,6 +679,9 @@ printHelp:
         jmp !row-
 
 !done:
+        lda #$80
+        sta MAGICDESK_CTRL
+
         jsr helpBorderBottom
         rts
 
@@ -2081,45 +2091,6 @@ hintStock:  .text "@?"
 hintJiffy:  .text "&?"
             .byte 13, 0
 
-// One row per command, without the prefix; printHelp puts it in front.
-helpRows:   .text "$           DIRECTORY"
-            .byte 0
-            .text "            CURRENT PATH"
-            .byte 0
-            .text "CD:NAME     CHANGE DIRECTORY"
-            .byte 0
-            .text "MD:NAME     CREATE DIRECTORY"
-            .byte 0
-            .text "RM:NAME     DELETE FILE"
-            .byte 0
-            .text "RN:OLD=NEW  RENAME FILE"
-            .byte 0
-            .text "T:NAME      SHOW TEXT FILE"
-            .byte 0
-            .text "SV:NAME     SAVE BASIC PROGRAM"
-            .byte 0
-            .text "/NAME       LOAD"
-            .byte 0
-            .byte $5e
-            .text "NAME       LOAD AND RUN"
-            .byte 0
-            .text "MT<ID>:NAME MOUNT DISK IMAGE"
-            .byte 0
-            .text "UM<ID>      UNMOUNT DISK"
-            .byte 0
-            .text "SW<ID>      SWAP TO NEXT DISK"
-            .byte 0
-            .text "DR          LIST DRIVE IDS"
-            .byte 0
-            .text "DA<0/1>     DRIVE A OFF/ON"
-            .byte 0
-            .text "DB<0/1>     DRIVE B OFF/ON"
-            .byte 0
-            .text "TI          SHOW DATE AND TIME"
-            .byte 0
-            .text "V           SHOW VERSION"
-            .byte 0
-            .byte 0                     // empty row: end of table
 dirText:    .text "  <DIR>"
             .byte 0
 jiffySig:   .text "JIFFYDOS"
@@ -2177,6 +2148,49 @@ residentEnd:
 
 .print "resident size: " + (residentEnd - resident) + " bytes"
 .errorif (residentEnd - resident) > RESIDENT_PAGES * $100, "resident part outgrew RESIDENT_PAGES - raise it"
+
+// ------------------------------------------------------ cartridge ROM only
+//
+// Read with the cartridge mapped back in, so this table is free of the RAM
+// budget. One row per command, without the prefix; printHelp puts it in front.
+helpRows:   .text "$           DIRECTORY"
+            .byte 0
+            .text "            CURRENT PATH"
+            .byte 0
+            .text "CD:NAME     CHANGE DIRECTORY"
+            .byte 0
+            .text "MD:NAME     CREATE DIRECTORY"
+            .byte 0
+            .text "RM:NAME     DELETE FILE"
+            .byte 0
+            .text "RN:OLD=NEW  RENAME FILE"
+            .byte 0
+            .text "T:NAME      SHOW TEXT FILE"
+            .byte 0
+            .text "SV:NAME     SAVE BASIC PROGRAM"
+            .byte 0
+            .text "/NAME       LOAD"
+            .byte 0
+            .byte $5e
+            .text "NAME       LOAD AND RUN"
+            .byte 0
+            .text "MT<ID>:NAME MOUNT DISK IMAGE"
+            .byte 0
+            .text "UM<ID>      UNMOUNT DISK"
+            .byte 0
+            .text "SW<ID>      SWAP TO NEXT DISK"
+            .byte 0
+            .text "DR          LIST DRIVE IDS"
+            .byte 0
+            .text "DA<0/1>     DRIVE A OFF/ON"
+            .byte 0
+            .text "DB<0/1>     DRIVE B OFF/ON"
+            .byte 0
+            .text "TI          SHOW DATE AND TIME"
+            .byte 0
+            .text "V           SHOW VERSION"
+            .byte 0
+            .byte 0                     // empty row: end of table
 
 // Pad to a full 8 KB image.
 * = $9fff

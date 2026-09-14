@@ -148,6 +148,14 @@ the machine reports 30719 bytes free instead of 38911. Magic Desk has a disable
 bit in its bank register at `$DE00`, so the ROM copies itself to `$C000`,
 switches itself off, and BASIC comes up with all of its memory.
 
+**The help table stays in the cartridge.** The resident block is the 4 KB of
+free RAM at `$C000-$CFFF`, and the command table alone took 475 bytes of it.
+It lives in the ROM image instead, which the wedge maps back in for as long as
+it takes to print - `$DE00` to `$00`, print, `$80` again. While it is mapped the
+ROM covers BASIC's memory at `$8000-$9FFF`, which nothing in the printing path
+reads, and it is switched off again before BASIC continues. So the table can
+grow with the command set without costing RAM.
+
 **The hook is installed from an interrupt.** BASIC's cold start rewrites
 `$0300-$030B`, so a hook installed before it is silently wiped. Reproducing the
 cold start inline is not portable either: a JiffyDOS machine calls `$E4B7` where
