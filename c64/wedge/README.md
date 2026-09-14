@@ -14,7 +14,7 @@ JiffyDOS.
 @T:NAME       show a text file        @DR        list the drive ids
 @/NAME        load                    @↑NAME     load and run
 @MT<id>:NAME  mount a disk image      @UM<id>    unmount the disk
-@SW<id>       swap to the next disk
+@SW<id>       swap to the next disk   @TI        show date and time
 ```
 
 `<id>` in `@MT`, `@UM` and `@SW` is the drive's bus id and may be left out;
@@ -38,6 +38,9 @@ of this file.
 
 `@MT`, `@UM` and `@SW` are the part no other wedge offers, because they are
 device control rather than file access.
+
+`@TI` reads the Ultimate's clock, which the C64 itself does not have: weekday,
+date and time on one line.
 
 `@RN` takes both names in one line, old first, separated by `=`. Commodore DOS
 writes the same operation the other way round (`R:new=old`), so the order is

@@ -92,6 +92,8 @@
 .const DOS_CREATE_DIR = $16
 .const DOS_MOUNT_DISK = $23
 .const DOS_SWAP_DISK  = $25
+.const DOS_GET_TIME   = $26            // $01 $26 <fmt>, DOS 1.2+
+.const TIME_FMT_DAY   = $01            // format with the weekday in front
 .const DOS_WRITE_DATA = $05
 
 .const FA_READ        = $01             // open mode flags
@@ -113,6 +115,7 @@
 .const CH_DOLLAR  = $24
 .const CH_C       = $43
 .const CH_D       = $44
+.const CH_I       = $49
 .const CH_M       = $4d
 .const CH_N       = $4e
 .const CH_P       = $50
@@ -442,6 +445,18 @@ wedgeCommand:
 !notHelp2:
         cmp #CH_T
         bne !notType+
+        // "TI" on its own is the clock. The colon in "T:NAME" is optional, so a
+        // file whose name starts with I - "&TINFO.TXT" - reaches here too; the
+        // end of the line is what tells the two apart.
+        ldy #$01
+        lda (TXTPTR),y
+        cmp #CH_I
+        bne !type+
+        iny
+        lda (TXTPTR),y
+        bne !type+
+        jmp doTime
+!type:
         jmp doType
 !notType:
         cmp #CH_V
@@ -578,6 +593,10 @@ doVersion:
         ldx #<versionText
         ldy #>versionText
         jsr printString
+        jmp endOfCommand
+
+doTime:
+        jsr showTime
         jmp endOfCommand
 
 // ------------------------------------------------------------------- help
@@ -1486,6 +1505,9 @@ currentPath:
         sta UCI_CONTROL
         jsr uciWait
 
+// Prints whatever the command left on the response queue, one line, and leaves
+// the interface idle again.
+printUciReply:
 !chars:
         lda UCI_STATUS
         and #ST_DATA_AV
@@ -1500,6 +1522,24 @@ currentPath:
         jsr uciDrainStatus
         jsr uciAccept
         rts
+
+// The Ultimate keeps a clock, the C64 does not. Format $01 puts the weekday in
+// front of the date.
+showTime:
+        jsr uciPresent
+        bcc !go+
+        rts
+!go:
+        lda #TARGET_DOS
+        sta UCI_CMD_DATA
+        lda #DOS_GET_TIME
+        sta UCI_CMD_DATA
+        lda #TIME_FMT_DAY
+        sta UCI_CMD_DATA
+        lda #PUSH_CMD
+        sta UCI_CONTROL
+        jsr uciWait
+        jmp printUciReply
 
 // Mounts a disk image on the drive with the given IEC id. Passing the id of a
 // drive that does not exist makes the Ultimate use the last one mounted on.
@@ -2015,6 +2055,8 @@ helpRows:   .text "$           DIRECTORY"
             .text "SW<ID>      SWAP TO NEXT DISK"
             .byte 0
             .text "DR          LIST DRIVE IDS"
+            .byte 0
+            .text "TI          SHOW DATE AND TIME"
             .byte 0
             .text "V           SHOW VERSION"
             .byte 0
