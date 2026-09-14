@@ -194,6 +194,15 @@ a fixed firmware is on the machine. Do not re-derive this; check the firmware ve
 Firmware 3.15a has the fix - measured on an Ultimate II+L, where the same call answers
 `85,REU FILE CANNOT BE OPENED` and leaves the interface idle.
 
+The documented format `$04 $08 <filename>` is wrong: **the filename is ignored**. Upstream the
+handler calls `REUPreloader::LoadREU(char *status)`, whose argument is an output buffer for the
+status text, and the path it actually uses is the `REU Preload Image` configuration item. What
+the command really needs is length: `if (command->length >= 5)`, so at least three bytes have
+to follow the two command bytes or the reply is `81,INVALID PARAMS`. Measured on 3.15a:
+`$04 $08 "AB"` answers `81,INVALID PARAMS`, `$04 $08 "ABC"` answers `00,OK` and loads the
+configured image, and a full but nonsensical name answers `00,OK` just the same. To load a
+different image, change `REU Preload Image` over the REST API first - the UCI cannot name one.
+
 `U64_SAVEMEM` (`$0F`) reports `00,OK` on firmware 1.1.0 without writing anything. Tried with an
 absolute path, a relative path and no path at all (where the firmware is supposed to use
 `/temp/c64_memory.bin`); no file appears, over FTP or in the Ultimate's own directory listing,

@@ -122,6 +122,28 @@ same directory answers `00,OK` and renames the file.
 
 So whichever release is meant to carry that fix, 3.15a of 2026-09-11 is not it.
 
+## A fourth observation: the REU commands do not take a filename
+
+Chapter 12.4 documents `CTRL_CMD_LOAD_REU` as `$04 $08 <FILENAME>`, "Loads an REU image from
+storage into the Ultimate's REU memory". On firmware 3.15a the filename has no effect at all.
+
+Measured on the Ultimate II+L, with `REU Preload Image` set to `/Usb0/preload.reu`:
+
+| Command sent | Reply |
+|---|---|
+| `$04 $08` + `"AB"` (4 bytes total) | `81,INVALID PARAMS` |
+| `$04 $08` + `"ABC"` (5 bytes total) | `00,OK`, and the configured image is loaded |
+| `$04 $08` + `"THIS.NAME.IS.IGNORED"` | `00,OK`, the same image is loaded |
+| the same, with no image file present | `85,REU FILE CANNOT BE OPENED` |
+
+So the command loads whatever `REU Preload Image` points at, and the bytes after the command
+are only a length check. That matches the upstream implementation, where the handler calls
+`REUPreloader::LoadREU(char *status)` and that argument is an output buffer for the status
+text, while the path comes from the configuration item.
+
+Could the documentation be corrected, or the command changed to honour the filename it
+documents? Either is fine for us - we would just like the two to agree.
+
 ## What we can provide
 
 - The exact byte sequence sent, and the register states after each step.

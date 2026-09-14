@@ -641,8 +641,14 @@ doTime:
 // the same as GideonZ/1541ultimate issue #740, which names the cause (the
 // filename is read from the reply buffer instead of the command buffer) and is
 // fixed in PR #741, merged 2026-07-31. SAVE_REU shares that code path, so it is
-// assumed to behave identically and was not tried. Put the two help rows back
-// when a C64 Ultimate firmware carries the fix.
+// assumed to behave identically and was not tried.
+//
+// On an Ultimate II+L with firmware 3.15a, which has the fix, the same command
+// answers cleanly. It also showed that the filename is ignored: the firmware
+// loads whatever the "REU Preload Image" setting points at, and only checks
+// that the command is at least five bytes long. So ":NAME" here is padding, not
+// an argument. Before these two are ever advertised, the syntax should drop the
+// name and send three filler bytes instead.
 doReuLoad:
         ldy #TARGET_CONTROL
         lda #CTRL_LOAD_REU
