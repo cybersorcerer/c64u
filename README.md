@@ -32,7 +32,7 @@ in [`c64/wedge`](c64/wedge/README.md) removes that detour:
 @RN:OLD=NEW   rename a file              @SV:NAME   save the BASIC program
 @/NAME        load                       @↑NAME     load and run
 @MT<id>:NAME  mount a disk image         @UM<id>    unmount the disk
-@SW<id>       swap to the next disk
+@SW<id>       swap to the next disk      @V         show the version
 ```
 
 `<id>` is the drive's bus id and may be left out. It is set per drive in the

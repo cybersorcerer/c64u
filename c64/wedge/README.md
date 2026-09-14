@@ -10,7 +10,7 @@ JiffyDOS.
 @$            list the current directory
 @CD:NAME      change directory        @MD:NAME   create directory
 @RM:NAME      delete a file           @SV:NAME   save the BASIC program
-@RN:OLD=NEW   rename a file
+@RN:OLD=NEW   rename a file           @V         show the version
 @T:NAME       show a text file        @DR        list the drive ids
 @/NAME        load                    @↑NAME     load and run
 @MT<id>:NAME  mount a disk image      @UM<id>    unmount the disk
@@ -58,12 +58,12 @@ string rather than checking a fixed address, and adapts:
 | JiffyDOS | JiffyDOS | wedge |
 
 `&` therefore always reaches the wedge. The start-up banner is a single line
-above BASIC's own message, where JiffyDOS puts its own, and ends in `&? FOR HELP`
-or `@? FOR HELP` - whichever prefix is live on the machine it just booted on.
-That command prints the command table above, drawn with PETSCII box
-characters. The two can be installed together:
-JiffyDOS keeps making disk loading fast, the wedge reaches the Ultimate
-filesystem.
+above BASIC's own message, where JiffyDOS puts its own, and ends in `&?` or `@?`
+- whichever prefix is live on the machine it just booted on. It carries the
+version, which `@V` prints on its own as well. The `?` command prints the
+command table above, drawn with PETSCII box characters. The two can be
+installed together: JiffyDOS keeps making disk loading fast, the wedge reaches
+the Ultimate filesystem.
 
 Everything goes through the Ultimate Command Interface, so every command acts
 on the same directory - the one `@$` just showed. No SoftIEC, no disk image, and

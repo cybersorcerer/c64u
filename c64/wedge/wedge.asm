@@ -444,6 +444,10 @@ wedgeCommand:
         bne !notType+
         jmp doType
 !notType:
+        cmp #CH_V
+        bne !notVersion+
+        jmp doVersion
+!notVersion:
 
         // Everything else is a two-letter command.
         jsr CHRGET
@@ -568,6 +572,12 @@ doDriveInfo:
 
 doHelp:
         jsr printHelp
+        jmp endOfCommand
+
+doVersion:
+        ldx #<versionText
+        ldy #>versionText
+        jsr printString
         jmp endOfCommand
 
 // ------------------------------------------------------------------- help
@@ -1961,15 +1971,19 @@ statusBuf:    .fill STATUS_MAX + 1, 0
 
 // The greeting sits above BASIC's own start-up message, so it stays one line:
 // the hint is appended, not put on a line of its own.
+.var VERSION = "1.0.0"
+
 bannerText: .byte 13
-            .text "UCI WEDGE BY CYBERSORCERER "
+            .text "UCI WEDGE V" + VERSION + " BY CYBERSORCERER "
             .byte 0
 
-hintStock:  .text "@? FOR HELP"
+// The banner has to stay inside 40 columns: the line above plus the hint is 36
+// characters, which is why the hint is the prefix alone rather than a sentence.
+hintStock:  .text "@?"
             .byte 13, 0
 
 // JiffyDOS owns @, / and the up arrow, so everything moves behind '&'.
-hintJiffy:  .text "&? FOR HELP"
+hintJiffy:  .text "&?"
             .byte 13, 0
 
 // One row per command, without the prefix; printHelp puts it in front.
@@ -2002,11 +2016,16 @@ helpRows:   .text "$           DIRECTORY"
             .byte 0
             .text "DR          LIST DRIVE IDS"
             .byte 0
+            .text "V           SHOW VERSION"
+            .byte 0
             .byte 0                     // empty row: end of table
 dirText:    .text "  <DIR>"
             .byte 0
 jiffySig:   .text "JIFFYDOS"
 jiffySigEnd:
+
+versionText: .text "UCI WEDGE V" + VERSION
+            .byte 13, 0
 
 errText:    .text "?UNKNOWN WEDGE COMMAND"
             .byte 13, 0
