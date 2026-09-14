@@ -1,6 +1,6 @@
 # c64u - Commodore C64 Ultimate CLI
 
-A command-line interface for controlling the [Commodore C64 Ultimate](https://commodore.net) via its REST API written in Go. This project is currently work in progress, so there may still be some bugs. c64u is primarily intended for those of you who want to develop for the Commodore C64 Ultimate with VS Code or Neovim, or who want to create small automations with scripting languages. A development environment with full CLI integration in Neovim can be found in the [c64.nvim project](https://github.com/cybersorcerer/c64.nvim). A plugin for VSCode including a Tree Browser is in the making.
+A command-line interface for controlling the [Commodore C64 Ultimate](https://commodore.net) via its REST API written in Go. c64u is primarily intended for those of you who want to develop for the Commodore C64 Ultimate with VS Code or Neovim, or who want to create small automations with scripting languages. A development environment with full CLI integration in Neovim can be found in the [c64.nvim project](https://github.com/cybersorcerer/c64.nvim). A plugin for VSCode including a Tree Browser is in the making.
 
 ## Features
 
