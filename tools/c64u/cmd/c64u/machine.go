@@ -484,7 +484,7 @@ func inputUnavailable(resp *api.Response) []string {
 
 var machineInputCmd = &cobra.Command{
 	Use:   "input [event...]",
-	Short: "Press, release or tap keys and joystick directions",
+	Short: "Press, release or tap keys and joystick directions (experimental)",
 	Long: `Inject keyboard and joystick input at the hardware level.
 
 Unlike 'sendkey', which fills the KERNAL keyboard buffer, this drives the key
@@ -510,6 +510,12 @@ fire, fire2, fire3. restore has to stand alone and can only be tapped.
 A batch holds 1 to 64 events and must serialise to under 4096 bytes.
 
 Requires an Ultimate 64 and firmware 3.15 or newer.
+
+EXPERIMENTAL. No machine this was developed against can execute it yet: firmware
+1.1.0 on the Commodore 64 Ultimate has no such endpoint, and an Ultimate II+L on
+3.15a has the endpoint but not the input hardware. Both refusals are verified on
+hardware, the success path is not. Expect the arguments and the output to change
+once it can be run against a machine that accepts it.
 
 Examples:
   c64u machine input --show

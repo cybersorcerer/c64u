@@ -42,7 +42,7 @@ c64u machine write-mem <address> <hexdata>
 c64u machine write-mem-file <address> <file>
 c64u machine sendkey <string> [--delay ms]
 
-c64u machine input [event...] [--show]         # key matrix and joystick, U64 + firmware 3.15
+c64u machine input [event...] [--show]         # key matrix and joystick, U64 + firmware 3.15, experimental
 c64u machine menu-screen                       # the firmware menu as text, firmware 3.15
 
 c64u machine debug-reg                         # read $D7FF, U64 only
@@ -63,7 +63,9 @@ c64u machine input release-all
 ```
 
 A batch holds 1 to 64 events and has to serialise to under 4096 bytes; `restore` must stand
-alone and can only be tapped. Two failure modes are worth telling apart, and the CLI does:
+alone and can only be tapped. Treat it as **experimental**: no machine in reach can execute it
+yet, so only the two refusals below are verified on hardware, not the success path, and the
+arguments may still change. Two failure modes are worth telling apart, and the CLI does:
 **404** means the firmware predates 3.15, **501** means the product has no Ultimate 64 input
 hardware - a cartridge in a real C64 never will, because the keyboard is the C64's.
 
