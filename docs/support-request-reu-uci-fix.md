@@ -83,6 +83,28 @@ was confirmed as known, with a fix planned for a coming release.
    against the C64 Ultimate. We are happy to run the same test set on both machines and share
    the results.
 
+## A second observation, on the same firmware
+
+`CTRL_CMD_U64_SAVEMEM` (`$04 $0F`) answers `00,OK` and writes no file. The documentation says
+it saves the entire C64 RAM, and that the filename may be omitted, in which case
+`/temp/c64_memory.bin` is used.
+
+Tried on the C64 Ultimate with firmware 1.1.0:
+
+| Argument | Status reply | File afterwards |
+|---|---|---|
+| `/USB0/TEMP/MEMDUMP.BIN` (absolute) | `00,OK` | none |
+| `MEMDUMP.BIN` with the current directory set to `/USB0/TEMP` | `00,OK` | none |
+| no filename at all | `00,OK` | no `/temp/c64_memory.bin` |
+
+The directories were checked over FTP and through the Ultimate's own DOS target, and again a
+minute later in case the write was deferred. The status is not left over from an earlier
+command: sending `CHANGE_DIR` to a directory that does not exist first gives
+`83,NO SUCH DIRECTORY`, and the very next `U64_SAVEMEM` still answers `00,OK`.
+
+Unlike the REU command above this one leaves the interface idle and needs no power cycle - it
+simply reports a success that did not happen. We could not find an existing report for it.
+
 ## What we can provide
 
 - The exact byte sequence sent, and the register states after each step.

@@ -77,6 +77,7 @@
 .const CTRL_GET_DRVINFO = $29
 .const CTRL_LOAD_REU  = $08            // $04 $08 <filename>, $09 saves
 .const CTRL_SAVE_REU  = $09
+.const CTRL_SAVE_MEM  = $0f            // $04 $0f [filename], whole C64 RAM
 .const CTRL_DRIVE_A   = $30            // enables drive A; $31 disables it
 .const CTRL_DRIVE_B   = $32            // same pair one code up for drive B
 .const DRVINFO_MAX    = 8               // sanity limit on the reported count
@@ -548,6 +549,10 @@ wedgeCommand:
         bne !notSv+
         jmp doSave
 !notSv:
+        cmp #CH_M
+        bne !notSm+
+        jmp doSaveMem
+!notSm:
         cmp #CH_W
         bne unknownCommand
         jmp doSwap
@@ -648,6 +653,10 @@ doReuSave:
         ldy #TARGET_CONTROL
         lda #CTRL_SAVE_REU
         jsr simpleNameCommand
+        jmp endOfCommand
+
+doSaveMem:
+        jsr saveMemory
         jmp endOfCommand
 
 doDriveA:
@@ -1594,6 +1603,37 @@ printUciReply:
         jsr uciDrainStatus
         jsr uciAccept
         rts
+
+// Writes all 64 KB of C64 memory to a file. The name is optional - without one
+// the Ultimate uses /temp/c64_memory.bin - so unlike the other name commands an
+// empty name is not an error.
+//
+// Reachable but kept out of the help table, like @CP and the REU pair: on
+// firmware 1.1.0 the command answers 00,OK and writes nothing at all. Measured
+// with an absolute name, a relative name and no name, checked both over FTP and
+// through the wedge's own directory listing, and the status is genuinely fresh -
+// an error from the command before it does not survive into the reply. It does
+// not wedge the interface the way LOAD_REU does, it just lies. Put the help row
+// back once a firmware actually produces the file.
+saveMemory:
+        jsr uciPresent
+        bcc !go+
+        rts
+!go:
+        jsr advanceText
+        jsr skipSeparator
+
+        lda #TARGET_CONTROL
+        sta UCI_CMD_DATA
+        lda #CTRL_SAVE_MEM
+        sta UCI_CMD_DATA
+        jsr sendFilename
+
+        lda #PUSH_CMD
+        sta UCI_CONTROL
+        jsr uciWait
+        jsr printStatus
+        jmp uciAccept
 
 // Turns an emulated drive on or off. A holds the enable command; the Ultimate
 // puts the matching disable one code up, so "0" only has to add one. A digit

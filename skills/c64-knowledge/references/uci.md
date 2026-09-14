@@ -191,6 +191,13 @@ present and absent. This is GideonZ/1541ultimate issue #740, fixed in PR #741 (m
 `SAVE_REU` (`$09`) shares the same code path and argument, so treat it as equally unsafe until
 a fixed firmware is on the machine. Do not re-derive this; check the firmware version instead.
 
+`U64_SAVEMEM` (`$0F`) reports `00,OK` on firmware 1.1.0 without writing anything. Tried with an
+absolute path, a relative path and no path at all (where the firmware is supposed to use
+`/temp/c64_memory.bin`); no file appears, over FTP or in the Ultimate's own directory listing,
+and not with a delay either. The status is not a stale one - an error from the preceding
+command does not carry over. Unlike `LOAD_REU` it leaves the interface idle, so it is safe to
+send; it simply does nothing.
+
 `GET_DRVINFO` answers with a count byte followed by three bytes per drive: type, IEC bus
 address, power state (`$00` off, `$01` on). Types are `$00` 1541, `$01` 1571, `$02` 1581,
 `$03` undecided, `$0F` software IEC, `$50` printer. The argument byte asks for the address
