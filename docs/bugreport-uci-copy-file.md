@@ -1,5 +1,10 @@
 # Bug report: `DOS_CMD_COPY_FILE` ($0B) never copies a file
 
+## Status
+
+Reported to Commodore. They answered that the bug is known to the developers and will be
+fixed in an upcoming release. Nothing below has been retested since.
+
 ## Summary
 
 The Ultimate Command Interface command `DOS_CMD_COPY_FILE` (`$0B`) does not copy anything on

@@ -179,7 +179,8 @@ exists, `FILE DOESN'T EXIST` when it does not - in both argument orders, with ba
 absolute names, with the destination null terminated or not, and with a blank in place of the
 separator. `RENAME_FILE` over the identical byte stream, differing only in the command byte,
 renames the file. Verified from a 6502 program with the outgoing bytes logged and read back
-over DMA, and by hand at the keyboard. Do not re-derive this; check a newer firmware instead.
+over DMA, and by hand at the keyboard. Commodore has confirmed the bug and says a fix is
+coming in a future firmware release. Do not re-derive this; check a newer firmware instead.
 
 `GET_DRVINFO` answers with a count byte followed by three bytes per drive: type, IEC bus
 address, power state (`$00` off, `$01` on). Types are `$00` 1541, `$01` 1571, `$02` 1581,
