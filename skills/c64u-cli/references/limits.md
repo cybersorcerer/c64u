@@ -45,8 +45,19 @@ That is the path the KERNAL and BASIC read from, so it works for the BASIC promp
 
 Games and demos usually poll the keyboard matrix through CIA 1 (`$DC00`/`$DC01`) instead. Those
 registers are driven by the hardware scan of the physical key lines: an injected value is
-overwritten before any game reads it. A "press SPACE to start" title screen therefore cannot be
-driven this way. This is a property of how the matrix works, not a missing feature.
+overwritten before any game reads it, so a "press SPACE to start" title screen cannot be driven
+with `sendkey`.
+
+Measured against a game that scans the matrix itself: three `sendkey " "` left the screen
+byte-identical, while `$0277` held `$20` and `$00C6` held `1`. The byte arrives, and nothing
+reads it.
+
+`machine input` is the path that does reach such a program - it injects at the key matrix and
+the joystick ports instead of the buffer. It needs an Ultimate 64 **and** firmware 3.15 or
+newer, and its two refusals mean different things: `404` is a firmware without the endpoint,
+`501` is a product without Ultimate 64 input hardware, which a cartridge in a real C64 never
+has. Treat the command as experimental until its success path has been run on a machine that
+accepts it.
 
 The buffer is **10 bytes**. Longer strings are chunked with `--delay` between chunks, and the
 machine has to consume each chunk. If the running program does not drain the buffer, the rest
@@ -79,6 +90,15 @@ These need an Ultimate 64, not a 1541 Ultimate II:
 - `c64u streams` - video, audio, debug
 - `c64u machine poweroff`
 - `c64u machine debug-reg`, `debug-reg-set` (register `$D7FF`)
+- `c64u machine input` - and firmware 3.15 or newer on top of that
+
+An Ultimate II+L answers `404` with an empty body for every `streams` path, valid stream names
+included, while an Ultimate 64 answers `404` with `Unrecognized stream name` for a made-up one
+and `200` for a real one. An empty body means the route does not exist at all, which is the
+quickest way to tell a missing feature from a rejected argument.
+
+`c64u machine menu-screen` is not U64-only: it needs firmware 3.15, and it was verified on an
+Ultimate II+L.
 
 ## Video and audio are missing from some builds
 
