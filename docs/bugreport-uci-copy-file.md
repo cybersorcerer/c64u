@@ -3,7 +3,14 @@
 ## Status
 
 Reported to Commodore. They answered that the bug is known to the developers and will be
-fixed in an upcoming release. Nothing below has been retested since.
+fixed in an upcoming release.
+
+Retested since on a second machine: a C64C with an **Ultimate II+L on firmware 3.15a**
+(FPGA 125, released 2026-09-11, the newest at the time of writing) behaves exactly as
+described below. With absolute names the reply is `FILE EXISTS` and no copy appears; with
+bare names after `CHANGE_DIR` it is `PATH DOESN'T EXIST`. `RENAME_FILE` in the same
+directory, over the same code path, answers `00,OK` and renames the file. So the fix is not
+in 3.15a.
 
 ## Summary
 

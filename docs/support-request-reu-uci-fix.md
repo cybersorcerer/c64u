@@ -77,11 +77,13 @@ was confirmed as known, with a fix planned for a coming release.
    over the REST API, commands are injected into the keyboard buffer, and results are read back
    out of screen memory and over DMA, so a regression run is repeatable and quick.
 
-3. **Would a cross-check on an Ultimate II+L help?**
-   We also have a C64C with an Ultimate II+L. Firmware 3.15 can be installed there, which would
-   let us verify the fixed behaviour of `LOAD_REU` and `SAVE_REU` on that line and compare it
-   against the C64 Ultimate. We are happy to run the same test set on both machines and share
-   the results.
+3. **A cross-check on an Ultimate II+L has since been done.**
+   We installed firmware 3.15a (FPGA 125) on a C64C with an Ultimate II+L and repeated the
+   test. `LOAD_REU` there answers `85,REU FILE CANNOT BE OPENED` and leaves the interface
+   idle - a clean error, no wedge, no power cycle. The firmware reports git commit `dddd29b2`,
+   which is 110 commits ahead of the merge of PR #741, so the fix is in that build. That
+   narrows the question to the C64 Ultimate line alone. We are happy to run the same test set
+   on both machines for any build you would like checked.
 
 ## A second observation, on the same firmware
 
@@ -104,6 +106,21 @@ command: sending `CHANGE_DIR` to a directory that does not exist first gives
 
 Unlike the REU command above this one leaves the interface idle and needs no power cycle - it
 simply reports a success that did not happen. We could not find an existing report for it.
+
+The same command on the Ultimate II+L running 3.15a answers `21,UNKNOWN COMMAND`. Upstream the
+implementation sits behind `#ifdef U64`, so a build without it rejects the command properly -
+which is why the C64 Ultimate's `00,OK` looks like a wrong success rather than an
+unimplemented command reporting itself honestly.
+
+## A third observation: COPY_FILE is not fixed in 3.15a either
+
+`DOS_CMD_COPY_FILE` (`$0B`) was reported separately and confirmed as known, with a fix planned
+for a coming release. On the Ultimate II+L with firmware 3.15a it still behaves exactly as
+first described: absolute names answer `FILE EXISTS` and produce no copy, bare names after
+`CHANGE_DIR` answer `PATH DOESN'T EXIST`, and `RENAME_FILE` over the same command shape in the
+same directory answers `00,OK` and renames the file.
+
+So whichever release is meant to carry that fix, 3.15a of 2026-09-11 is not it.
 
 ## What we can provide
 

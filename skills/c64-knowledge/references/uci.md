@@ -179,8 +179,9 @@ exists, `FILE DOESN'T EXIST` when it does not - in both argument orders, with ba
 absolute names, with the destination null terminated or not, and with a blank in place of the
 separator. `RENAME_FILE` over the identical byte stream, differing only in the command byte,
 renames the file. Verified from a 6502 program with the outgoing bytes logged and read back
-over DMA, and by hand at the keyboard. Commodore has confirmed the bug and says a fix is
-coming in a future firmware release. Do not re-derive this; check a newer firmware instead.
+over DMA, and by hand at the keyboard, and repeated on an Ultimate II+L on firmware 3.15a -
+same replies there, so this is not a C64U-only problem and not fixed in the newest firmware.
+Commodore has confirmed the bug and says a fix is coming in a future firmware release. Do not re-derive this; check a newer firmware instead.
 
 `LOAD_REU` (`$08`) on the control target hangs the interface on firmware 1.1.0. Sending
 `$04 $08 <filename>` leaves the status register at `$11` (busy) forever; ABORT takes it to
@@ -190,13 +191,18 @@ present and absent. This is GideonZ/1541ultimate issue #740, fixed in PR #741 (m
 2026-07-31); the Ultimate-II firmware 3.15 notes carry it, the C64U 1.1.0 line does not yet.
 `SAVE_REU` (`$09`) shares the same code path and argument, so treat it as equally unsafe until
 a fixed firmware is on the machine. Do not re-derive this; check the firmware version instead.
+Firmware 3.15a has the fix - measured on an Ultimate II+L, where the same call answers
+`85,REU FILE CANNOT BE OPENED` and leaves the interface idle.
 
 `U64_SAVEMEM` (`$0F`) reports `00,OK` on firmware 1.1.0 without writing anything. Tried with an
 absolute path, a relative path and no path at all (where the firmware is supposed to use
 `/temp/c64_memory.bin`); no file appears, over FTP or in the Ultimate's own directory listing,
 and not with a delay either. The status is not a stale one - an error from the preceding
 command does not carry over. Unlike `LOAD_REU` it leaves the interface idle, so it is safe to
-send; it simply does nothing.
+send; it simply does nothing. For comparison, an Ultimate II+L on 3.15a answers
+`21,UNKNOWN COMMAND` - the command is guarded by `#ifdef U64` upstream, and a build without it
+rejects the command properly. So the C64U reply is a wrong success, not an unimplemented
+command reporting itself honestly.
 
 `GET_DRVINFO` answers with a count byte followed by three bytes per drive: type, IEC bus
 address, power state (`$00` off, `$01` on). Types are `$00` 1541, `$01` 1571, `$02` 1581,
