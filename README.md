@@ -33,7 +33,8 @@ in [`c64/wedge`](c64/wedge/README.md) removes that detour:
 @/NAME        load                       @↑NAME     load and run
 @MT<id>:NAME  mount a disk image         @UM<id>    unmount the disk
 @SW<id>       swap to the next disk      @V         show the version
-@TI           show date and time
+@TI           show date and time         @DA<0/1>   drive A off, on
+@DB<0/1>      drive B off, on
 ```
 
 `<id>` is the drive's bus id and may be left out. It is set per drive in the

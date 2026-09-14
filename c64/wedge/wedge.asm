@@ -53,7 +53,7 @@
 
 // Pages copied from ROM to $C000 at boot. The assert below fails if the
 // resident part outgrows this.
-.const RESIDENT_PAGES = 14
+.const RESIDENT_PAGES = 16              // $C000-$CFFF, the whole free block
 
 // Ultimate Command Interface
 .const UCI_CONTROL    = $df1c           // write
@@ -75,6 +75,8 @@
 .const TARGET_DOS     = $01
 .const TARGET_CONTROL = $04
 .const CTRL_GET_DRVINFO = $29
+.const CTRL_DRIVE_A   = $30            // enables drive A; $31 disables it
+.const CTRL_DRIVE_B   = $32            // same pair one code up for drive B
 .const DRVINFO_MAX    = 8               // sanity limit on the reported count
 .const DRVBUF_SIZE    = 1 + 3 * DRVINFO_MAX
 .const DRIVE_TYPE_ENTRY = 8             // type byte plus seven name characters
@@ -113,6 +115,8 @@
 .const CH_AT      = $40
 .const CH_AMP     = $26
 .const CH_DOLLAR  = $24
+.const CH_A       = $41
+.const CH_B       = $42
 .const CH_C       = $43
 .const CH_D       = $44
 .const CH_I       = $49
@@ -499,8 +503,16 @@ wedgeCommand:
 !d:
         lda cmdChar2
         cmp #CH_R
-        bne unknownCommand
+        bne !notDr+
         jmp doDriveInfo
+!notDr:
+        cmp #CH_A
+        bne !notDa+
+        jmp doDriveA
+!notDa:
+        cmp #CH_B
+        bne unknownCommand
+        jmp doDriveB
 !m:
         lda cmdChar2
         cmp #CH_D
@@ -597,6 +609,16 @@ doVersion:
 
 doTime:
         jsr showTime
+        jmp endOfCommand
+
+doDriveA:
+        lda #CTRL_DRIVE_A
+        jsr driveSwitch
+        jmp endOfCommand
+
+doDriveB:
+        lda #CTRL_DRIVE_B
+        jsr driveSwitch
         jmp endOfCommand
 
 // ------------------------------------------------------------------- help
@@ -1523,6 +1545,39 @@ printUciReply:
         jsr uciAccept
         rts
 
+// Turns an emulated drive on or off. A holds the enable command; the Ultimate
+// puts the matching disable one code up, so "0" only has to add one. A digit
+// rather than ON/OFF because BASIC tokenises ON into $91 behind the '&' prefix
+// but leaves it as text behind '@'.
+driveSwitch:
+        sta dosCommand
+        jsr uciPresent
+        bcc !go+
+        rts
+!go:
+        jsr advanceText
+        ldy #$00
+        lda (TXTPTR),y
+        cmp #CH_ZERO + 1
+        beq !send+
+        cmp #CH_ZERO
+        beq !off+
+        ldx #<onOffText
+        ldy #>onOffText
+        jmp printString
+!off:
+        inc dosCommand
+!send:
+        lda #TARGET_CONTROL
+        sta UCI_CMD_DATA
+        lda dosCommand
+        sta UCI_CMD_DATA
+        lda #PUSH_CMD
+        sta UCI_CONTROL
+        jsr uciWait
+        jsr printStatus
+        jmp uciAccept
+
 // The Ultimate keeps a clock, the C64 does not. Format $01 puts the weekday in
 // front of the date.
 showTime:
@@ -2056,6 +2111,10 @@ helpRows:   .text "$           DIRECTORY"
             .byte 0
             .text "DR          LIST DRIVE IDS"
             .byte 0
+            .text "DA<0/1>     DRIVE A OFF/ON"
+            .byte 0
+            .text "DB<0/1>     DRIVE B OFF/ON"
+            .byte 0
             .text "TI          SHOW DATE AND TIME"
             .byte 0
             .text "V           SHOW VERSION"
@@ -2074,6 +2133,8 @@ errText:    .text "?UNKNOWN WEDGE COMMAND"
 noNameText: .text "?MISSING FILENAME"
             .byte 13, 0
 twoNameText: .text "?NEEDS OLD=NEW"
+            .byte 13, 0
+onOffText:  .text "?NEEDS 0 OR 1"
             .byte 13, 0
 readyText:  .text "LOADED"
             .byte 13, 0

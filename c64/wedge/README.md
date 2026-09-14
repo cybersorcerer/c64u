@@ -15,6 +15,7 @@ JiffyDOS.
 @/NAME        load                    @↑NAME     load and run
 @MT<id>:NAME  mount a disk image      @UM<id>    unmount the disk
 @SW<id>       swap to the next disk   @TI        show date and time
+@DA<0/1>      drive A off, on         @DB<0/1>   drive B off, on
 ```
 
 `<id>` in `@MT`, `@UM` and `@SW` is the drive's bus id and may be left out;
@@ -41,6 +42,11 @@ device control rather than file access.
 
 `@TI` reads the Ultimate's clock, which the C64 itself does not have: weekday,
 date and time on one line.
+
+`@DA0` and `@DB0` switch an emulated drive off, `@DA1` and `@DB1` switch it back
+on - useful to get one out of the way of a real device sitting on the same bus
+id. The state is not written to the configuration, so a reboot brings the drive
+back.
 
 `@RN` takes both names in one line, old first, separated by `=`. Commodore DOS
 writes the same operation the other way round (`R:new=old`), so the order is
@@ -256,7 +262,7 @@ such a device.
 
 **The free DOS 5.1 wedge is not a substitute for that on a machine running this
 cartridge.** It loads to `$CC00-$CFFF`, and the resident block here occupies
-`$C000-$CDFF`; loading it overwrites the top of that block and takes over the
+`$C000-$CFFF`; loading it overwrites the top of that block and takes over the
 same `$0308` hook, so these commands stop working until the next reset. No
 layout avoids the clash - `$C000-$CFFF` is the only free 4K block and the
-resident code needs most of it.
+resident code fills most of it.
