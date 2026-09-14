@@ -182,6 +182,15 @@ renames the file. Verified from a 6502 program with the outgoing bytes logged an
 over DMA, and by hand at the keyboard. Commodore has confirmed the bug and says a fix is
 coming in a future firmware release. Do not re-derive this; check a newer firmware instead.
 
+`LOAD_REU` (`$08`) on the control target hangs the interface on firmware 1.1.0. Sending
+`$04 $08 <filename>` leaves the status register at `$11` (busy) forever; ABORT takes it to
+`$15` and no control bit gets further, a C64 reset does not clear it, and every UCI command
+after it hangs as well - the Ultimate has to lose power. Measured on hardware with the file
+present and absent. This is GideonZ/1541ultimate issue #740, fixed in PR #741 (merged
+2026-07-31); the Ultimate-II firmware 3.15 notes carry it, the C64U 1.1.0 line does not yet.
+`SAVE_REU` (`$09`) shares the same code path and argument, so treat it as equally unsafe until
+a fixed firmware is on the machine. Do not re-derive this; check the firmware version instead.
+
 `GET_DRVINFO` answers with a count byte followed by three bytes per drive: type, IEC bus
 address, power state (`$00` off, `$01` on). Types are `$00` 1541, `$01` 1571, `$02` 1581,
 `$03` undecided, `$0F` software IEC, `$50` printer. The argument byte asks for the address

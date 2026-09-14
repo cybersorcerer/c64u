@@ -75,6 +75,8 @@
 .const TARGET_DOS     = $01
 .const TARGET_CONTROL = $04
 .const CTRL_GET_DRVINFO = $29
+.const CTRL_LOAD_REU  = $08            // $04 $08 <filename>, $09 saves
+.const CTRL_SAVE_REU  = $09
 .const CTRL_DRIVE_A   = $30            // enables drive A; $31 disables it
 .const CTRL_DRIVE_B   = $32            // same pair one code up for drive B
 .const DRVINFO_MAX    = 8               // sanity limit on the reported count
@@ -120,6 +122,7 @@
 .const CH_C       = $43
 .const CH_D       = $44
 .const CH_I       = $49
+.const CH_L       = $4c
 .const CH_M       = $4d
 .const CH_N       = $4e
 .const CH_P       = $50
@@ -529,8 +532,16 @@ wedgeCommand:
         jmp doRemove
 !notRm:
         cmp #CH_N
-        bne unknownCommand
+        bne !notRn+
         jmp doRename
+!notRn:
+        cmp #CH_L
+        bne !notRl+
+        jmp doReuLoad
+!notRl:
+        cmp #CH_S
+        bne unknownCommand
+        jmp doReuSave
 !s:
         lda cmdChar2
         cmp #CH_V
@@ -552,16 +563,19 @@ doDirectory:
         jmp endOfCommand
 
 doChangeDir:
+        ldy #TARGET_DOS
         lda #DOS_CHANGE_DIR
         jsr simpleNameCommand
         jmp endOfCommand
 
 doMakeDir:
+        ldy #TARGET_DOS
         lda #DOS_CREATE_DIR
         jsr simpleNameCommand
         jmp endOfCommand
 
 doRemove:
+        ldy #TARGET_DOS
         lda #DOS_DELETE_FILE
         jsr simpleNameCommand
         jmp endOfCommand
@@ -609,6 +623,31 @@ doVersion:
 
 doTime:
         jsr showTime
+        jmp endOfCommand
+
+// The REU image commands take a filename like the DOS ones, but they live on
+// the control target - which is what makes them cheap: the DOS pair ($21/$22)
+// would want a 32-bit address and length instead.
+//
+// Both are reachable but deliberately absent from the help table, like @CP.
+// On firmware 1.1.0 LOAD_REU never completes: the interface stays busy, no
+// control bit releases it, a C64 reset does not either, and every later UCI
+// command hangs too - only pulling the power brings it back. Measured here and
+// the same as GideonZ/1541ultimate issue #740, which names the cause (the
+// filename is read from the reply buffer instead of the command buffer) and is
+// fixed in PR #741, merged 2026-07-31. SAVE_REU shares that code path, so it is
+// assumed to behave identically and was not tried. Put the two help rows back
+// when a C64 Ultimate firmware carries the fix.
+doReuLoad:
+        ldy #TARGET_CONTROL
+        lda #CTRL_LOAD_REU
+        jsr simpleNameCommand
+        jmp endOfCommand
+
+doReuSave:
+        ldy #TARGET_CONTROL
+        lda #CTRL_SAVE_REU
+        jsr simpleNameCommand
         jmp endOfCommand
 
 doDriveA:
@@ -1438,10 +1477,11 @@ skipSeparator:
 !out:
         rts
 
-// Commands shaped "<code> <name>": change directory, create directory, delete.
-// A is the DOS command byte.
+// Commands shaped "<code> <name>": change directory, create directory, delete,
+// and the REU image commands. A is the command byte, Y the target it goes to.
 simpleNameCommand:
         sta dosCommand
+        sty cmdTarget
         jsr uciPresent
         bcc !go+
         rts
@@ -1449,7 +1489,7 @@ simpleNameCommand:
         jsr advanceText
         jsr skipSeparator
 
-        lda #TARGET_DOS
+        lda cmdTarget
         sta UCI_CMD_DATA
         lda dosCommand
         sta UCI_CMD_DATA
@@ -2057,6 +2097,7 @@ runAfterLoad: .byte $00
 cmdChar:      .byte $00
 cmdChar2:     .byte $00
 dosCommand:   .byte $00
+cmdTarget:    .byte $00
 chunkCount:   .byte $00
 driveId:      .byte $00
 prefixChar:   .byte CH_AT
