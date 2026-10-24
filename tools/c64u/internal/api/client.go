@@ -15,6 +15,11 @@ type Client struct {
 	BaseURL    string
 	HTTPClient *http.Client
 	Verbose    bool
+
+	// Password is the device's network password, sent as the X-Password
+	// header on every request and used for the FTP login. Empty when the
+	// device has none.
+	Password string
 }
 
 // Response represents a standard API response
@@ -38,6 +43,19 @@ func NewClient(host string, port int, verbose bool) *Client {
 	}
 }
 
+// passwordHeader is the header the C64 Ultimate REST API reads its network
+// password from.
+const passwordHeader = "X-Password"
+
+// authenticate adds the network password to a request, if one is set. Every
+// request goes through here so that a password cannot be applied to some
+// commands and forgotten on others.
+func (c *Client) authenticate(req *http.Request) {
+	if c.Password != "" {
+		req.Header.Set(passwordHeader, c.Password)
+	}
+}
+
 // Get performs a GET request to the API
 func (c *Client) Get(endpoint string, params map[string]string) (*Response, error) {
 	// Build URL with query parameters
@@ -58,7 +76,13 @@ func (c *Client) Get(endpoint string, params map[string]string) (*Response, erro
 		fmt.Printf("→ GET %s\n", reqURL.String())
 	}
 
-	resp, err := c.HTTPClient.Get(reqURL.String())
+	req, err := http.NewRequest(http.MethodGet, reqURL.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	c.authenticate(req)
+
+	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
@@ -91,6 +115,7 @@ func (c *Client) Put(endpoint string, params map[string]string) (*Response, erro
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
+	c.authenticate(req)
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -128,6 +153,7 @@ func (c *Client) Post(endpoint string, body io.Reader, params map[string]string)
 
 	// Set appropriate content type
 	req.Header.Set("Content-Type", "application/octet-stream")
+	c.authenticate(req)
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -158,6 +184,7 @@ func (c *Client) PostJSON(endpoint string, data interface{}) (*Response, error) 
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	c.authenticate(req)
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -216,6 +243,14 @@ func (c *Client) parseResponse(resp *http.Response) (*Response, error) {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		if len(apiResp.Errors) == 0 {
 			apiResp.Errors = append(apiResp.Errors, fmt.Sprintf("HTTP %d: %s", resp.StatusCode, resp.Status))
+		}
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			if c.Password == "" {
+				apiResp.Errors = append(apiResp.Errors,
+					"the device may require a network password: pass --password, set C64U_PASSWORD, or add password to the config file")
+			} else {
+				apiResp.Errors = append(apiResp.Errors, "the network password was rejected by the device")
+			}
 		}
 	}
 
