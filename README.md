@@ -190,7 +190,7 @@ using the older flat `host = "..."` form keeps working unchanged.
 ### Priority Order
 
 1. **CLI Flags** `--host 192.168.1.100 --port 80`
-2. **Environment Variables** `C64U_HOST`, `C64U_PORT`, `C64U_DEVICE`
+2. **Environment Variables** `C64U_HOST`, `C64U_PORT`, `C64U_DEVICE`, `C64U_PASSWORD`
 3. **`--device`**, naming an entry in the config file
 4. **Config File** `~/.config/c64u/config.toml`
 5. **Default** port=`80`
@@ -200,6 +200,33 @@ machine on the network, so `localhost` could only ever be wrong: with nothing
 configured, `c64u` stops and says so instead of reporting a connection timeout
 against your own computer.
 
+### Network Password
+
+If the device has a network password set (Network Settings in the Ultimate
+menu), give it to `c64u` in one of these ways, highest priority first:
+
+```bash
+c64u --password secret info          # visible in the process list
+export C64U_PASSWORD=secret          # preferred for scripts
+```
+
+```toml
+# ~/.config/c64u/config.toml - top level, or per device
+password = "secret"
+
+[devices.attic]
+host = "c64u-attic.local"
+password = "other-secret"
+```
+
+The password is sent as the `X-Password` header on every REST request and as
+the FTP password for file browsing. It is stored in clear text in the config
+file, so `c64u cli-config init` creates that file readable by you only; keep
+it that way. `c64u cli-config show` reports only whether a password is set.
+A device entry's password applies to that device, and `C64U_PASSWORD` or
+`--password` override it. With a missing or wrong password the device answers
+403 and `c64u` says so.
+
 ## Usage
 
 ### Global Flags
@@ -208,6 +235,7 @@ against your own computer.
 --host string      C64 Ultimate hostname/IP (env: C64U_HOST)
 --device, -D name  Device defined in the config file (env: C64U_DEVICE)
 --port int         HTTP port, default 80 (env: C64U_PORT)
+--password string  Network password of the device (env: C64U_PASSWORD)
 --json             Output in JSON format
 --verbose          Show HTTP requests/responses
 --debug, -d        Debug logging to ~/.local/share/c64u/c64u.log
