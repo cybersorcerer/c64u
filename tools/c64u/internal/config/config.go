@@ -14,8 +14,9 @@ import (
 
 // Device is one named C64 Ultimate in the config file.
 type Device struct {
-	Host string `mapstructure:"host"`
-	Port int    `mapstructure:"port"`
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	Password string `mapstructure:"password"`
 }
 
 // Config holds the application configuration.
@@ -28,6 +29,11 @@ type Config struct {
 	Port    int    `mapstructure:"port"`
 	Verbose bool   `mapstructure:"verbose"`
 	JSON    bool   `mapstructure:"json"`
+
+	// Password is the device's network password; empty when it has none.
+	// Resolved the same way as Host and Port, so a device entry can carry
+	// its own. It is a secret: never print it, show only whether it is set.
+	Password string `mapstructure:"password"`
 
 	Devices map[string]Device `mapstructure:"devices"`
 	Default string            `mapstructure:"default"`
@@ -76,8 +82,9 @@ var ErrNoHost = errors.New(
 // explicit override and no device would ever apply its own address. The command
 // layer sets these from pflag's Changed state.
 var (
-	ExplicitHost bool
-	ExplicitPort bool
+	ExplicitHost     bool
+	ExplicitPort     bool
+	ExplicitPassword bool
 )
 
 // Load loads configuration from file, environment variables, and flags
@@ -100,6 +107,7 @@ func Load() (*Config, error) {
 	// dropped on the way into the struct.
 	_ = viper.BindEnv("host", "C64U_HOST")
 	_ = viper.BindEnv("device", "C64U_DEVICE")
+	_ = viper.BindEnv("password", "C64U_PASSWORD")
 
 	// Set exact config file path: ~/.config/c64u/config.toml
 	configFile := ""
@@ -128,7 +136,7 @@ func Load() (*Config, error) {
 				if content, readErr := os.ReadFile(configFileUsed); readErr == nil {
 					debug.Log("Config file content (%d bytes):", len(content))
 					debug.Log("--- BEGIN CONFIG FILE ---")
-					debug.Log("%s", string(content))
+					debug.Log("%s", redactSecrets(string(content)))
 					debug.Log("--- END CONFIG FILE ---")
 				} else {
 					debug.LogError("Could not read config file for debugging: %v", readErr)
@@ -184,8 +192,9 @@ func Load() (*Config, error) {
 //
 // Order, first match wins:
 //
-//  1. --host / --port given explicitly, which override a device as well
-//  2. C64U_HOST / C64U_PORT
+//  1. --host / --port / --password given explicitly, which override a device
+//     as well
+//  2. C64U_HOST / C64U_PORT / C64U_PASSWORD
 //  3. --device NAME, or C64U_DEVICE
 //  4. the "default" key in the config file
 //  5. the only device, when exactly one is defined
@@ -202,6 +211,7 @@ func (c *Config) resolveDevice() error {
 
 	explicitHost := ExplicitHost || os.Getenv("C64U_HOST") != ""
 	explicitPort := ExplicitPort || os.Getenv("C64U_PORT") != ""
+	explicitPassword := ExplicitPassword || os.Getenv("C64U_PASSWORD") != ""
 
 	if name == "" {
 		switch {
@@ -227,6 +237,9 @@ func (c *Config) resolveDevice() error {
 	}
 	if device.Port != 0 && !explicitPort {
 		c.Port = device.Port
+	}
+	if device.Password != "" && !explicitPassword {
+		c.Password = device.Password
 	}
 	return nil
 }
@@ -254,7 +267,7 @@ func CreateDefaultConfig() error {
 		if content, readErr := os.ReadFile(configPath); readErr == nil {
 			debug.Log("Existing config file content:")
 			debug.Log("--- BEGIN EXISTING CONFIG ---")
-			debug.Log("%s", string(content))
+			debug.Log("%s", redactSecrets(string(content)))
 			debug.Log("--- END EXISTING CONFIG ---")
 		}
 		return fmt.Errorf("config file already exists at: %s", configPath)
@@ -303,6 +316,12 @@ func CreateDefaultConfig() error {
 # HTTP port (default: 80)
 port = 80
 
+# Network password, if one is set on the device (Network Settings in the
+# Ultimate menu). Sent as the X-Password header and used for FTP. A password
+# kept here is stored in clear text, so this file is created readable by you
+# only; the C64U_PASSWORD environment variable is the alternative.
+# password = "secret"
+
 # A second "host" line does not add a device - it replaces the one above.
 # For several machines use named entries instead, selected per command with
 # --device NAME (or -D NAME):
@@ -317,6 +336,7 @@ port = 80
 # [devices.living-room]
 # host = "192.168.1.100"
 # port = 80
+# password = "secret"
 #
 # [devices.attic]
 # host = "c64u-attic.local"
@@ -328,7 +348,7 @@ port = 80
 	debug.Log("--- END DEFAULT CONFIG ---")
 
 	// Write config file
-	if err := os.WriteFile(configPath, []byte(defaultConfig), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(defaultConfig), 0600); err != nil {
 		debug.LogError("Failed to write config file: %v", err)
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
@@ -352,4 +372,20 @@ func GetConfigPath() string {
 		return ""
 	}
 	return filepath.Join(homeDir, ".config", "c64u", "config.toml")
+}
+
+// redactSecrets blanks the value of any password line, so that a dump of the
+// config file into the debug log does not leave the password behind in
+// ~/.local/share/c64u/c64u.log.
+func redactSecrets(content string) string {
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimLeft(line, " \t")
+		if strings.HasPrefix(trimmed, "password") {
+			if eq := strings.Index(line, "="); eq >= 0 {
+				lines[i] = line[:eq+1] + ` "<redacted>"`
+			}
+		}
+	}
+	return strings.Join(lines, "\n")
 }
