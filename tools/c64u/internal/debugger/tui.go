@@ -1,7 +1,6 @@
 package debugger
 
 import (
-	"encoding/binary"
 	"fmt"
 	"net"
 	"strings"
@@ -301,6 +300,7 @@ func (m *Model) visibleLines() int {
 func (m *Model) startUDPReceiver() {
 	go func() {
 		buf := make([]byte, 4096)
+		var decoder debug.Decoder
 		for {
 			n, _, err := m.conn.ReadFromUDP(buf)
 			if err != nil {
@@ -313,7 +313,7 @@ func (m *Model) startUDPReceiver() {
 				return
 			}
 			if !m.isPaused() {
-				entries := decodePacketEntries(buf[:n])
+				entries := decodePacketEntries(&decoder, buf[:n])
 				for _, e := range entries {
 					m.tracker.Feed(e)
 				}
@@ -325,19 +325,13 @@ func (m *Model) startUDPReceiver() {
 
 // ── Packet decoding ───────────────────────────────────────────────────────────
 
-func decodePacketEntries(data []byte) []debug.Entry {
-	const (
-		headerSize = 4
-		entrySize  = 4
-	)
-	if len(data) < headerSize+entrySize {
+func decodePacketEntries(dec *debug.Decoder, data []byte) []debug.Entry {
+	_, words, ok := dec.Words(data)
+	if !ok {
 		return nil
 	}
-	payload := data[headerSize:]
-	count := len(payload) / entrySize
-	entries := make([]debug.Entry, 0, count)
-	for i := 0; i < count; i++ {
-		word := binary.LittleEndian.Uint32(payload[i*entrySize:])
+	entries := make([]debug.Entry, 0, len(words))
+	for _, word := range words {
 		if word == 0 {
 			continue
 		}

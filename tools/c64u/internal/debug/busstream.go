@@ -119,24 +119,116 @@ func format1541(e Entry) string {
 	return fmt.Sprintf("1541 %s $%04X = $%02X%s", rw, e.Address, e.Data, flags)
 }
 
+// Decoder turns the datagrams of one debug stream into 32-bit words in the
+// documented bit layout.
+//
+// The documentation says a datagram is a 4-byte header (16-bit sequence
+// number, 16 reserved bits, zero) followed by 360 little-endian 32-bit
+// entries. The C64 Ultimate (seen on firmware 1.1.0) frames the same entries
+// differently:
+//
+//   - the entries are one continuous stream that is cut into 1444-byte
+//     datagrams wherever it happens to fall, so each datagram starts with the
+//     upper half of an entry begun at the end of the previous one, and the
+//     entries proper start at byte 2;
+//   - only the first few datagrams of a stream (14-47 were seen) carry a
+//     header, as a (sequence number, 0) pair in the place of the first entry;
+//     after that there is no header and no sequence number at all.
+//
+// Read as documented, such a stream has every entry's address half paired
+// with the control and data of the entry before it, so the disassembler never
+// finds an instruction. Checked against the KERNAL's keyboard-wait loop at
+// $E5CD-$E5D6 on a BASIC prompt: as documented, no entry has an address in
+// the loop (0 of 888,480); with this framing every read in it returns the ROM
+// byte (98,943 of 98,943).
+//
+// The two framings are told apart by header bytes 2-3, which are reserved
+// and zero in the documented layout. On this device they hold a sequence
+// number or an address, so one non-zero value settles it, and the choice then
+// sticks: a later datagram can hold a zero there by chance. A stream's very
+// first datagram has sequence number zero and is therefore decoded as
+// documented, which is wrong for that one datagram.
+//
+// Use one Decoder per stream; it is not safe for concurrent use.
+type Decoder struct {
+	continuous bool   // device framing, see above
+	haveTail   bool   // tail holds the lower half of an entry split across datagrams
+	tail       uint16 // lower half (the address) of that entry
+	count      uint16 // datagrams seen, numbers them when the stream has no sequence number
+}
+
+// Continuous reports whether the stream has been recognised as the device's
+// continuous framing rather than the documented one.
+func (d *Decoder) Continuous() bool { return d.continuous }
+
+// Words returns the entries of a datagram as words in the documented layout,
+// and its sequence number: the one in the header for the documented framing,
+// otherwise the number of datagrams seen so far. ok is false for a datagram
+// too short to hold an entry.
+func (d *Decoder) Words(data []byte) (seq uint16, words []uint32, ok bool) {
+	if len(data) < minPacketSize {
+		return 0, nil, false
+	}
+	d.count++
+
+	if !d.continuous && binary.LittleEndian.Uint16(data[2:4]) != 0 {
+		d.continuous = true
+	}
+
+	if !d.continuous {
+		seq = binary.LittleEndian.Uint16(data[0:2])
+		payload := data[pktHeaderSize:]
+		words = make([]uint32, len(payload)/entrySize)
+		for i := range words {
+			words[i] = binary.LittleEndian.Uint32(payload[i*entrySize:])
+		}
+		return seq, words, true
+	}
+
+	seq = d.count - 1
+	words = make([]uint32, 0, len(data)/entrySize+1)
+
+	// The entry split across the datagram boundary: its address half ended
+	// the previous datagram, its control and data half starts this one.
+	if d.haveTail {
+		words = append(words, uint32(d.tail)|uint32(binary.LittleEndian.Uint16(data[0:2]))<<16)
+	}
+
+	i := 2
+	for ; i+entrySize <= len(data); i += entrySize {
+		w := binary.LittleEndian.Uint32(data[i:])
+		// In the first datagrams the first "entry" is the (sequence
+		// number, 0) header pair. No 6510 or VIC entry has zero control
+		// and data bits, so a word with a zero upper half there is it.
+		if i == 2 && w>>16 == 0 {
+			continue
+		}
+		words = append(words, w)
+	}
+
+	d.haveTail = i+2 <= len(data)
+	if d.haveTail {
+		d.tail = binary.LittleEndian.Uint16(data[i:])
+	}
+	return seq, words, true
+}
+
 // DecodePacket reads a UDP packet, decodes every entry and writes the
 // readable form to w.
 // raw=true: structured output, raw=false: address and data only
-func DecodePacket(data []byte, w io.Writer, raw bool) {
-	if len(data) < minPacketSize {
+func (d *Decoder) DecodePacket(data []byte, w io.Writer, raw bool) {
+	seq, words, ok := d.Words(data)
+	if !ok {
 		return
 	}
-
-	seq := binary.LittleEndian.Uint16(data[0:2])
-	payload := data[pktHeaderSize:]
-	count := len(payload) / entrySize
+	count := len(words)
 
 	if !raw {
 		fmt.Fprintf(w, "--- PKT #%05d (%d entries) ---\n", seq, count)
 	}
 
 	for i := 0; i < count; i++ {
-		word := binary.LittleEndian.Uint32(payload[i*entrySize:])
+		word := words[i]
 		if word == 0 {
 			continue // skip blank lines
 		}

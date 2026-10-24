@@ -574,6 +574,7 @@ Examples:
 		}
 
 		buf := make([]byte, 4096)
+		var decoder dbg.Decoder
 		for {
 			n, _, err := conn.ReadFromUDP(buf)
 			if err != nil {
@@ -581,7 +582,7 @@ Examples:
 				break
 			}
 			if n > 0 {
-				dbg.DecodePacket(buf[:n], os.Stdout, raw)
+				decoder.DecodePacket(buf[:n], os.Stdout, raw)
 			}
 		}
 
