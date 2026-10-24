@@ -24,7 +24,7 @@ For C64 hardware questions - register addresses, screen codes, SID frequencies -
 Resolution order, highest first:
 
 1. Flags: `--host 192.168.1.100 --port 80`
-2. Environment: `C64U_HOST`, `C64U_PORT`, `C64U_DEVICE`
+2. Environment: `C64U_HOST`, `C64U_PORT`, `C64U_DEVICE`, `C64U_PASSWORD`
 3. `-D, --device NAME`, naming an entry in the config file
 4. Config file: `~/.config/c64u/config.toml`
 5. Port defaults to 80

@@ -95,7 +95,8 @@ type FileEntry struct {
 }
 
 // getFTPConn creates an FTP connection to the C64 Ultimate
-// C64 Ultimate FTP is on port 21, anonymous login
+// C64 Ultimate FTP is on port 21, anonymous login. When a network password is
+// set, it goes in the password field of the login.
 func (c *Client) getFTPConn() (*ftp.ServerConn, error) {
 	// Extract host from BaseURL (remove http:// and port)
 	host := strings.TrimPrefix(c.BaseURL, "http://")
@@ -110,7 +111,11 @@ func (c *Client) getFTPConn() (*ftp.ServerConn, error) {
 	}
 
 	// C64 Ultimate uses anonymous FTP
-	if err := conn.Login("anonymous", "anonymous"); err != nil {
+	ftpPassword := "anonymous"
+	if c.Password != "" {
+		ftpPassword = c.Password
+	}
+	if err := conn.Login("anonymous", ftpPassword); err != nil {
 		conn.Quit()
 		return nil, fmt.Errorf("FTP login failed: %w", err)
 	}

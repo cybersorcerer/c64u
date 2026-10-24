@@ -23,6 +23,7 @@ var (
 	// Global flags
 	cfgFile   string
 	host      string
+	password  string
 	device    string
 	port      int
 	verbose   bool
@@ -55,11 +56,13 @@ Without --device the "default" entry is used, or the only device when just one
 is defined. "c64u cli-config show" lists them.
 
 Configuration Priority:
-  1. CLI flags (--host, --port)
-  2. Environment variables (C64U_HOST, C64U_PORT, C64U_DEVICE)
+  1. CLI flags (--host, --port, --password)
+  2. Environment variables (C64U_HOST, C64U_PORT, C64U_DEVICE, C64U_PASSWORD)
   3. --device, naming an entry in the config file
   4. Config file (~/.config/c64u/config.toml)
-  5. Port defaults to 80. The host has no default - without one, c64u stops
+  5. Port defaults to 80. The password is only needed when the device has
+     one set; prefer C64U_PASSWORD or the config file over --password, which
+     is visible in the process list. The host has no default - without one, c64u stops
      and says so, because the device is never this machine.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// Initialize debug logger first (before anything else)
@@ -75,6 +78,7 @@ Configuration Priority:
 		// host that the flag's default already put in place.
 		config.ExplicitHost = cmd.Root().PersistentFlags().Changed("host")
 		config.ExplicitPort = cmd.Root().PersistentFlags().Changed("port")
+		config.ExplicitPassword = cmd.Root().PersistentFlags().Changed("password")
 
 		// Initialize configuration
 		cfg, err := config.Load()
@@ -106,6 +110,12 @@ Configuration Priority:
 			port = cfg.Port
 		}
 
+		if cmd.Flags().Changed("password") {
+			cfg.Password = password
+		} else {
+			password = cfg.Password
+		}
+
 		if cmd.Flags().Changed("verbose") {
 			cfg.Verbose = verbose
 		} else {
@@ -120,6 +130,7 @@ Configuration Priority:
 
 		// Initialize global instances
 		apiClient = api.NewClient(cfg.Host, cfg.Port, cfg.Verbose)
+		apiClient.Password = cfg.Password
 		formatter = output.NewFormatter(cfg.JSON)
 		formatter.SetNoColor(noColor)
 		return nil
@@ -295,9 +306,10 @@ var cliConfigShowCmd = &cobra.Command{
 		}
 
 		data := map[string]interface{}{
-			"host":    cfg.Host,
-			"port":    cfg.Port,
-			"verbose": cfg.Verbose,
+			"host":     cfg.Host,
+			"port":     cfg.Port,
+			"verbose":  cfg.Verbose,
+			"password": passwordState(cfg.Password),
 		}
 		if cfg.Device != "" {
 			data["device"] = cfg.Device
@@ -305,7 +317,7 @@ var cliConfigShowCmd = &cobra.Command{
 		if len(cfg.Devices) > 0 {
 			devices := make(map[string]interface{}, len(cfg.Devices))
 			for name, d := range cfg.Devices {
-				devices[name] = map[string]interface{}{"host": d.Host, "port": d.Port}
+				devices[name] = map[string]interface{}{"host": d.Host, "port": d.Port, "password": passwordState(d.Password)}
 			}
 			data["devices"] = devices
 			data["default"] = cfg.Default
@@ -325,6 +337,7 @@ var cliConfigShowCmd = &cobra.Command{
 			}
 			fmt.Printf("  Host:        %s\n", cfg.Host)
 			fmt.Printf("  Port:        %d\n", cfg.Port)
+			fmt.Printf("  Password:    %s\n", passwordState(cfg.Password))
 			fmt.Printf("  Verbose:     %v\n", cfg.Verbose)
 			if configPath != "" {
 				fmt.Printf("  Config File: %s\n", configPath)
@@ -350,6 +363,14 @@ var cliConfigShowCmd = &cobra.Command{
 			}
 		}
 	},
+}
+
+// passwordState describes a password without revealing it.
+func passwordState(p string) string {
+	if p == "" {
+		return "not set"
+	}
+	return "set"
 }
 
 // isZeroDefault reports whether a flag's default is the zero value of its type,
@@ -474,6 +495,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&host, "host", "", "C64 Ultimate hostname or IP address")
 	rootCmd.PersistentFlags().StringVarP(&device, "device", "D", "", "Name of a device defined in the config file")
 	rootCmd.PersistentFlags().IntVar(&port, "port", 80, "HTTP port")
+	rootCmd.PersistentFlags().StringVar(&password, "password", "", "Network password of the C64 Ultimate (env: C64U_PASSWORD)")
 	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Enable verbose output")
 	rootCmd.PersistentFlags().BoolVar(&jsonOut, "json", false, "Output in JSON format")
 	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "Disable colored output")
@@ -483,6 +505,7 @@ func init() {
 	viper.BindPFlag("host", rootCmd.PersistentFlags().Lookup("host"))
 	viper.BindPFlag("device", rootCmd.PersistentFlags().Lookup("device"))
 	viper.BindPFlag("port", rootCmd.PersistentFlags().Lookup("port"))
+	viper.BindPFlag("password", rootCmd.PersistentFlags().Lookup("password"))
 	viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
 	viper.BindPFlag("json", rootCmd.PersistentFlags().Lookup("json"))
 	viper.BindPFlag("no-color", rootCmd.PersistentFlags().Lookup("no-color"))
