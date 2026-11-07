@@ -222,10 +222,11 @@ password = "other-secret"
 The password is sent as the `X-Password` header on every REST request and as
 the FTP password for file browsing. It is stored in clear text in the config
 file, so `c64u cli-config init` creates that file readable by you only; keep
-it that way. `c64u cli-config show` reports only whether a password is set.
-A device entry's password applies to that device, and `C64U_PASSWORD` or
-`--password` override it. With a missing or wrong password the device answers
-403 and `c64u` says so.
+it that way. If your config file predates this, run
+`chmod 600 ~/.config/c64u/config.toml`. `c64u cli-config show` reports only
+whether a password is set. A selected device uses only its own password, never
+the top-level one, and `C64U_PASSWORD` or `--password` override it. With a
+missing or wrong password the device answers 403 and `c64u` says so.
 
 ## Usage
 

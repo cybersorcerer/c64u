@@ -25,6 +25,7 @@ func TestResolveDevice_Password(t *testing.T) {
 	}{
 		{"device password is used", Config{Port: 80, Devices: devices}, "attic", "", false, "attic-pw"},
 		{"a device without one leaves it empty", Config{Port: 80, Devices: devices}, "cellar", "", false, ""},
+		{"a device without one does not inherit the top-level password", Config{Port: 80, Password: "top", Devices: devices}, "cellar", "", false, ""},
 		{"environment outranks the device", Config{Port: 80, Password: "from-env", Devices: devices}, "attic", "from-env", false, "from-env"},
 		{"flag outranks the device", Config{Port: 80, Password: "from-flag", Devices: devices}, "attic", "", true, "from-flag"},
 		{"flat top-level password keeps working", Config{Host: "h", Port: 80, Password: "flat"}, "", "", false, "flat"},

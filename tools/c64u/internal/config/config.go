@@ -238,7 +238,9 @@ func (c *Config) resolveDevice() error {
 	if device.Port != 0 && !explicitPort {
 		c.Port = device.Port
 	}
-	if device.Password != "" && !explicitPassword {
+	// A device uses only its own password, never the top-level one, so that
+	// one device's secret is not sent to another.
+	if !explicitPassword {
 		c.Password = device.Password
 	}
 	return nil

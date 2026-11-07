@@ -62,8 +62,8 @@ Configuration Priority:
   4. Config file (~/.config/c64u/config.toml)
   5. Port defaults to 80. The password is only needed when the device has
      one set; prefer C64U_PASSWORD or the config file over --password, which
-     is visible in the process list. The host has no default - without one, c64u stops
-     and says so, because the device is never this machine.`,
+     is visible in the process list. The host has no default - without one,
+     c64u stops and says so, because the device is never this machine.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// Initialize debug logger first (before anything else)
 		if err := debug.Init(debugMode); err != nil {
@@ -495,7 +495,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&host, "host", "", "C64 Ultimate hostname or IP address")
 	rootCmd.PersistentFlags().StringVarP(&device, "device", "D", "", "Name of a device defined in the config file")
 	rootCmd.PersistentFlags().IntVar(&port, "port", 80, "HTTP port")
-	rootCmd.PersistentFlags().StringVar(&password, "password", "", "Network password of the C64 Ultimate (env: C64U_PASSWORD)")
+	rootCmd.PersistentFlags().StringVar(&password, "password", "", "Network password of the C64 Ultimate")
 	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Enable verbose output")
 	rootCmd.PersistentFlags().BoolVar(&jsonOut, "json", false, "Output in JSON format")
 	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "Disable colored output")
