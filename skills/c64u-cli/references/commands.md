@@ -9,6 +9,7 @@ Every command accepts the global flags below. `<>` is required, `[]` optional.
 | `--host string` | Device hostname or IP (env `C64U_HOST`) |
 | `-D, --device string` | Name of a device defined in the config file (env `C64U_DEVICE`) |
 | `--port int` | HTTP port, default 80 (env `C64U_PORT`) |
+| `--password string` | Network password, when the device has one set (env `C64U_PASSWORD`, or `password` in the config file). Sent as `X-Password`; a 403 without it means the device wants one |
 | `--json` | JSON output - use this for anything a script parses |
 | `--verbose` | Show HTTP requests and responses |
 | `-d, --debug` | Debug log to `~/.local/share/c64u/c64u.log` |
