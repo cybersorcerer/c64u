@@ -17,6 +17,9 @@ type fakeDevice struct {
 	items      map[string]interface{}
 	busIDMin   float64
 	busIDMax   float64
+	// enableValues is what the device offers for the enable setting; empty
+	// stands for firmware that does not report it.
+	enableValues []interface{}
 
 	path      string
 	lastError string
@@ -52,11 +55,41 @@ func (f *fakeDevice) GetConfigCategory(category string) (map[string]interface{},
 }
 
 func (f *fakeDevice) GetConfigItem(category, item string) (map[string]interface{}, error) {
-	return map[string]interface{}{
-		category: map[string]interface{}{
-			item: map[string]interface{}{"min": f.busIDMin, "max": f.busIDMax},
-		},
-	}, nil
+	detail := map[string]interface{}{"min": f.busIDMin, "max": f.busIDMax}
+	if _, isNumber := f.items[item].(float64); !isNumber {
+		detail = map[string]interface{}{}
+		if len(f.enableValues) > 0 {
+			detail["values"] = f.enableValues
+		}
+	}
+	return map[string]interface{}{category: map[string]interface{}{item: detail}}, nil
+}
+
+// newFirmware121Device mirrors firmware 1.2.1, where the enable setting has a
+// third value and the default path setting is gone.
+func newFirmware121Device(current string) *fakeDevice {
+	d := newFakeDevice()
+	d.items = map[string]interface{}{
+		"IEC Drive":           current,
+		"Soft Drive Bus ID":   float64(11),
+		"Log Every Operation": "Disabled",
+	}
+	d.enableValues = []interface{}{"UCI Only", "Enabled", "Disabled"}
+	return d
+}
+
+// Firmware 1.2.1 added a second Enabled/Disabled setting to the category. Map
+// order is random, so a wrong pick shows up only on some runs; repeat.
+func TestLoadSettingsIgnoresOtherSwitches(t *testing.T) {
+	for range 50 {
+		s, err := LoadSettings(newFirmware121Device("Enabled"))
+		if err != nil {
+			t.Fatalf("LoadSettings: %v", err)
+		}
+		if s.EnableItem != "IEC Drive" {
+			t.Fatalf("enable item = %q, want IEC Drive", s.EnableItem)
+		}
+	}
 }
 
 func (f *fakeDevice) SetConfigItem(category, item, value string) error {
@@ -180,6 +213,56 @@ func TestSetEnabledWritesTheConfigItem(t *testing.T) {
 	}
 	if s.Enabled {
 		t.Error("settings still report enabled")
+	}
+}
+
+// Firmware 1.2.1 ships with "UCI Only" as the default, so a device that was
+// never switched on reports it.
+func TestLoadSettingsRecognisesUCIOnly(t *testing.T) {
+	d := newFirmware121Device("UCI Only")
+	s, err := LoadSettings(d)
+	if err != nil {
+		t.Fatalf("LoadSettings: %v", err)
+	}
+	if s.EnableItem != "IEC Drive" || s.Enabled {
+		t.Errorf("enable item = %q enabled=%v", s.EnableItem, s.Enabled)
+	}
+	if s.PathItem != "" {
+		t.Errorf("path item = %q, firmware 1.2.1 has none", s.PathItem)
+	}
+}
+
+// Taking the drive off the bus keeps it usable through the Command Interface,
+// which is what Disabled meant before firmware 1.2.1.
+func TestSetEnabledOffKeepsCommandInterface(t *testing.T) {
+	d := newFirmware121Device("Enabled")
+	s, _ := LoadSettings(d)
+
+	if err := SetEnabled(d, s, false); err != nil {
+		t.Fatalf("SetEnabled: %v", err)
+	}
+	if got := d.items["IEC Drive"]; got != "UCI Only" {
+		t.Errorf("config item is %v, want UCI Only", got)
+	}
+}
+
+func TestDisableCompletely(t *testing.T) {
+	for name, d := range map[string]*fakeDevice{
+		"firmware 1.2.1": newFirmware121Device("Enabled"),
+		"older firmware": newFakeDevice(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			s, _ := LoadSettings(d)
+			if err := DisableCompletely(d, s); err != nil {
+				t.Fatalf("DisableCompletely: %v", err)
+			}
+			if got := d.items["IEC Drive"]; got != disabledValue {
+				t.Errorf("config item is %v, want %s", got, disabledValue)
+			}
+			if s.Enabled {
+				t.Error("settings still report enabled")
+			}
+		})
 	}
 }
 

@@ -44,6 +44,11 @@ type Settings struct {
 
 	MinBusID int
 	MaxBusID int
+
+	// OffValue takes the drive off the IEC bus. Firmware 1.2.1 offers
+	// "UCI Only" for that and makes "Disabled" switch the drive off for the
+	// Command Interface as well; older firmware only has "Disabled".
+	OffValue string
 }
 
 // Status is the drive's live state, as reported by the drives list.
@@ -58,6 +63,7 @@ type Status struct {
 const (
 	enabledValue  = "Enabled"
 	disabledValue = "Disabled"
+	uciOnlyValue  = "UCI Only"
 )
 
 // LoadSettings discovers the SoftIEC configuration and reads it.
@@ -76,11 +82,14 @@ func LoadSettings(d Device) (*Settings, error) {
 		return nil, fmt.Errorf("category %q returned no settings", category)
 	}
 
-	s := &Settings{Category: category, MinBusID: 8, MaxBusID: 30}
+	s := &Settings{Category: category, MinBusID: 8, MaxBusID: 30, OffValue: disabledValue}
 	classifyItems(items, s)
 
 	if s.EnableItem == "" {
 		return nil, fmt.Errorf("category %q has no enable setting", category)
+	}
+	if offersValue(d, category, s.EnableItem, uciOnlyValue) {
+		s.OffValue = uciOnlyValue
 	}
 	if s.BusIDItem != "" {
 		if lo, hi, ok := busIDRange(d, category, s.BusIDItem); ok {
@@ -108,14 +117,23 @@ func findCategory(d Device) (string, error) {
 
 // classifyItems assigns the settings by the shape of their values, so renamed
 // items in another firmware are still found: the enable setting is the one
-// holding Enabled or Disabled, the bus ID is the number, the default path is
-// the absolute path.
+// holding Enabled, Disabled or UCI Only, the bus ID is the number, the default
+// path is the absolute path (firmware 1.2.1 has none).
+//
+// Firmware 1.2.1 also has "Log Every Operation", another Enabled/Disabled
+// switch, so among several switches the one naming IEC wins ("IEC Drive",
+// "Software IEC").
 func classifyItems(items map[string]interface{}, s *Settings) {
+	namesIEC := func(name string) bool { return strings.Contains(strings.ToLower(name), "iec") }
 	for name, value := range items {
 		switch v := value.(type) {
 		case string:
 			switch {
-			case strings.EqualFold(v, enabledValue), strings.EqualFold(v, disabledValue):
+			case strings.EqualFold(v, enabledValue), strings.EqualFold(v, disabledValue),
+				strings.EqualFold(v, uciOnlyValue):
+				if s.EnableItem != "" && namesIEC(s.EnableItem) && !namesIEC(name) {
+					continue
+				}
 				s.EnableItem = name
 				s.Enabled = strings.EqualFold(v, enabledValue)
 			case strings.HasPrefix(v, "/"):
@@ -129,16 +147,38 @@ func classifyItems(items map[string]interface{}, s *Settings) {
 	}
 }
 
-func busIDRange(d Device, category, item string) (lo, hi int, ok bool) {
+// itemDetail reads the full description of one setting: its current value and
+// either the values it accepts or its numeric range.
+func itemDetail(d Device, category, item string) (map[string]interface{}, bool) {
 	raw, err := d.GetConfigItem(category, item)
 	if err != nil {
-		return 0, 0, false
+		return nil, false
 	}
 	cat, ok := raw[category].(map[string]interface{})
 	if !ok {
-		return 0, 0, false
+		return nil, false
 	}
 	detail, ok := cat[item].(map[string]interface{})
+	return detail, ok
+}
+
+// offersValue reports whether a setting accepts value.
+func offersValue(d Device, category, item, value string) bool {
+	detail, ok := itemDetail(d, category, item)
+	if !ok {
+		return false
+	}
+	values, _ := detail["values"].([]interface{})
+	for _, v := range values {
+		if s, ok := v.(string); ok && strings.EqualFold(s, value) {
+			return true
+		}
+	}
+	return false
+}
+
+func busIDRange(d Device, category, item string) (lo, hi int, ok bool) {
+	detail, ok := itemDetail(d, category, item)
 	if !ok {
 		return 0, 0, false
 	}
@@ -150,12 +190,23 @@ func busIDRange(d Device, category, item string) (lo, hi int, ok bool) {
 	return int(minV), int(maxV), true
 }
 
-// SetEnabled turns SoftIEC on or off.
+// SetEnabled puts SoftIEC on the IEC bus or takes it off. Off leaves the drive
+// usable through the Command Interface where the firmware allows it.
 func SetEnabled(d Device, s *Settings, on bool) error {
-	value := disabledValue
+	value := s.OffValue
 	if on {
 		value = enabledValue
 	}
+	return setEnableItem(d, s, value, on)
+}
+
+// DisableCompletely switches SoftIEC off for the IEC bus and the Command
+// Interface alike. On firmware before 1.2.1 that is the only way to disable it.
+func DisableCompletely(d Device, s *Settings) error {
+	return setEnableItem(d, s, disabledValue, false)
+}
+
+func setEnableItem(d Device, s *Settings, value string, on bool) error {
 	if err := d.SetConfigItem(s.Category, s.EnableItem, value); err != nil {
 		return err
 	}

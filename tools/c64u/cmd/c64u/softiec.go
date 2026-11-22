@@ -96,11 +96,16 @@ var softiecDisableCmd = &cobra.Command{
 	Short: "Disable SoftIEC",
 	Long: `Disable the SoftIEC drive, so it stops answering on the IEC bus.
 
+On firmware 1.2.1 and newer the drive stays usable through the Command
+Interface ("UCI Only"); --completely switches it off there as well. Older
+firmware has only the complete switch-off, so both forms do the same there.
+
 This writes the device configuration; the drives endpoint has no effect on
 SoftIEC. The bus ID and directory are left as they are.
 
-Example:
-  c64u drives softiec disable`,
+Examples:
+  c64u drives softiec disable
+  c64u drives softiec disable --completely`,
 	Args: cobra.NoArgs,
 	Run:  func(cmd *cobra.Command, args []string) { runSoftIECEnable(cmd, false) },
 }
@@ -122,7 +127,13 @@ func runSoftIECEnable(cmd *cobra.Command, on bool) {
 		details["bus_id"] = busID
 	}
 
-	if err := softiec.SetEnabled(apiClient, settings, on); err != nil {
+	completely, _ := cmd.Flags().GetBool("completely")
+	if completely {
+		err = softiec.DisableCompletely(apiClient, settings)
+	} else {
+		err = softiec.SetEnabled(apiClient, settings, on)
+	}
+	if err != nil {
 		formatter.Error("Failed to change SoftIEC", []string{err.Error()})
 		return
 	}
@@ -205,4 +216,5 @@ func init() {
 	softiecCmd.AddCommand(softiecRootCmd)
 
 	softiecEnableCmd.Flags().Int("bus-id", 0, "IEC device number to answer on")
+	softiecDisableCmd.Flags().Bool("completely", false, "Also switch it off for the Command Interface")
 }
