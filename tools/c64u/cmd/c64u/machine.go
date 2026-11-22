@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"os"
@@ -178,8 +179,17 @@ Examples:
   c64u machine write-mem d020 00          # Change border color to black`,
 	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
-		address := args[0]
+		addr, err := parseAddress(args[0])
+		if err != nil {
+			formatter.Error("Invalid address", []string{err.Error()})
+			return
+		}
 		data := args[1]
+		if err := checkWriteData(data); err != nil {
+			formatter.Error("Invalid data", []string{err.Error()})
+			return
+		}
+		address := fmt.Sprintf("%04X", addr)
 
 		resp, err := apiClient.MachineWriteMem(address, data)
 		if err != nil {
@@ -233,6 +243,19 @@ Example:
 		}
 		formatter.Success("Wrote file to memory", data)
 	},
+}
+
+// checkWriteData accepts bytes as pairs of hex digits. Firmware 1.2.1 writes an
+// odd digit count such as "100" as the single byte $10 and still reports
+// success, so the device cannot be left to judge.
+func checkWriteData(s string) error {
+	if s == "" {
+		return fmt.Errorf("no bytes given")
+	}
+	if _, err := hex.DecodeString(s); err != nil {
+		return fmt.Errorf("%q is not a sequence of hex byte pairs such as 0102ff", s)
+	}
+	return nil
 }
 
 // parseAddress reads a C64 address written as 0400, $0400 or 0x0400. The device

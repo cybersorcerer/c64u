@@ -60,3 +60,18 @@ func TestRangeLengthRejectsBadRanges(t *testing.T) {
 		t.Error("an end beyond $FFFF was accepted")
 	}
 }
+
+// Firmware 1.2.1 writes "100" as the single byte $10 and reports success, so
+// the data is checked here.
+func TestCheckWriteData(t *testing.T) {
+	for _, good := range []string{"00", "01020304", "aBcD"} {
+		if err := checkWriteData(good); err != nil {
+			t.Errorf("checkWriteData(%q) rejected it: %v", good, err)
+		}
+	}
+	for _, bad := range []string{"", "100", "zz", "0x10", "01 02"} {
+		if err := checkWriteData(bad); err == nil {
+			t.Errorf("checkWriteData(%q) accepted it", bad)
+		}
+	}
+}
