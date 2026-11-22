@@ -468,7 +468,8 @@ func inputUnavailable(resp *api.Response) []string {
 	switch resp.StatusCode {
 	case http.StatusNotFound:
 		return []string{
-			"This firmware has no input endpoint - it arrived with firmware 3.15.",
+			"This firmware has no input endpoint - it arrived with firmware 1.2.0 on the Commodore 64 Ultimate",
+			"and with 3.15 on the other Ultimate products.",
 			"Check the installed version with 'c64u info' and update the Ultimate to use this command.",
 		}
 	case http.StatusNotImplemented:
@@ -484,7 +485,7 @@ func inputUnavailable(resp *api.Response) []string {
 
 var machineInputCmd = &cobra.Command{
 	Use:   "input [event...]",
-	Short: "Press, release or tap keys and joystick directions (experimental)",
+	Short: "Press, release or tap keys and joystick directions",
 	Long: `Inject keyboard and joystick input at the hardware level.
 
 Unlike 'sendkey', which fills the KERNAL keyboard buffer, this drives the key
@@ -509,13 +510,10 @@ fire, fire2, fire3. restore has to stand alone and can only be tapped.
 
 A batch holds 1 to 64 events and must serialise to under 4096 bytes.
 
-Requires an Ultimate 64 and firmware 3.15 or newer.
+The state that results is printed afterwards, as with --show.
 
-EXPERIMENTAL. No machine this was developed against can execute it yet: firmware
-1.1.0 on the Commodore 64 Ultimate has no such endpoint, and an Ultimate II+L on
-3.15a has the endpoint but not the input hardware. Both refusals are verified on
-hardware, the success path is not. Expect the arguments and the output to change
-once it can be run against a machine that accepts it.
+Requires the Ultimate 64 input hardware: a Commodore 64 Ultimate on firmware
+1.2.0 or newer, or an Ultimate 64 on 3.15 or newer.
 
 Examples:
   c64u machine input --show
@@ -560,7 +558,7 @@ Examples:
 			return
 		}
 
-		formatter.Success(fmt.Sprintf("Applied %d event(s)", len(events)), nil)
+		formatter.Success(fmt.Sprintf("Applied %d event(s)", len(events)), resp.Data)
 	},
 }
 
@@ -574,7 +572,8 @@ The device returns a 40x25 character matrix followed by a 40x25 colour matrix,
 so the menu can be inspected without the video stream. Open the menu first with
 'machine menu-button'; with no menu on screen the device answers 404.
 
-Requires firmware 3.15 or newer.`,
+Requires firmware 1.2.0 or newer on the Commodore 64 Ultimate, 3.15 or newer on
+the other Ultimate products.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		resp, err := apiClient.MachineMenuScreen()
 		if err != nil {
@@ -584,7 +583,7 @@ Requires firmware 3.15 or newer.`,
 		if resp.StatusCode == http.StatusNotFound {
 			formatter.Error("No menu screen is active", []string{
 				"Open the Ultimate menu first: c64u machine menu-button",
-				"On firmware older than 3.15 this endpoint does not exist at all.",
+				"On firmware older than 1.2.0 (C64 Ultimate) or 3.15 (other Ultimates) this endpoint does not exist at all.",
 			})
 			return
 		}
