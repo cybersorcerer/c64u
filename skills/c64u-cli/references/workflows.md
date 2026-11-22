@@ -112,7 +112,17 @@ Copy files in with `c64u fs upload`, and they appear in the next directory listi
 rebuild, no remount.
 
 **Check whether it is switched on before concluding it does not work** — `IEC Drive` defaults to
-disabled, and a disabled SoftIEC simply does not answer on the bus.
+disabled (`UCI Only` from firmware 1.2.1), and SoftIEC off the bus simply does not answer.
+`disable` takes it off the bus and leaves it usable through the Command Interface where the
+firmware allows that; `disable --completely` switches it off there too.
+
+**From firmware 1.2 on, SoftIEC only reaches its partitions.** The `Default Path` setting is
+gone, and out of the box the only partition is `1 "RAMDISK"`, the `/Temp/` folder - `LOAD"$=P",11`
+lists them. `root` cannot leave a partition: a directory outside them fails with
+`71,DIRECTORY ERROR` exactly like a missing one, and `c64u` says which partition the drive
+serves. New partitions come from the Command Interface (`ADD_PARTITION`, target `$05` command
+`$20`) or from a partition list (`.ipr`) loaded in the Ultimate's file browser; the REST API has
+no call for them.
 
 ## Build and mount a disk image
 
