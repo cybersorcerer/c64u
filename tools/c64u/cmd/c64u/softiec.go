@@ -184,6 +184,10 @@ a CBM DOS "CD:" line, so the C64 must be sitting at the BASIC prompt — if a
 program is running the line goes nowhere. The drive is read back afterwards and
 this reports what it actually serves.
 
+Firmware 1.2 and newer confine SoftIEC to its partitions, and out of the box the
+only one is the RAM disk (/Temp/). A directory outside the partitions cannot be
+reached this way.
+
 Example:
   c64u drives softiec root /Usb0/development`,
 	Args: cobra.ExactArgs(1),

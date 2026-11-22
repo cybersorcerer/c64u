@@ -343,6 +343,19 @@ func TestSetRootFailsWhenNothingHappens(t *testing.T) {
 	}
 }
 
+// Firmware 1.2 and newer confine SoftIEC to its partitions, so a directory
+// outside them fails with the same error as a missing one. Say both.
+func TestSetRootExplainsPartitionLimit(t *testing.T) {
+	d := newFakeDevice()
+	d.path = "/Temp/"
+	d.lastError = "71,DIRECTORY ERROR,01,00"
+
+	_, err := SetRoot(d, 11, "/USB0/development")
+	if err == nil || !strings.Contains(err.Error(), "partition") || !strings.Contains(err.Error(), "/Temp/") {
+		t.Errorf("error = %v, want a hint at the partition and what it serves", err)
+	}
+}
+
 func TestSetRootReportsDriveError(t *testing.T) {
 	d := newFakeDevice()
 	d.lastError = "71,DIRECTORY ERROR,00,00"

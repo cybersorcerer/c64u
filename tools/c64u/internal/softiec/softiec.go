@@ -342,6 +342,11 @@ func awaitPath(d Device, path string, attempts int, interval time.Duration) (Sta
 			return st, nil
 		}
 	}
+	if strings.HasPrefix(last.LastError, "71") {
+		return last, fmt.Errorf("drive reported %s: the directory does not exist, or lies outside "+
+			"the SoftIEC partitions - on firmware 1.2 and newer SoftIEC only reaches its partitions, "+
+			"and this one serves %s", last.LastError, last.Path)
+	}
 	if last.LastError != "" && !strings.HasPrefix(last.LastError, "00") {
 		return last, fmt.Errorf("drive reported %s", last.LastError)
 	}
