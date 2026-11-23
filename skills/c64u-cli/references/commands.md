@@ -57,7 +57,7 @@ firmware menu and the machine code monitor read. Each argument is one event and 
 batch, applied atomically:
 
 ```sh
-c64u machine input tap:commodore+o             # opens the machine code monitor
+c64u machine input tap:commodore+o             # C= and O together, as one keystroke
 c64u machine input press:joy2:up+fire          # held until released
 c64u machine input press:left_shift tap:a release:left_shift
 c64u machine input release-all
