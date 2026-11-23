@@ -20,10 +20,10 @@ type padFrame struct {
 }
 
 var padDirections = map[ebiten.StandardGamepadButton]string{
-	ebiten.StandardGamepadButtonLeftTop:    "up",
-	ebiten.StandardGamepadButtonLeftBottom: "down",
-	ebiten.StandardGamepadButtonLeftLeft:   "left",
-	ebiten.StandardGamepadButtonLeftRight:  "right",
+	ebiten.StandardGamepadButtonLeftTop:     "up",
+	ebiten.StandardGamepadButtonLeftBottom:  "down",
+	ebiten.StandardGamepadButtonLeftLeft:    "left",
+	ebiten.StandardGamepadButtonLeftRight:   "right",
 	ebiten.StandardGamepadButtonRightBottom: "fire",  // A
 	ebiten.StandardGamepadButtonRightRight:  "fire2", // B
 }
