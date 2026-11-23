@@ -3,12 +3,15 @@ package main
 import (
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
+	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/api"
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/audio"
 	dbg "github.com/cybersorcerer/c64.nvim/tools/c64u/internal/debug"
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/debugger"
@@ -718,7 +721,7 @@ Examples:
 				apiClient.StreamsStop("video")
 				return nil
 			},
-			apiClient,
+			windowClient(apiClient),
 		); err != nil {
 			formatter.Error("Video stream error", []string{err.Error()})
 		}
@@ -781,4 +784,13 @@ func init() {
 	filesPackD64Cmd.Flags().String("name", "", "Disk name (max 16 chars, defaults to directory name)")
 	filesPackD64Cmd.Flags().String("id", "2A", "Disk ID (2 chars)")
 	filesPackD64Cmd.Flags().Int("tracks", 35, "Number of tracks (35 or 40)")
+}
+
+// windowClient is a copy of c that gives up after two seconds, so the video
+// window reports an unreachable device instead of freezing its input for the
+// general 30 second timeout.
+func windowClient(c *api.Client) *api.Client {
+	w := *c
+	w.HTTPClient = &http.Client{Timeout: 2 * time.Second}
+	return &w
 }
