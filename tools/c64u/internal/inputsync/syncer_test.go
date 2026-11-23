@@ -156,7 +156,7 @@ func TestSyncer_NoBacklog(t *testing.T) {
 	}
 }
 
-func TestSyncer_ErrorKeepsLastSentAndRetries(t *testing.T) {
+func TestSyncer_ErrorRetriesFromReleaseAll(t *testing.T) {
 	f := &fakeSender{fail: 1}
 	y := newSyncer(t, f)
 	y.Update(State{Keys: Set{"a": true}})
@@ -166,7 +166,7 @@ func TestSyncer_ErrorKeepsLastSentAndRetries(t *testing.T) {
 	eventually(t, "Err to clear", func() bool { return y.Err() == nil })
 
 	calls := f.snapshot()
-	if want := []api.InputEvent{kbd("press", "a")}; !reflect.DeepEqual(calls[1], want) {
+	if want := []api.InputEvent{{Kind: "release_all"}, kbd("press", "a")}; !reflect.DeepEqual(calls[1], want) {
 		t.Errorf("retry = %+v, want %+v", calls[1], want)
 	}
 	f.mu.Lock()
@@ -189,7 +189,7 @@ func TestSyncer_ErrorDropsTaps(t *testing.T) {
 	if len(calls) != 2 {
 		t.Fatalf("got %d calls, want 2: %+v", len(calls), calls)
 	}
-	if want := []api.InputEvent{kbd("press", "b")}; !reflect.DeepEqual(calls[1], want) {
+	if want := []api.InputEvent{{Kind: "release_all"}, kbd("press", "b")}; !reflect.DeepEqual(calls[1], want) {
 		t.Errorf("second call = %+v, want %+v (the tap must not be repeated)", calls[1], want)
 	}
 }
@@ -204,7 +204,7 @@ func TestSyncer_StateAfterOutageIsCurrent(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	calls := f.snapshot()
 	last := calls[len(calls)-1]
-	if want := []api.InputEvent{kbd("press", "b")}; !reflect.DeepEqual(last, want) {
+	if want := []api.InputEvent{{Kind: "release_all"}, kbd("press", "b")}; !reflect.DeepEqual(last, want) {
 		t.Errorf("after the outage got %+v, want %+v", last, want)
 	}
 }
@@ -295,5 +295,63 @@ func TestSyncer_CloseSendsReleaseAll(t *testing.T) {
 	y.Close(500 * time.Millisecond)
 	if took := time.Since(start); took > 900*time.Millisecond {
 		t.Errorf("Close took %v with a hanging device, want about 500ms", took)
+	}
+}
+
+// Review finding: a letter typed just before Space must arrive before it.
+func TestSyncer_TapThenPressKeepsOrder(t *testing.T) {
+	f := &fakeSender{delay: 50 * time.Millisecond}
+	y := newSyncer(t, f)
+	y.Update(State{Keys: Set{"x": true}}) // occupies the sender
+	time.Sleep(10 * time.Millisecond)
+	y.Update(State{Keys: Set{"x": true}, Taps: []Tap{{Kind: "keyboard", Inputs: []string{"o"}}}})
+	y.Update(State{Keys: Set{"x": true, "space": true}})
+	eventually(t, "two calls", func() bool { return len(f.snapshot()) >= 2 })
+	want := []api.InputEvent{kbd("tap", "o"), kbd("press", "space")}
+	if got := f.snapshot()[1]; !reflect.DeepEqual(got, want) {
+		t.Errorf("second call = %+v, want %+v", got, want)
+	}
+}
+
+// Review finding: a quick Left arrow is Shift plus cursor, and must stay one
+// keystroke rather than becoming Shift, then cursor right.
+func TestSyncer_ShortMultiKeyPressIsOneTap(t *testing.T) {
+	f := &fakeSender{delay: 50 * time.Millisecond}
+	y := newSyncer(t, f)
+	y.Update(State{Keys: Set{"x": true}})
+	time.Sleep(10 * time.Millisecond)
+	y.Update(State{Keys: Set{"x": true, "left_shift": true, "cursor_left_right": true}})
+	y.Update(State{Keys: Set{"x": true}})
+	eventually(t, "two calls", func() bool { return len(f.snapshot()) >= 2 })
+	want := []api.InputEvent{kbd("tap", "cursor_left_right", "left_shift")}
+	if got := f.snapshot()[1]; !reflect.DeepEqual(got, want) {
+		t.Errorf("second call = %+v, want %+v", got, want)
+	}
+}
+
+// Review finding: a press the device applied although the call failed must
+// not stay down when the key is released before the retry.
+func TestSyncer_ReleaseDuringOutageIsNotLost(t *testing.T) {
+	f := &fakeSender{fail: 1}
+	y := newSyncer(t, f)
+	y.Update(State{Keys: Set{"a": true}})
+	eventually(t, "the failed call", callCount(f))
+	y.Update(State{})
+	eventually(t, "the retry", func() bool { return len(f.snapshot()) >= 2 })
+	if want := []api.InputEvent{{Kind: "release_all"}}; !reflect.DeepEqual(f.snapshot()[1], want) {
+		t.Errorf("retry = %+v, want %+v", f.snapshot()[1], want)
+	}
+}
+
+// Review finding: Close must not let a press in flight land after release_all.
+func TestSyncer_CloseWaitsForInFlightCall(t *testing.T) {
+	f := &fakeSender{delay: 100 * time.Millisecond}
+	y := New(f)
+	y.Update(State{Keys: Set{"a": true}})
+	time.Sleep(10 * time.Millisecond)
+	y.Close(time.Second)
+	calls := f.snapshot()
+	if len(calls) != 2 || !reflect.DeepEqual(calls[1], []api.InputEvent{{Kind: "release_all"}}) {
+		t.Errorf("calls = %+v, want press a, then release_all last", calls)
 	}
 }

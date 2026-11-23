@@ -1,6 +1,7 @@
 package inputsync
 
 import (
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -20,25 +21,38 @@ var retryDelay = 250 * time.Millisecond
 // much of it, so a fast swipe cannot leave the pointer drifting for seconds.
 const maxMouseCarry = 254
 
-// Syncer sends the difference between the wanted state and the last state the
-// device acknowledged, one call at a time. Updates made while a call is in
-// flight are merged, so a slow device delays input but never queues it up.
+// entry is one change waiting to be sent. Entries of one Update share a
+// group, so the Shift and cursor of a Left arrow travel as one event.
+type entry struct {
+	kind       string
+	port       int
+	names      []string
+	transition string
+	group      int
+	held       bool // a held input's press, release or short press, not a typed tap
+}
+
+// Syncer sends what changed since the last call, in the order it changed, one
+// call at a time. Changes made while a call is in flight are merged: a press
+// and release in between becomes a tap, and repeated taps of a held input
+// collapse, so a slow device delays input but never queues it up.
 type Syncer struct {
 	sender Sender
 
 	mu          sync.Mutex
-	want        State // held sets plus taps and motion collected since the last send
-	seen        State // every held input since the last snapshot, to catch short presses
-	releaseAll  bool
+	want        State   // held sets plus motion collected since the last send
+	log         []entry // unsent changes in order
+	group       int
+	resync      bool // next call starts with release_all and the full state
 	err         error
 	unsupported bool
 
 	wake     chan struct{}
 	stop     chan struct{}
+	done     chan struct{}
 	stopOnce sync.Once
 
 	// owned by the run goroutine
-	lastSent   State
 	pauseMove  bool
 	retryAfter time.Time
 }
@@ -49,6 +63,7 @@ func New(s Sender) *Syncer {
 		sender: s,
 		wake:   make(chan struct{}, 1),
 		stop:   make(chan struct{}),
+		done:   make(chan struct{}),
 	}
 	go y.run()
 	return y
@@ -58,50 +73,79 @@ func New(s Sender) *Syncer {
 // the taps and motion of held to what is waiting to be sent.
 func (y *Syncer) Update(held State) {
 	y.mu.Lock()
+	y.group++
+	y.record("keyboard", 0, y.want.Keys, held.Keys)
+	for port := 1; port <= 2; port++ {
+		y.record("joystick", port, y.want.Joy[port], held.Joy[port])
+	}
+	y.record("mouse", 0, y.want.Buttons, held.Buttons)
+	for _, tap := range held.Taps {
+		y.group++
+		y.log = append(y.log, entry{kind: tap.Kind, port: tap.Port, names: tap.Inputs, transition: "tap", group: y.group})
+	}
+
 	y.want.Keys = held.Keys.Clone()
 	y.want.Buttons = held.Buttons.Clone()
 	for port := range held.Joy {
 		y.want.Joy[port] = held.Joy[port].Clone()
 	}
-	y.want.Taps = append(y.want.Taps, held.Taps...)
 	y.want.DX += held.DX
 	y.want.DY += held.DY
 	y.want.WheelV += held.WheelV
 	y.want.WheelH += held.WheelH
-
-	y.seen.Keys = union(y.seen.Keys, held.Keys)
-	y.seen.Buttons = union(y.seen.Buttons, held.Buttons)
-	for port := range held.Joy {
-		y.seen.Joy[port] = union(y.seen.Joy[port], held.Joy[port])
-	}
 	y.mu.Unlock()
 	y.signal()
+}
+
+// record logs the releases, then the presses, that turn from into to.
+func (y *Syncer) record(kind string, port int, from, to Set) {
+	for _, name := range missing(from, to) {
+		y.release(kind, port, name)
+	}
+	for _, name := range missing(to, from) {
+		y.log = append(y.log, entry{kind: kind, port: port, names: []string{name}, transition: "press", group: y.group, held: true})
+	}
+}
+
+// release turns an unsent press into a tap where it stands, so it keeps its
+// place among the other changes, or logs a release.
+func (y *Syncer) release(kind string, port int, name string) {
+	same := func(e entry) bool {
+		return e.held && e.kind == kind && e.port == port && len(e.names) == 1 && e.names[0] == name
+	}
+	for i := len(y.log) - 1; i >= 0; i-- {
+		if !same(y.log[i]) || y.log[i].transition != "press" {
+			continue
+		}
+		for j := 0; j < i; j++ {
+			if same(y.log[j]) && y.log[j].transition == "tap" {
+				// already tapped since the last call: drop the repeat
+				y.log = append(y.log[:i], y.log[i+1:]...)
+				return
+			}
+		}
+		y.log[i].transition = "tap"
+		return
+	}
+	y.log = append(y.log, entry{kind: kind, port: port, names: []string{name}, transition: "release", group: y.group, held: true})
 }
 
 // ReleaseAll drops everything held or waiting and has the device release
 // every injected input. Use it when the window loses focus.
 func (y *Syncer) ReleaseAll() {
 	y.mu.Lock()
-	y.want, y.seen = State{}, State{}
-	y.releaseAll = true
+	y.want, y.log, y.resync = State{}, nil, true
 	y.mu.Unlock()
 	y.signal()
 }
 
-// Close stops sending and releases every injected input, waiting at most
-// timeout for the device to answer.
+// Close stops sending and has the device release every injected input. The
+// release goes out after any call in flight, so nothing lands behind it; Close
+// waits at most timeout for that.
 func (y *Syncer) Close(timeout time.Duration) {
 	y.stopOnce.Do(func() { close(y.stop) })
-	if y.Unsupported() {
-		return
-	}
-	done := make(chan struct{})
-	go func() {
-		y.sender.MachineInput([]api.InputEvent{{Kind: "release_all"}}) //nolint:errcheck
-		close(done)
-	}()
 	select {
-	case <-done:
+	case <-y.done:
 	case <-time.After(timeout):
 	}
 }
@@ -138,6 +182,14 @@ func (y *Syncer) stopped() bool {
 }
 
 func (y *Syncer) run() {
+	defer close(y.done)
+	y.loop()
+	if !y.Unsupported() {
+		y.sender.MachineInput([]api.InputEvent{{Kind: "release_all"}}) //nolint:errcheck
+	}
+}
+
+func (y *Syncer) loop() {
 	for {
 		select {
 		case <-y.wake:
@@ -161,48 +213,33 @@ func (y *Syncer) run() {
 			if len(events) == 0 {
 				break
 			}
-			if !y.send(snap, events) {
-				if y.Unsupported() {
-					return
-				}
+			y.send(snap, events)
+			if y.Unsupported() {
+				return
 			}
 		}
 	}
 }
 
-// snapshot takes what is waiting and turns it into events. Taps and motion
-// leave the wanted state here; only a motion remainder stays behind.
+// snapshot takes the logged changes and the motion and turns them into events.
 func (y *Syncer) snapshot() (State, []api.InputEvent) {
 	y.mu.Lock()
 	defer y.mu.Unlock()
 
-	snap := State{
-		Keys:    y.want.Keys.Clone(),
-		Buttons: y.want.Buttons.Clone(),
-		WheelV:  y.want.WheelV,
-		WheelH:  y.want.WheelH,
+	var events []api.InputEvent
+	if y.resync {
+		// After a failure nobody knows what the device holds, so start over.
+		y.resync = false
+		held := State{Keys: y.want.Keys, Buttons: y.want.Buttons, Joy: y.want.Joy}
+		events = append([]api.InputEvent{{Kind: "release_all"}}, Diff(State{}, held)...)
+	} else {
+		events = eventsFrom(y.log)
 	}
-	for port := range y.want.Joy {
-		snap.Joy[port] = y.want.Joy[port].Clone()
-	}
+	y.log = nil
 
-	// A press that came and went since the last snapshot is a tap.
-	for _, name := range missing(y.seen.Keys, union(y.want.Keys, y.lastSent.Keys)) {
-		snap.Taps = append(snap.Taps, Tap{Kind: "keyboard", Inputs: []string{name}})
-	}
-	for port := 1; port <= 2; port++ {
-		for _, name := range missing(y.seen.Joy[port], union(y.want.Joy[port], y.lastSent.Joy[port])) {
-			snap.Taps = append(snap.Taps, Tap{Kind: "joystick", Port: port, Inputs: []string{name}})
-		}
-	}
-	for _, name := range missing(y.seen.Buttons, union(y.want.Buttons, y.lastSent.Buttons)) {
-		snap.Taps = append(snap.Taps, Tap{Kind: "mouse", Inputs: []string{name}})
-	}
-	snap.Taps = append(snap.Taps, y.want.Taps...)
-	y.want.Taps = nil
-
-	// One move per batch; the firmware sends a report every 20ms at most.
-	// A pause holds back the next motion there is, not merely the next batch.
+	var snap State
+	// One move per batch; the firmware sends a report every 20ms at most. A
+	// pause holds back the next motion there is, not merely the next batch.
 	if y.pauseMove && (y.want.DX != 0 || y.want.DY != 0) {
 		y.pauseMove = false
 	} else if !y.pauseMove {
@@ -210,29 +247,43 @@ func (y *Syncer) snapshot() (State, []api.InputEvent) {
 	}
 	y.want.DX = clamp(y.want.DX-snap.DX, maxMouseCarry)
 	y.want.DY = clamp(y.want.DY-snap.DY, maxMouseCarry)
+	snap.WheelV, snap.WheelH = y.want.WheelV, y.want.WheelH
 	y.want.WheelV, y.want.WheelH = 0, 0
 
-	y.seen = State{Keys: y.want.Keys.Clone(), Buttons: y.want.Buttons.Clone()}
-	for port := range y.want.Joy {
-		y.seen.Joy[port] = y.want.Joy[port].Clone()
-	}
-
-	var events []api.InputEvent
-	base := y.lastSent
-	if y.releaseAll {
-		y.releaseAll = false
-		events = append(events, api.InputEvent{Kind: "release_all"})
-		base = State{}
-		y.lastSent = State{}
-	}
-	return snap, append(events, Diff(base, snap)...)
+	return snap, append(events, Diff(State{}, snap)...)
 }
 
-// send delivers the events and reports whether all of them were accepted.
-func (y *Syncer) send(snap State, events []api.InputEvent) bool {
+// eventsFrom merges neighbouring entries of one group and transition into one
+// event, within the API's per-event limits.
+func eventsFrom(log []entry) []api.InputEvent {
+	limits := map[string]int{"keyboard": api.MaxKeyboardInputs, "joystick": api.MaxJoystickInputs, "mouse": api.MaxMouseInputs}
+	var events []api.InputEvent
+	for i := 0; i < len(log); {
+		e := log[i]
+		names := append([]string(nil), e.names...)
+		j := i + 1
+		for e.held && j < len(log) && log[j].held && log[j].group == e.group && log[j].kind == e.kind &&
+			log[j].port == e.port && log[j].transition == e.transition && len(names) < limits[e.kind] {
+			names = append(names, log[j].names...)
+			j++
+		}
+		sort.Strings(names)
+		events = append(events, api.InputEvent{Kind: e.kind, Port: e.port, Inputs: names, Transition: e.transition})
+		i = j
+	}
+	return events
+}
+
+// send delivers the events. A failure makes the next call start over from
+// release_all: a press the device applied before the error, or a batch that
+// got through before a later one failed, must not stay down.
+func (y *Syncer) send(snap State, events []api.InputEvent) {
 	var last *api.Response
 	var err error
 	for _, batch := range api.SplitInputBatches(events) {
+		if y.stopped() {
+			return // run sends release_all next
+		}
 		last, err = y.sender.MachineInput(batch)
 		if err == nil && len(last.Errors) > 0 {
 			err = sendError(last.Errors)
@@ -248,48 +299,24 @@ func (y *Syncer) send(snap State, events []api.InputEvent) bool {
 		y.err = err
 		if last != nil && last.StatusCode == 404 {
 			y.unsupported = true
-			return false
+			return
 		}
 		y.retryAfter = time.Now().Add(retryDelay)
 		// The taps are gone: a keystroke arriving late is worse than one lost.
-		// Motion is kept, capped, and presses since the snapshot start afresh.
+		y.resync, y.log = true, nil
 		y.want.DX = clamp(y.want.DX+snap.DX, maxMouseCarry)
 		y.want.DY = clamp(y.want.DY+snap.DY, maxMouseCarry)
-		y.seen = State{}
-		if len(events) > 0 && events[0].Kind == "release_all" {
-			y.releaseAll = true
-		}
-		return false
+		return
 	}
 
 	y.err = nil
-	y.lastSent = State{Keys: snap.Keys, Buttons: snap.Buttons, Joy: snap.Joy}
 	if m, ok := last.Data["mouse"].(map[string]interface{}); ok {
 		if pending, ok := m["pending"].(float64); ok && pending > 2 {
 			y.pauseMove = true
 		}
 	}
-	return true
 }
 
 type sendError []string
 
 func (e sendError) Error() string { return strings.Join(e, "; ") }
-
-func union(a, b Set) Set {
-	if len(a) == 0 && len(b) == 0 {
-		return nil
-	}
-	u := make(Set, len(a)+len(b))
-	for k, v := range a {
-		if v {
-			u[k] = true
-		}
-	}
-	for k, v := range b {
-		if v {
-			u[k] = true
-		}
-	}
-	return u
-}
