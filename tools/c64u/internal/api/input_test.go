@@ -192,3 +192,74 @@ func TestDecodeMenuScreen_Short(t *testing.T) {
 		t.Error("a truncated menu screen was accepted")
 	}
 }
+
+func TestInputEvent_MouseJSON(t *testing.T) {
+	cases := map[string]InputEvent{
+		`{"kind":"mouse","move":{"x":5,"y":-3}}`:                   {Kind: "mouse", Move: &MouseMove{X: 5, Y: -3}},
+		`{"kind":"mouse","move":{"x":0,"y":4}}`:                    {Kind: "mouse", Move: &MouseMove{Y: 4}},
+		`{"kind":"mouse","wheel":{"vertical":-1}}`:                 {Kind: "mouse", Wheel: &MouseWheel{Vertical: -1}},
+		`{"kind":"mouse","inputs":["left"],"transition":"press"}`: {Kind: "mouse", Inputs: []string{"left"}, Transition: "press"},
+		`{"kind":"release_all"}`:                                   {Kind: "release_all"},
+	}
+	for want, ev := range cases {
+		got, err := json.Marshal(ev)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != want {
+			t.Errorf("got %s, want %s", got, want)
+		}
+	}
+}
+
+func TestSplitInputBatches(t *testing.T) {
+	if got := SplitInputBatches(nil); got != nil {
+		t.Errorf("SplitInputBatches(nil) = %v, want nil", got)
+	}
+
+	short := make([]InputEvent, 130)
+	for i := range short {
+		short[i] = InputEvent{Kind: "release_all"}
+	}
+	var lens []int
+	for _, b := range SplitInputBatches(short) {
+		lens = append(lens, len(b))
+	}
+	if len(lens) != 3 || lens[0] != 64 || lens[1] != 64 || lens[2] != 2 {
+		t.Errorf("batch sizes = %v, want [64 64 2]", lens)
+	}
+
+	// Long names: 64 of these exceed the body limit, so the split has to
+	// measure bytes as well as count events.
+	long := make([]InputEvent, 64)
+	for i := range long {
+		long[i] = InputEvent{
+			Kind:       "keyboard",
+			Inputs:     []string{"left_shift", "right_shift", "commodore", "ctrl", "run_stop", "clr_home", "cursor_up_down", "cursor_left_right"},
+			Transition: []string{"press", "release"}[i%2],
+		}
+	}
+	batches := SplitInputBatches(long)
+	if len(batches) < 2 {
+		t.Fatalf("got %d batch(es), want the body limit to force at least 2", len(batches))
+	}
+	var flat []InputEvent
+	for _, b := range batches {
+		body, _ := json.Marshal(map[string]interface{}{"events": b})
+		if len(body) > MaxInputBodyBytes {
+			t.Errorf("batch serialises to %d bytes, over %d", len(body), MaxInputBodyBytes)
+		}
+		if len(b) > MaxInputEvents {
+			t.Errorf("batch has %d events, over %d", len(b), MaxInputEvents)
+		}
+		flat = append(flat, b...)
+	}
+	if len(flat) != len(long) {
+		t.Fatalf("got %d events back, want %d", len(flat), len(long))
+	}
+	for i := range flat {
+		if flat[i].Transition != long[i].Transition {
+			t.Fatalf("event %d out of order", i)
+		}
+	}
+}

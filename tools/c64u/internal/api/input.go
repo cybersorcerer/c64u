@@ -12,19 +12,66 @@ import (
 // with short names stay inside both, 64 events with long ones do not, so the
 // body has to be measured as well as counted.
 const (
-	maxInputEvents    = 64
-	maxInputBodyBytes = 4096
-	maxKeyboardInputs = 8
-	maxJoystickInputs = 7
+	MaxInputEvents    = 64
+	MaxInputBodyBytes = 4096
+	MaxKeyboardInputs = 8
+	MaxJoystickInputs = 7
+	MaxMouseInputs    = 3
 )
 
 // InputEvent is one entry of a machine:input batch. A release_all event carries
-// nothing else, which is why every other field is omitted when empty.
+// nothing else, which is why every other field is omitted when empty. Mouse
+// buttons use Inputs and Transition like keys do; Move and Wheel are the other
+// two mouse reports.
 type InputEvent struct {
-	Kind       string   `json:"kind"`
-	Port       int      `json:"port,omitempty"`
-	Inputs     []string `json:"inputs,omitempty"`
-	Transition string   `json:"transition,omitempty"`
+	Kind       string      `json:"kind"`
+	Port       int         `json:"port,omitempty"`
+	Inputs     []string    `json:"inputs,omitempty"`
+	Transition string      `json:"transition,omitempty"`
+	Move       *MouseMove  `json:"move,omitempty"`
+	Wheel      *MouseWheel `json:"wheel,omitempty"`
+}
+
+// MouseMove is one relative mouse report, -127..127 on each axis; positive is
+// right on x and down on y.
+type MouseMove struct {
+	X int `json:"x"`
+	Y int `json:"y"`
+}
+
+// MouseWheel turns the wheels by whole detents, -64..64; positive vertical
+// turns away from the user, positive horizontal to the right.
+type MouseWheel struct {
+	Vertical   int `json:"vertical,omitempty"`
+	Horizontal int `json:"horizontal,omitempty"`
+}
+
+// SplitInputBatches cuts events into batches the device accepts, keeping their
+// order: at most MaxInputEvents each, and each serialising to at most
+// MaxInputBodyBytes as a request body.
+func SplitInputBatches(events []InputEvent) [][]InputEvent {
+	// {"events":[]} plus one comma per event after the first
+	const overhead = len(`{"events":[]}`)
+	var batches [][]InputEvent
+	var cur []InputEvent
+	size := overhead
+	for _, ev := range events {
+		encoded, _ := json.Marshal(ev)
+		add := len(encoded)
+		if len(cur) > 0 {
+			add++
+		}
+		if len(cur) == MaxInputEvents || (len(cur) > 0 && size+add > MaxInputBodyBytes) {
+			batches = append(batches, cur)
+			cur, size, add = nil, overhead, len(encoded)
+		}
+		cur = append(cur, ev)
+		size += add
+	}
+	if len(cur) > 0 {
+		batches = append(batches, cur)
+	}
+	return batches
 }
 
 // The names the firmware accepts. Validating here rather than letting the
@@ -97,14 +144,14 @@ func joystickEvent(port int, names []string, transition string) (InputEvent, err
 	if port != 1 && port != 2 {
 		return InputEvent{}, fmt.Errorf("joystick port %d does not exist: use joy1 or joy2", port)
 	}
-	if err := checkInputs(names, joystickInputs, maxJoystickInputs, "joystick"); err != nil {
+	if err := checkInputs(names, joystickInputs, MaxJoystickInputs, "joystick"); err != nil {
 		return InputEvent{}, err
 	}
 	return InputEvent{Kind: "joystick", Port: port, Inputs: names, Transition: transition}, nil
 }
 
 func keyboardEvent(names []string, transition string) (InputEvent, error) {
-	if err := checkInputs(names, keyboardInputs, maxKeyboardInputs, "keyboard"); err != nil {
+	if err := checkInputs(names, keyboardInputs, MaxKeyboardInputs, "keyboard"); err != nil {
 		return InputEvent{}, err
 	}
 	// restore is wired to the NMI rather than the key matrix, so the firmware
@@ -145,8 +192,8 @@ func sortedKeys(m map[string]bool) []string {
 
 // MachineInput applies a batch of keyboard, joystick and release-all events.
 func (c *Client) MachineInput(events []InputEvent) (*Response, error) {
-	if len(events) < 1 || len(events) > maxInputEvents {
-		return nil, fmt.Errorf("a batch takes 1 to %d events, got %d", maxInputEvents, len(events))
+	if len(events) < 1 || len(events) > MaxInputEvents {
+		return nil, fmt.Errorf("a batch takes 1 to %d events, got %d", MaxInputEvents, len(events))
 	}
 
 	body := map[string]interface{}{"events": events}
@@ -157,9 +204,9 @@ func (c *Client) MachineInput(events []InputEvent) (*Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(encoded) > maxInputBodyBytes {
+	if len(encoded) > MaxInputBodyBytes {
 		return nil, fmt.Errorf("the batch serialises to %d bytes, over the %d byte limit: send fewer events per call",
-			len(encoded), maxInputBodyBytes)
+			len(encoded), MaxInputBodyBytes)
 	}
 
 	return c.PostJSON("/v1/machine:input", body)
