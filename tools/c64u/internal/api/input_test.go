@@ -195,11 +195,11 @@ func TestDecodeMenuScreen_Short(t *testing.T) {
 
 func TestInputEvent_MouseJSON(t *testing.T) {
 	cases := map[string]InputEvent{
-		`{"kind":"mouse","move":{"x":5,"y":-3}}`:                   {Kind: "mouse", Move: &MouseMove{X: 5, Y: -3}},
-		`{"kind":"mouse","move":{"x":0,"y":4}}`:                    {Kind: "mouse", Move: &MouseMove{Y: 4}},
-		`{"kind":"mouse","wheel":{"vertical":-1}}`:                 {Kind: "mouse", Wheel: &MouseWheel{Vertical: -1}},
+		`{"kind":"mouse","move":{"x":5,"y":-3}}`:                  {Kind: "mouse", Move: &MouseMove{X: 5, Y: -3}},
+		`{"kind":"mouse","move":{"x":0,"y":4}}`:                   {Kind: "mouse", Move: &MouseMove{Y: 4}},
+		`{"kind":"mouse","wheel":{"vertical":-1}}`:                {Kind: "mouse", Wheel: &MouseWheel{Vertical: -1}},
 		`{"kind":"mouse","inputs":["left"],"transition":"press"}`: {Kind: "mouse", Inputs: []string{"left"}, Transition: "press"},
-		`{"kind":"release_all"}`:                                   {Kind: "release_all"},
+		`{"kind":"release_all"}`:                                  {Kind: "release_all"},
 	}
 	for want, ev := range cases {
 		got, err := json.Marshal(ev)
