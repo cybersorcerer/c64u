@@ -7,7 +7,7 @@ A command-line interface for controlling the [Commodore C64 Ultimate](https://co
 - **Complete REST API Coverage**: All C64 Ultimate API endpoints supported
 - **Interactive TUI**: Full-screen terminal UI with a dual-pane file browser, drive, machine and config views
 - **SoftIEC Control**: Load from the Ultimate filesystem at the BASIC prompt — no disk image needed; enable the DOS emulation drive, set its device number, and point it at a directory
-- **Live Video Stream**: Display C64 video output in a native window with keyboard forwarding — type into BASIC, load and run programs from your own keyboard (BASIC/KERNAL input only; games that poll the keyboard matrix directly are not supported)
+- **Live Video Stream**: Display C64 video output in a native window that is also the C64's keyboard, joystick and mouse — type into BASIC, play games with a gamepad, use GEOS with the mouse, drive the Ultimate menu and its machine code monitor (firmware 1.2.0 / 3.15; older firmware falls back to the keyboard buffer)
 - **Live Audio Stream**: Play back C64 audio in real time
 - **FTP Integration**: Access the C64 Ultimate filesystem
 - **Flexible Configuration**: Config file, environment variables, or CLI flags
@@ -331,23 +331,52 @@ one, where they report that they are unavailable. `debug` is plain output and wo
 
 **Video Stream**: Opens a native 768×544 window (2× scaled) with accurate VIC colors. PAL (384×272) and NTSC (384×240) supported.
 
-While the video window is focused, keystrokes are forwarded to the C64 keyboard buffer via DMA — the window acts as a keyboard input device for the real hardware.
+While the video window has focus it is the C64's keyboard, joystick and mouse. Keys are held as
+long as you hold them, so games, the Ultimate menu and its machine code monitor work as well as
+BASIC. This uses the REST API's `machine:input`, which came with firmware 1.2.0 on the C64
+Ultimate and 3.15 on the other Ultimates. On older firmware the window falls back to typing into
+the KERNAL keyboard buffer, which only BASIC and other buffer readers see, and says so in its
+title.
 
-> **Important — BASIC only, not games:** Keyboard forwarding works only for input that the C64 KERNAL/BASIC reads from the keyboard buffer at `$0277` (the BASIC prompt, `INPUT`, `GET`, typing/loading programs). It writes to RAM via DMA. Most **games and demos poll the keyboard matrix hardware directly** (CIA registers `$DC00`/`$DC01`) — for example a "press SPACE to start" title screen. DMA cannot reach those I/O registers, so such keypresses have no effect. This is a hardware limitation of the Ultimate REST API, not a bug.
+**Keyboard** — two modes, switched with Mod+K:
 
-| Key                          | C64 action                                          |
-| ---------------------------- | --------------------------------------------------- |
-| Letters, digits, punctuation | Typed character (layout-aware, converted to PETSCII)|
-| Return                       | Return                                              |
-| Backspace / Delete           | DEL                                                 |
-| F1–F8                        | F1–F8                                               |
-| Cursor keys                  | Cursor Up / Down / Left / Right                     |
-| Left Alt + Shift             | CBM+Shift (toggle graphics/text charset)            |
-| Escape                       | — (see below)                                       |
+- **character** (default): what your keyboard layout types arrives on the C64, whatever the
+  layout — `"` is Shift+2 on the C64, `@` is typed with AltGr / right Option as usual. Characters
+  the C64 lacks (ä, ß, €, …) are ignored.
+- **position**: the C64 key in the same place as yours, for games that read particular keys.
 
-**Escape key — hardware limitation:** RUN/STOP on a real C64 works by the BASIC ROM reading the CIA1 hardware register at `$DC01` directly — it does not go through the keyboard buffer. DMA writes (which the Ultimate API uses) only reach RAM, not I/O-mapped CIA registers. Therefore RUN/STOP cannot be injected via the API while a program is running.
+| Key                              | C64                                  |
+| -------------------------------- | ------------------------------------ |
+| Left Alt / Option                | C= (Commodore)                       |
+| Right Alt / Option (AltGr)       | your layout's symbols (@ [ ] …)      |
+| Ctrl, Tab                        | CTRL                                 |
+| Esc                              | RUN/STOP                             |
+| Page Up                          | RESTORE                              |
+| Return, Backspace, Home          | RETURN, INST/DEL, CLR/HOME           |
+| Cursor keys                      | cursor keys (up and left with Shift) |
+| F1–F8                            | F1–F8 (even keys with Shift)         |
 
-As a workaround, pressing **Escape once** arms a reset confirmation — the window title changes to signal this state. Pressing **Escape a second time within 3 seconds** sends `machine:reset` to the C64. Any other key or waiting cancels the confirmation.
+**Joystick** — gamepads in the standard layout (an Xbox controller, for example) are joysticks:
+the first on port 2, the second on port 1. D-pad or left stick move, A is fire, B is fire 2, X is
+Space and Menu is RUN/STOP. Mod+J turns the keyboard into a joystick too (arrows, left Ctrl =
+fire). Mod+P swaps the ports.
+
+**Mouse** — Mod+M captures the pointer; motion, buttons and wheel then go to the C64 mouse on
+port 1 (as in GEOS). While it is captured a joystick on port 1 is ignored.
+
+**Hotkeys** — the modifier is Cmd on macOS and Ctrl+Shift on Windows and Linux. Letters follow
+your layout's labels.
+
+| Hotkey | Action                                                                  |
+| ------ | ----------------------------------------------------------------------- |
+| Mod+K  | switch keyboard mode                                                    |
+| Mod+J  | keyboard joystick on/off                                                |
+| Mod+P  | swap joystick ports                                                     |
+| Mod+M  | capture or release the mouse                                            |
+| Mod+U  | open or close the Ultimate menu (F1 › Developer › Machine Code Monitor) |
+| Mod+R  | reset the C64, pressed twice within a second                            |
+
+Losing focus or closing the window releases everything the window was holding.
 
 **Audio Stream**: Plays 48 kHz stereo 16-bit PCM from the C64 audio mixer with automatic gap compensation.
 

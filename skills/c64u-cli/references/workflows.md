@@ -149,6 +149,14 @@ kill %1
 Handy when a check fails and you cannot tell whether the program crashed, hung, or simply did
 something different from what you expected.
 
+## Open the machine code monitor
+
+The firmware's monitor (hex, disassembly, inline assembler, fill, transfer, hunt) lives in the
+Ultimate menu. With the video window focused: Mod+U, then F1, the arrows down to Developer,
+right, Return on Machine Code Monitor. Esc steps back out one layer at a time. Without the
+window, the same works with `c64u machine menu-button`, `c64u machine input tap:f1 ...` and
+`c64u machine menu-screen` to read what it shows.
+
 ## Check the REU before relying on it
 
 ```sh

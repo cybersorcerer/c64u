@@ -127,7 +127,16 @@ c64u config export config-backup.json
 Most commands emit snake_case (`core_version`, `bus_id`). `c64u fs ls --json` emits PascalCase
 (`Name`, `Size`, `IsDir`, `Type`). Scripts touching both need to handle both.
 
-## The video window forwards keystrokes
+## The video window is a keyboard, joystick and mouse
 
-While `c64u streams listen video` has focus, keys are forwarded to the C64 keyboard buffer by
-the same DMA mechanism as `sendkey` - so the same BASIC-only limitation applies there.
+While `c64u streams listen video` has focus, keys, gamepads and the captured mouse reach the C64
+through `machine:input`, so games and the Ultimate menu see them, not only BASIC. That needs
+firmware 1.2.0 (C64 Ultimate) or 3.15; on older firmware the window falls back to the keyboard
+buffer, with the same BASIC-only limitation as `sendkey`.
+
+- The mouse is on control port 1 only; while it is captured a joystick on port 1 is ignored.
+- `C=+O`, the monitor's hotkey, does not arrive through `machine:input` - not from a running
+  program and not inside the menu. Open the monitor through the menu instead: Mod+U in the window
+  (or `c64u machine menu-button`), then F1 › Developer › Machine Code Monitor.
+- The device takes about 25 ms per input call on a LAN. The window sends what changed since the
+  last call, so input is delayed by about one call but never queues up.

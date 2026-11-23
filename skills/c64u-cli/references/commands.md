@@ -214,7 +214,7 @@ c64u config set "C64 and Cartridge Settings" "RAM Expansion Unit" Enabled
 ## Streams (U64 only)
 
 ```
-c64u streams listen video      # native window, 768x544, keystrokes forwarded to the C64
+c64u streams listen video      # native window, 768x544; keyboard, gamepads and mouse reach the C64
 c64u streams listen audio      # playback through local speakers
 c64u streams listen debug      # raw debug stream to stdout, --raw to pipe
 c64u streams start <stream> <ip>
@@ -227,6 +227,12 @@ almost always. `start`/`stop` are the manual halves for cases where the receiver
 Ports: video 11000, audio 11001, debug 11002.
 
 `video` and `audio` need a window and are not in the Linux ARM64 binary; see `limits.md`.
+
+In the video window, keys are held as long as you hold them (firmware 1.2.0 / 3.15). Hotkeys,
+with Cmd on macOS and Ctrl+Shift elsewhere: Mod+K keyboard mode (character / position), Mod+J
+keyboard joystick, Mod+P swap ports, Mod+M capture the mouse, Mod+U Ultimate menu, Mod+R reset
+(twice). Left Alt is C=, right Alt (AltGr) types the layout's symbols, Esc is RUN/STOP, Page Up
+is RESTORE. The command prints the list when it starts.
 
 ## CLI configuration and TUI
 
