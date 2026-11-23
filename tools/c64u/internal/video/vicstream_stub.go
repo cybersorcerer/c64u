@@ -9,6 +9,6 @@ import (
 
 const VideoPort = 11000
 
-func Listen(localIP string, startFn func(ip string) error, stopFn func() error, sendFn func([]byte) error, resetFn func() error) error {
+func Listen(localIP string, startFn func(ip string) error, stopFn func() error, dev Device) error {
 	return fmt.Errorf("video stream is not available on %s builds", runtime.GOOS)
 }

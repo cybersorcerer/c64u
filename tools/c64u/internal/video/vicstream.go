@@ -8,9 +8,11 @@ import (
 	"image"
 	"image/color"
 	"net"
+	"runtime"
 	"sync"
+	"time"
 
-	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/petscii"
+	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/inputsync"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
@@ -45,6 +47,7 @@ var vicPalette = [16]color.RGBA{
 
 // keyMap maps Ebiten keys to raw PETSCII bytes for keys that cannot be
 // expressed as printable ASCII (cursor keys, function keys, control keys).
+// Only the keyboard buffer path for firmware without machine:input uses it.
 var keyMap = []struct {
 	key     ebiten.Key
 	petscii byte
@@ -79,89 +82,97 @@ var cbmMap = []struct {
 	{ebiten.KeyShiftRight, 0x08},
 }
 
-const escConfirmFrames = 60 * 3 // 3 seconds at 60 TPS
-
 // Game implements ebiten.Game and holds the framebuffer
 type Game struct {
-	mu            sync.Mutex
-	img           *image.RGBA
-	tex           *ebiten.Image
-	dirty         bool
-	stopFn        func() error
-	resetFn       func() error
-	conn          *net.UDPConn
-	sendFn        func([]byte) error
-	escPending    bool
-	escFramesLeft int
+	mu        sync.Mutex
+	img       *image.RGBA
+	tex       *ebiten.Image
+	dirty     bool
+	stopFn    func() error
+	conn      *net.UDPConn
+	ctrl      *controller
+	captured  bool
+	lastTitle string
 }
 
-func newGame(conn *net.UDPConn, stopFn func() error, sendFn func([]byte) error, resetFn func() error) *Game {
+func newGame(conn *net.UDPConn, stopFn func() error, ctrl *controller) *Game {
 	return &Game{
-		img:     image.NewRGBA(image.Rect(0, 0, PixelsPerLine, FrameLines)),
-		tex:     ebiten.NewImage(PixelsPerLine, FrameLines),
-		conn:    conn,
-		stopFn:  stopFn,
-		sendFn:  sendFn,
-		resetFn: resetFn,
+		img:    image.NewRGBA(image.Rect(0, 0, PixelsPerLine, FrameLines)),
+		tex:    ebiten.NewImage(PixelsPerLine, FrameLines),
+		conn:   conn,
+		stopFn: stopFn,
+		ctrl:   ctrl,
 	}
 }
 
 func (g *Game) Update() error {
 	if ebiten.IsWindowBeingClosed() {
+		g.ctrl.close()
 		g.conn.Close()
-		g.stopFn()
+		g.stopFn() //nolint:errcheck
 		return ebiten.Termination
 	}
 
-	if g.escPending {
-		g.escFramesLeft--
-		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
-			g.escPending = false
-			if g.resetFn != nil {
-				g.resetFn() //nolint:errcheck
-			}
-			return nil
-		}
-		// Any other key cancels reset-confirm and forwards the key normally
-		if g.escFramesLeft <= 0 {
-			g.escPending = false
-		}
-	}
+	g.ctrl.tick(readHost())
 
-	if g.sendFn != nil && !g.escPending {
-		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
-			g.escPending = true
-			g.escFramesLeft = escConfirmFrames
-			return nil
-		}
-
-		cbm := ebiten.IsKeyPressed(ebiten.KeyAlt) || ebiten.IsKeyPressed(ebiten.KeyAltLeft) || ebiten.IsKeyPressed(ebiten.KeyAltRight)
-
-		if cbm {
-			for _, m := range cbmMap {
-				if inpututil.IsKeyJustPressed(m.key) {
-					g.sendFn([]byte{m.petscii}) //nolint:errcheck
-				}
-			}
+	if want := g.ctrl.captureMouse(); want != g.captured {
+		g.captured = want
+		if want {
+			ebiten.SetCursorMode(ebiten.CursorModeCaptured)
 		} else {
-			for _, m := range keyMap {
-				if inpututil.IsKeyJustPressed(m.key) {
-					g.sendFn([]byte{m.petscii}) //nolint:errcheck
-				}
-			}
-			// Printable chars via AppendInputChars — layout-aware, then PETSCII-encoded
-			chars := ebiten.AppendInputChars(nil)
-			for _, r := range chars {
-				if r < 0x80 {
-					if encoded, err := petscii.Encode(string(r)); err == nil {
-						g.sendFn(encoded) //nolint:errcheck
-					}
-				}
-			}
+			ebiten.SetCursorMode(ebiten.CursorModeVisible)
 		}
 	}
-
 	return nil
+}
+
+// readHost collects one frame of keyboard, gamepad and mouse input.
+func readHost() tickInput {
+	in := tickInput{
+		Focused: ebiten.IsFocused(),
+		Now:     time.Now(),
+		Frame: hostFrame{
+			Pressed:     map[ebiten.Key]bool{},
+			JustPressed: map[ebiten.Key]bool{},
+			Chars:       ebiten.AppendInputChars(nil),
+		},
+		Pads:         map[ebiten.GamepadID]padFrame{},
+		MouseButtons: inputsync.Set{},
+	}
+	for _, k := range inpututil.AppendPressedKeys(nil) {
+		in.Frame.Pressed[k] = true
+	}
+	for _, k := range inpututil.AppendJustPressedKeys(nil) {
+		in.Frame.JustPressed[k] = true
+	}
+
+	for _, id := range ebiten.AppendGamepadIDs(nil) {
+		if !ebiten.IsStandardGamepadLayoutAvailable(id) {
+			continue
+		}
+		p := padFrame{
+			Buttons: map[ebiten.StandardGamepadButton]bool{},
+			AxisX:   ebiten.StandardGamepadAxisValue(id, ebiten.StandardGamepadAxisLeftStickHorizontal),
+			AxisY:   ebiten.StandardGamepadAxisValue(id, ebiten.StandardGamepadAxisLeftStickVertical),
+		}
+		for b := ebiten.StandardGamepadButton(0); b <= ebiten.StandardGamepadButtonMax; b++ {
+			if ebiten.IsStandardGamepadButtonPressed(id, b) {
+				p.Buttons[b] = true
+			}
+		}
+		in.Pads[id] = p
+	}
+
+	in.CursorX, in.CursorY = ebiten.CursorPosition()
+	in.WheelX, in.WheelY = ebiten.Wheel()
+	for button, name := range map[ebiten.MouseButton]string{
+		ebiten.MouseButtonLeft: "left", ebiten.MouseButtonRight: "right", ebiten.MouseButtonMiddle: "middle",
+	} {
+		if ebiten.IsMouseButtonPressed(button) {
+			in.MouseButtons[name] = true
+		}
+	}
+	return in
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
@@ -177,10 +188,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	op.GeoM.Scale(windowScale, windowScale)
 	screen.DrawImage(g.tex, op)
 
-	if g.escPending {
-		ebiten.SetWindowTitle("C64 Ultimate — Press ESC again to RESET  |  Any other key cancels")
-	} else {
-		ebiten.SetWindowTitle("C64 Ultimate — Video Stream")
+	if title := g.ctrl.title(); title != g.lastTitle {
+		g.lastTitle = title
+		ebiten.SetWindowTitle(title)
 	}
 }
 
@@ -253,8 +263,8 @@ func (g *Game) receiveLoop() {
 }
 
 // Listen starts the video stream, opens a native window and renders frames.
-// sendFn is called for each keystroke; resetFn is called on double-Escape.
-func Listen(localIP string, startFn func(ip string) error, stopFn func() error, sendFn func([]byte) error, resetFn func() error) error {
+// Keyboard, gamepads and mouse reach the C64 through dev.
+func Listen(localIP string, startFn func(ip string) error, stopFn func() error, dev Device) error {
 	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", VideoPort))
 	if err != nil {
 		return fmt.Errorf("resolve UDP: %w", err)
@@ -269,8 +279,10 @@ func Listen(localIP string, startFn func(ip string) error, stopFn func() error, 
 		return err
 	}
 
-	g := newGame(conn, stopFn, sendFn, resetFn)
+	ctrl := newController(inputsync.New(dev), dev, runtime.GOOS, ebiten.KeyName)
+	g := newGame(conn, stopFn, ctrl)
 	go g.receiveLoop()
+	fmt.Println(hotkeyHelp(runtime.GOOS))
 
 	ebiten.SetWindowSize(PixelsPerLine*windowScale, FrameLines*windowScale)
 	ebiten.SetWindowTitle("C64 Ultimate — Video Stream")

@@ -659,8 +659,30 @@ var streamsListenVideoCmd = &cobra.Command{
 
 The local IP address is detected automatically. Use --ip to override.
 The window is 768x544 (2x scale) with true VIC colors; PAL and NTSC are both
-supported. While it has focus, keystrokes are forwarded to the C64 keyboard
-buffer, so you can type into BASIC. Press Ctrl+C to stop.
+supported. Press Ctrl+C to stop.
+
+While the window has focus it is the C64's keyboard, joystick and mouse. Keys
+are held as long as you hold them, so games, the Ultimate menu and its machine
+code monitor work as well as BASIC. This needs machine:input, which came with
+firmware 1.2.0 on the C64 Ultimate and 3.15 on the other Ultimates; on older
+firmware the window falls back to typing into the KERNAL keyboard buffer.
+
+Keyboard modes:
+  character  what your layout types arrives, " is Shift+2 on the C64 (default)
+  position   the C64 key in the same place as yours, for games
+
+Left Alt/Option is the C= key, right Alt/Option (AltGr) types your layout's
+symbols, Esc is RUN/STOP and Page Up is RESTORE. Gamepads in the standard
+layout (an Xbox controller, for example) are joysticks: the first on port 2,
+the second on port 1. The mouse works on port 1 while it is captured.
+
+Hotkeys (Cmd on macOS, Ctrl+Shift on Windows and Linux):
+  Mod+K  switch keyboard mode
+  Mod+J  keyboard joystick on/off (arrows, left Ctrl = fire)
+  Mod+P  swap joystick ports
+  Mod+M  capture or release the mouse
+  Mod+U  open or close the Ultimate menu (F1 > Developer > Machine Code Monitor)
+  Mod+R  reset the C64, pressed twice within a second
 
 Examples:
   c64u streams listen video
@@ -680,10 +702,6 @@ Examples:
 			listenIP = detected
 		}
 
-		sendFn := func(data []byte) error {
-			return apiClient.SendKeyBytes(data, 0)
-		}
-
 		if err := video.Listen(
 			listenIP,
 			func(ip string) error {
@@ -700,11 +718,7 @@ Examples:
 				apiClient.StreamsStop("video")
 				return nil
 			},
-			sendFn,
-			func() error {
-				_, err := apiClient.MachineReset()
-				return err
-			},
+			apiClient,
 		); err != nil {
 			formatter.Error("Video stream error", []string{err.Error()})
 		}
