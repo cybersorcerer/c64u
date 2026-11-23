@@ -48,7 +48,10 @@ func detectHotkey(f hostFrame, keyName func(ebiten.Key) string, goos string) (ho
 	if goos == "darwin" {
 		held = f.Pressed[ebiten.KeyMetaLeft] || f.Pressed[ebiten.KeyMetaRight]
 	} else {
-		held = (f.Pressed[ebiten.KeyControlLeft] || f.Pressed[ebiten.KeyControlRight]) &&
+		// Windows reports a fake left Ctrl with AltGr; AltGr+Shift types a
+		// character and is no hotkey.
+		fakeCtrl := goos == "windows" && f.Pressed[ebiten.KeyAltRight]
+		held = !fakeCtrl && (f.Pressed[ebiten.KeyControlLeft] || f.Pressed[ebiten.KeyControlRight]) &&
 			(f.Pressed[ebiten.KeyShiftLeft] || f.Pressed[ebiten.KeyShiftRight])
 	}
 	if !held {

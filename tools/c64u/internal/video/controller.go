@@ -59,6 +59,10 @@ type controller struct {
 	resetArmed time.Time
 	now        time.Time
 	pads       []int // ports of the connected pads, for the title
+	// swallowed are keys that were down while the hotkey modifier was; they
+	// stay away from the C64 until released, so letting go of the modifier
+	// first does not type the hotkey's letter.
+	swallowed map[ebiten.Key]bool
 
 	buffer    chan []byte // keyboard buffer writes on old firmware
 	closeOnce sync.Once
@@ -66,12 +70,13 @@ type controller struct {
 
 func newController(s syncer, dev Device, goos string, keyName func(ebiten.Key) string) *controller {
 	c := &controller{
-		sync:    s,
-		dev:     dev,
-		goos:    goos,
-		keyName: keyName,
-		focused: true,
-		buffer:  make(chan []byte, 64),
+		sync:      s,
+		dev:       dev,
+		goos:      goos,
+		keyName:   keyName,
+		focused:   true,
+		buffer:    make(chan []byte, 64),
+		swallowed: map[ebiten.Key]bool{},
 	}
 	go func() {
 		for b := range c.buffer {
@@ -95,17 +100,11 @@ func (c *controller) tick(in tickInput) {
 
 	action, mod := detectHotkey(in.Frame, c.keyName, c.goos)
 	c.hotkey(action)
+	frame := c.unswallowed(in.Frame, mod)
 
 	if c.sync.Unsupported() {
-		if !mod {
-			c.bufferKeys(in.Frame)
-		}
+		c.bufferKeys(frame)
 		return
-	}
-
-	frame := in.Frame
-	if mod {
-		frame = hostFrame{}
 	}
 	mouseHeld := c.mouse && len(in.MouseButtons) > 0
 	keys, taps := translateKeys(frame, keyOptions{
@@ -139,6 +138,39 @@ func (c *controller) tick(in tickInput) {
 		st.Joy[1] = inputsync.Set{}
 	}
 	c.sync.Update(st)
+}
+
+// unswallowed returns the frame without the keys that belong to a hotkey.
+func (c *controller) unswallowed(f hostFrame, mod bool) hostFrame {
+	if mod {
+		for k, down := range f.Pressed {
+			if down {
+				c.swallowed[k] = true
+			}
+		}
+	}
+	for k := range c.swallowed {
+		if !f.Pressed[k] {
+			delete(c.swallowed, k)
+		}
+	}
+	if len(c.swallowed) == 0 {
+		return f
+	}
+	out := hostFrame{Pressed: map[ebiten.Key]bool{}, JustPressed: map[ebiten.Key]bool{}}
+	for k, down := range f.Pressed {
+		if down && !c.swallowed[k] {
+			out.Pressed[k] = true
+		}
+	}
+	for k, down := range f.JustPressed {
+		if down && !c.swallowed[k] {
+			out.JustPressed[k] = true
+		}
+	}
+	// Characters cannot be told apart by key: drop them while a swallowed
+	// key is still down, or its auto-repeat would type it.
+	return out
 }
 
 func (c *controller) hotkey(action hotkeyAction) {

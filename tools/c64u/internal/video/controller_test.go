@@ -232,3 +232,19 @@ func TestController_CloseSendsRelease(t *testing.T) {
 		t.Errorf("Close timeout = %v, want 500ms", s.closed)
 	}
 }
+
+// Review finding: keys of a hotkey must not reach the C64 when the modifier
+// is let go first.
+func TestController_HotkeyKeysNotLeaked(t *testing.T) {
+	c, s, _ := newTestController(t)
+	c.tick(cmd(ebiten.KeyK, t0)) // position mode, so a held K would be sent
+	c.tick(tickInput{Focused: true, Now: t0, Frame: hostFrame{Pressed: pressed(ebiten.KeyK), Chars: []rune{'k'}}})
+	if got := s.last(); len(got.Keys) != 0 || len(got.Taps) != 0 {
+		t.Errorf("sent %v / %v after Cmd was let go first", got.Keys, got.Taps)
+	}
+	c.tick(tickInput{Focused: true, Now: t0})
+	c.tick(tickInput{Focused: true, Now: t0, Frame: hostFrame{Pressed: pressed(ebiten.KeyK)}})
+	if got := s.last(); !got.Keys["k"] {
+		t.Errorf("K pressed again after its release was not sent: %v", got.Keys)
+	}
+}

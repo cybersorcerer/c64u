@@ -61,3 +61,12 @@ func TestHotkey_OtherOSCtrlShift(t *testing.T) {
 		t.Errorf("Windows key on Windows: got %v,%v, want no hotkey", a, mod)
 	}
 }
+
+// Review finding: Windows reports a fake left Ctrl with AltGr, so AltGr+Shift
+// must not count as the Ctrl+Shift modifier.
+func TestHotkey_WindowsAltGrShiftIsNoModifier(t *testing.T) {
+	f := hostFrame{Pressed: pressed(ebiten.KeyAltRight, ebiten.KeyControlLeft, ebiten.KeyShiftLeft, ebiten.KeyQ), JustPressed: pressed(ebiten.KeyQ)}
+	if a, mod := detectHotkey(f, usNames, "windows"); a != hkNone || mod {
+		t.Errorf("got %v,%v, want hkNone,false", a, mod)
+	}
+}
