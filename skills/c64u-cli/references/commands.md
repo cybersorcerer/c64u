@@ -158,7 +158,20 @@ c64u fs rm <path>
 c64u fs mkdir <path>
 c64u fs upload   <local-path> <remote-path>
 c64u fs download <remote-path> <local-path>
+
+c64u fs servers                                # remote FTP servers mounted under /ftp/<alias>/
+c64u fs servers add <alias> <host> [--server-port N] [--user U] [--server-password P] [--folder /]
+c64u fs servers remove <alias>
 ```
+
+A remote FTP server (a NAS, another computer) shows up on the device as `/ftp/<alias>/`, and
+REST reaches it like local storage: `drives mount a /ftp/nas/disk.d64`, `runners run-prg
+/ftp/nas/demo.prg` (checked on firmware 1.2.1). `fs servers` edits `/Flash/config/ftp_servers`,
+which the device reads at power-on - `machine poweroff` then `machine poweron`; one added in the
+menu (Disk File Browser > FTP > New Host) works at once. The server's port and password are
+`--server-port` and `--server-password`, because `--port` and `--password` address the C64
+Ultimate itself. The password is stored URL-encoded, readable by anyone with FTP access to the
+device. Aliases are matched without regard to case.
 
 ```json
 // c64u fs ls / --json
