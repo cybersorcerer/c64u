@@ -2176,7 +2176,7 @@ statusBuf:    .fill STATUS_MAX + 1, 0
 
 // The greeting sits above BASIC's own start-up message, so it stays one line:
 // the hint is appended, not put on a line of its own.
-.var VERSION = "1.0.0"
+.var VERSION = "1.1.0"
 
 bannerText: .byte 13
             .text "UCI WEDGE V" + VERSION + " BY CYBERSORCERER "
