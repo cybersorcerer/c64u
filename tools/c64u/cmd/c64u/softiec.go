@@ -211,19 +211,23 @@ Example:
 	},
 }
 
-// partitionsTakeEffect is said wherever the partition file changes.
-const partitionsTakeEffect = "Takes effect when the C64 Ultimate is switched off and on again; " +
-	"c64u machine reboot is not enough"
+// partitionsTakeEffect is said wherever the partition file is written. The
+// firmware loads it by itself only at power-on; its menu loads it at once.
+const partitionsTakeEffect = "The device loads them when it is switched on (c64u machine reboot " +
+	"is not enough). To use them now, open them in the Ultimate menu: " +
+	"Disk File Browser > Flash > config > iec_partitions.ipr > Load"
 
 var softiecPartitionsCmd = &cobra.Command{
 	Use:   "partitions",
-	Short: "Show SoftIEC partitions, active now and saved for the next power-on",
+	Short: "Show SoftIEC partitions, active now and saved in the partition file",
 	Long: `Show the SoftIEC partitions: the ones the drive serves now, and the ones saved
-in ` + softiec.PartitionFile + ` for the next power-on.
+in ` + softiec.PartitionFile + `.
 
-The device only reads that file when it is switched on, so the two lists differ
-after 'partitions set' or 'partitions clear' until it has been switched off and
-on again. 'c64u machine reboot' restarts only the C64 and does not read it.
+The device loads that file by itself only when it is switched on - 'c64u
+machine reboot' restarts only the C64 - so the two lists differ after
+'partitions set' or 'partitions clear' until then, or until the file is loaded
+in the Ultimate menu: Disk File Browser > Flash > config > iec_partitions.ipr >
+Load.
 
 The drive reports partition names only through the file, so the active list
 shows numbers and paths.
@@ -269,7 +273,7 @@ func partitionRows(parts []softiec.Partition) []interface{} {
 
 var softiecPartitionsSetCmd = &cobra.Command{
 	Use:   "set N=[NAME:]PATH...",
-	Short: "Save the SoftIEC partitions for the next power-on",
+	Short: "Save the SoftIEC partitions in the partition file",
 	Long: `Save the SoftIEC partitions the device sets up when it is switched on.
 
 Each argument is one partition: its number (1-255), an optional name of up to
@@ -312,9 +316,8 @@ var softiecPartitionsClearCmd = &cobra.Command{
 	Use:   "clear",
 	Short: "Delete the saved SoftIEC partitions",
 	Long: `Delete ` + softiec.PartitionFile + `, so the device starts with its own single
-partition, 1 = /Temp.
-
-` + partitionsTakeEffect + `.
+partition, 1 = /Temp. The partitions in use stay until the device is switched
+off and on again.
 
 Example:
   c64u drives softiec partitions clear`,
@@ -329,7 +332,9 @@ Example:
 			formatter.Success("No SoftIEC partitions were saved", nil)
 			return
 		}
-		formatter.Success("SoftIEC partitions deleted", map[string]interface{}{"note": partitionsTakeEffect})
+		formatter.Success("SoftIEC partitions deleted", map[string]interface{}{
+			"note": "The device starts with 1 = /Temp from the next power-on; until then the partitions stay as they are",
+		})
 	},
 }
 

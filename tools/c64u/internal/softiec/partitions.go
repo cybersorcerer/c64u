@@ -13,10 +13,11 @@ import (
 
 // PartitionFile is where the firmware keeps the SoftIEC partitions. The drives
 // list reports the partitions, but no REST endpoint sets them. Firmware 1.2.1
-// reads this file once, when it starts from power-on - machine reboot restarts
-// only the C64 and its cartridge - and the file replaces the whole list: the
-// built-in partition 1 on /Temp is gone unless the file names it, and the first
-// partition becomes the current one (checked 2026-11-27).
+// loads this file by itself only at power-on - machine reboot restarts only the
+// C64 and its cartridge - and at once when it is opened with Load in the menu's
+// file browser. Either way it replaces the whole list: the built-in partition 1
+// on /Temp is gone unless the file names it, and the first partition becomes the
+// current one (checked 2026-11-27).
 const PartitionFile = "/Flash/config/iec_partitions.ipr"
 
 // maxPartitionName is as long as the drive keeps a partition name.
@@ -107,7 +108,7 @@ func EncodePartitions(parts []Partition) ([]byte, error) {
 }
 
 // SavePartitions writes the partition file after checking that every path is
-// a directory on the device. It takes effect at the next power-on.
+// a directory on the device. The firmware loads it at the next power-on.
 func SavePartitions(f Files, parts []Partition) error {
 	data, err := EncodePartitions(parts)
 	if err != nil {

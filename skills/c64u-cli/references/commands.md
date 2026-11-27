@@ -207,13 +207,14 @@ c64u drives set-mode <drive> <mode>
 c64u drives load-rom        <drive> <file>
 c64u drives load-rom-upload <drive> <local-file>
 c64u drives softiec status | enable | disable [--completely] | bus-id | root
-c64u drives softiec partitions                 # active now, and saved for the next power-on
+c64u drives softiec partitions                 # active now, and saved in the partition file
 c64u drives softiec partitions set N=[NAME:]PATH...   # e.g. 1=RAMDISK:/Temp 2=USB:/USB0/
 c64u drives softiec partitions clear
 ```
 
 `partitions set` writes `/Flash/config/iec_partitions.ipr`, the list the firmware sets up when it
-is switched on - not on `machine reboot`. The list replaces the built-in one (1 = `/Temp`), and the
+is switched on - not on `machine reboot`. To use it at once, open it in the Ultimate menu:
+Disk File Browser > Flash > config > `iec_partitions.ipr` > Load. The list replaces the built-in one (1 = `/Temp`), and the
 lowest number becomes the current partition. Paths must be existing directories; a partition
 without a name is called `PARTITION`.
 

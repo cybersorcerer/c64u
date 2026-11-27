@@ -86,7 +86,7 @@ If `c64u info` fails, nothing else will. Check that before debugging anything do
    filesystem as an IEC device, so the C64 can `LOAD` from it at the BASIC prompt without any
    `.d64` being built or mounted. It ships disabled — check `c64u drives softiec status` first.
    From firmware 1.2 on it only reaches its partitions, by default just `/Temp/`; add more with
-   `c64u drives softiec partitions set`, which takes effect at the next power-on.
+   `c64u drives softiec partitions set` (loaded at power-on, or at once with Load in the menu).
    See `references/workflows.md`.
 
 ## Leaving the machine clean

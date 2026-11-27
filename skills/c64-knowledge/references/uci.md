@@ -297,7 +297,7 @@ Partitions (checked on firmware 1.2.1): `$05 $20 $02 "USB:/USB0/" $00` answers `
 Both answer `$00` for an index that does nothing - 0 is not a valid partition (1-255 are) and a
 missing one is not an error. Partitions made this way live in RAM only and are gone at the next
 power-on; the ones the drive sets up at power-on come from `/Flash/config/iec_partitions.ipr`
-(`c64u drives softiec partitions`).
+(`c64u drives softiec partitions`), which the menu's file browser also loads at once.
 
 File types in directory replies: `$00` DEL, `$01` PRG, `$02` SEQ, `$03` USR, `$04` REL,
 `$05` folder.
