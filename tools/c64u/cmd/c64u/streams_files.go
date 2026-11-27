@@ -367,7 +367,9 @@ var filesPackD64Cmd = &cobra.Command{
 	Long: `Create a D64 disk image from all files in a directory.
 
 Reads all files from the source directory and packs them into a D64 disk image.
-Supports .prg, .seq, .usr, and .rel files.
+Supports .prg, .seq, .usr, and .rel files. Those extensions become the file
+type and are left out of the name, so hello.prg is loaded with LOAD"HELLO",8;
+any other extension stays part of the name. Names are cut to 16 characters.
 
 To upload the created D64 to C64 Ultimate, use: c64u fs upload <output-file> <remote-path>
 

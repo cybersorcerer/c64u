@@ -132,8 +132,14 @@ func collectFiles(dir string, filter []string) ([]FileInfo, error) {
 			}
 		}
 
-		// Keep full filename with extension
+		// An extension that only names the file type is dropped: the type
+		// byte carries it, and LOAD"HELLO" has to find hello.prg. Others say
+		// something the type does not and stay part of the name.
 		name := entry.Name()
+		switch ext {
+		case ".prg", ".seq", ".usr", ".rel":
+			name = strings.TrimSuffix(name, filepath.Ext(name))
+		}
 
 		// Truncate to 16 characters (max PETSCII filename length)
 		if len(name) > 16 {
