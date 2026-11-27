@@ -26,6 +26,19 @@ is the cartridge window: after a normal reset it reads and writes as RAM, but in
 `write-mem` reports success either way - it confirms that the request was accepted, not that
 the byte is in memory. Read the address back when it matters.
 
+## RAM under ROM and I/O is out of reach
+
+DMA follows the processor port: where the BASIC ROM, the KERNAL or I/O is banked in, `read-mem`
+shows that, and the REST API has no way to read the RAM underneath. Switching the bank from
+outside does not help either. `$00`/`$01` read as `00 00` through DMA, and writing `$36` to `$01`
+with the machine paused changed nothing at `$A000`: the write reaches RAM, not the CPU port.
+
+Checked: `write-mem a000 DEADBEEF` after a reset, then `read-mem a000` still shows the BASIC ROM
+(`94 E3 7B E3`). The firmware's own machine code monitor (Developer > Machine Code Monitor) does
+show `DE AD BE EF` after `O` switches its view, so the bytes are there - only the monitor can
+reach them. A program that banks the ROM out itself (`$01 = $35`, common in games) exposes the
+RAM to its own code, not to DMA reads.
+
 ## Colour registers read back with the upper bits set
 
 VIC colour registers are 4 bits wide and the unused bits read as `1`:
@@ -123,6 +136,12 @@ device resolves nothing; it is still releasing the previous stream. It recovered
 after about 50 seconds. Calling `streams stop video` between attempts kept it from recovering
 once, and only `c64u machine reboot` cleared it. `streams listen video` retries on its own for
 up to 90 seconds without stopping in between, and suggests the reboot after that.
+
+`streams listen debug` got the same answer once on 1.2.1 and recovered after a few minutes; it
+retries the same way. The cause is open: in later checks the debug stream started at once with
+the video window open (and kept delivering), right after it closed, after `runners
+run-prg-upload` and after `machine reset`. The API notes say video and debug share hardware and
+that starting video stops debug; starting debug beside a running video stream worked.
 
 ## Configuration changes are volatile by default
 
