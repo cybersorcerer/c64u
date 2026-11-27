@@ -184,9 +184,9 @@ func TestController_GamepadsAndMouseBeatsPort1(t *testing.T) {
 		t.Fatalf("Joy = %v, want fire on both ports", got.Joy)
 	}
 
-	c.tick(cmd(ebiten.KeyM, t0))
+	c.tick(cmd(ebiten.KeyL, t0))
 	if !c.captureMouse() {
-		t.Fatal("Cmd+M did not capture the mouse")
+		t.Fatal("Cmd+L did not capture the mouse")
 	}
 	c.tick(tickInput{Focused: true, Now: t0, Pads: pads, MouseButtons: inputsync.Set{"left": true}})
 	got = s.last()
@@ -200,7 +200,7 @@ func TestController_GamepadsAndMouseBeatsPort1(t *testing.T) {
 
 func TestController_FocusLossFreesMouse(t *testing.T) {
 	c, _, _ := newTestController(t)
-	c.tick(cmd(ebiten.KeyM, t0))
+	c.tick(cmd(ebiten.KeyL, t0))
 	c.tick(tickInput{Focused: false, Now: t0})
 	if c.captureMouse() {
 		t.Error("the mouse stayed captured after the window lost focus")

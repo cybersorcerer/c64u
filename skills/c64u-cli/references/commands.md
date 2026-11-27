@@ -230,7 +230,7 @@ Ports: video 11000, audio 11001, debug 11002.
 
 In the video window, keys are held as long as you hold them (firmware 1.2.0 / 3.15). Hotkeys,
 with Cmd on macOS and Ctrl+Shift elsewhere: Mod+K keyboard mode (character / position), Mod+J
-keyboard joystick, Mod+P swap ports, Mod+M capture the mouse, Mod+U Ultimate menu, Mod+R reset
+keyboard joystick, Mod+P swap ports, Mod+L capture the mouse, Mod+U Ultimate menu, Mod+R reset
 (twice). Left Alt is C=, right Alt (AltGr) types the layout's symbols, Esc is RUN/STOP, Page Up
 is RESTORE. The command prints the list when it starts.
 

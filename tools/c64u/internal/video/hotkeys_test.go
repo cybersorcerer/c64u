@@ -24,7 +24,7 @@ func TestHotkey_MacUsesCmd(t *testing.T) {
 func TestHotkey_AllLetters(t *testing.T) {
 	want := map[ebiten.Key]hotkeyAction{
 		ebiten.KeyK: hkMode, ebiten.KeyJ: hkJoystick, ebiten.KeyP: hkSwapPorts,
-		ebiten.KeyM: hkMouse, ebiten.KeyU: hkMenu, ebiten.KeyR: hkReset,
+		ebiten.KeyL: hkMouse, ebiten.KeyU: hkMenu, ebiten.KeyR: hkReset,
 	}
 	for key, action := range want {
 		f := hostFrame{Pressed: pressed(ebiten.KeyMetaRight, key), JustPressed: pressed(key)}
@@ -35,14 +35,15 @@ func TestHotkey_AllLetters(t *testing.T) {
 }
 
 func TestHotkey_LayoutName(t *testing.T) {
-	azerty := func(k ebiten.Key) string {
-		if k == ebiten.KeySemicolon {
-			return "m"
+	// Dvorak puts L where US has P, so the label must win over the position.
+	dvorak := func(k ebiten.Key) string {
+		if k == ebiten.KeyP {
+			return "l"
 		}
 		return ""
 	}
-	f := hostFrame{Pressed: pressed(ebiten.KeyMetaLeft, ebiten.KeySemicolon), JustPressed: pressed(ebiten.KeySemicolon)}
-	if a, _ := detectHotkey(f, azerty, "darwin"); a != hkMouse {
+	f := hostFrame{Pressed: pressed(ebiten.KeyMetaLeft, ebiten.KeyP), JustPressed: pressed(ebiten.KeyP)}
+	if a, _ := detectHotkey(f, dvorak, "darwin"); a != hkMouse {
 		t.Errorf("got %v, want hkMouse from the layout name", a)
 	}
 }
@@ -68,5 +69,15 @@ func TestHotkey_WindowsAltGrShiftIsNoModifier(t *testing.T) {
 	f := hostFrame{Pressed: pressed(ebiten.KeyAltRight, ebiten.KeyControlLeft, ebiten.KeyShiftLeft, ebiten.KeyQ), JustPressed: pressed(ebiten.KeyQ)}
 	if a, mod := detectHotkey(f, usNames, "windows"); a != hkNone || mod {
 		t.Errorf("got %v,%v, want hkNone,false", a, mod)
+	}
+}
+
+// The macOS window menu takes Cmd+H, Cmd+Q, Cmd+M and Ctrl+Cmd+F before the
+// window sees them; Cmd+M minimized the window instead of capturing the mouse.
+func TestHotkey_AvoidMacMenuKeys(t *testing.T) {
+	for _, letter := range []string{"h", "q", "m", "f"} {
+		if a, ok := hotkeyLetters[letter]; ok {
+			t.Errorf("hotkey %v sits on Cmd+%s, which the macOS menu takes", a, letter)
+		}
 	}
 }

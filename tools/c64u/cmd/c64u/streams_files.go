@@ -683,7 +683,7 @@ Hotkeys (Cmd on macOS, Ctrl+Shift on Windows and Linux):
   Mod+K  switch keyboard mode
   Mod+J  keyboard joystick on/off (arrows, left Ctrl = fire)
   Mod+P  swap joystick ports
-  Mod+M  capture or release the mouse
+  Mod+L  capture or release the mouse
   Mod+U  open or close the Ultimate menu (F1 > Developer > Machine Code Monitor)
   Mod+R  reset the C64, pressed twice within a second
 

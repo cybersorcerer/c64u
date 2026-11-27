@@ -361,7 +361,7 @@ the first on port 2, the second on port 1. D-pad or left stick move, A is fire, 
 Space and Menu is RUN/STOP. Mod+J turns the keyboard into a joystick too (arrows, left Ctrl =
 fire). Mod+P swaps the ports.
 
-**Mouse** — Mod+M captures the pointer; motion, buttons and wheel then go to the C64 mouse on
+**Mouse** — Mod+L captures the pointer; motion, buttons and wheel then go to the C64 mouse on
 port 1 (as in GEOS). While it is captured a joystick on port 1 is ignored.
 
 **Hotkeys** — the modifier is Cmd on macOS and Ctrl+Shift on Windows and Linux. Letters follow
@@ -372,7 +372,7 @@ your layout's labels.
 | Mod+K  | switch keyboard mode                                                    |
 | Mod+J  | keyboard joystick on/off                                                |
 | Mod+P  | swap joystick ports                                                     |
-| Mod+M  | capture or release the mouse                                            |
+| Mod+L  | capture or release the mouse                                            |
 | Mod+U  | open or close the Ultimate menu (F1 › Developer › Machine Code Monitor) |
 | Mod+R  | reset the C64, pressed twice within a second                            |
 

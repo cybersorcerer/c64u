@@ -295,7 +295,7 @@ func hotkeyHelp(goos string) string {
 		mod + "+K  switch keyboard mode (character / position)",
 		mod + "+J  keyboard joystick on/off (arrows, left Ctrl = fire)",
 		mod + "+P  swap joystick ports",
-		mod + "+M  capture / release the mouse (port 1)",
+		mod + "+L  capture / release the mouse (port 1)",
 		mod + "+U  open / close the Ultimate menu",
 		mod + "+R  reset the C64 (press twice within a second)",
 		"Left Alt/Option is the C= key; right Alt/Option (AltGr) types your layout's symbols.",
