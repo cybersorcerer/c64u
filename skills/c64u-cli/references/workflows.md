@@ -157,6 +157,28 @@ right, Return on Machine Code Monitor. Esc steps back out one layer at a time. W
 window, the same works with `c64u machine menu-button`, `c64u machine input tap:f1 ...` and
 `c64u machine menu-screen` to read what it shows.
 
+The monitor takes single keys, not command lines: typing `M 0400` switches to the hex view and
+then pages down on the space. To show an address, press `J`, type it, then Return:
+
+```sh
+c64u machine input tap:j tap:0 tap:4 tap:0 tap:0 tap:return
+c64u machine menu-screen        # MONITOR HEX $0400 ...
+```
+
+The keys, from the monitor's own help (F7 or `?`):
+
+| Key | Does |
+|---|---|
+| `M` `A` `I` `B` `V` | view as hex, assembly, ASCII, binary, screen codes |
+| `J` address Return | jump to the address |
+| `E` | edit in place; `C=+E` ends editing |
+| `F` `T` `C` `H` | fill, transfer, compare, hunt |
+| `G` | go (run from an address) |
+| `L` `S` | load, save |
+| `O` | CPU bank; `Shift+O` VIC bank |
+| Space or F5, Shift+Space or F3 | page down, page up |
+| RUN/STOP or `←` | back out one layer |
+
 ## Check the REU before relying on it
 
 ```sh
