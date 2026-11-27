@@ -148,6 +148,9 @@ var ConfigStoreMembers = map[string]string{
 // reset_to_default - on the categories matching category, a name or pattern
 // (firmware 1.2.1). It returns the names the device reports it acted on.
 func (c *Client) ConfigCategoryStore(action, category string) ([]string, error) {
+	if strings.TrimSpace(category) == "" {
+		return nil, fmt.Errorf("category must not be empty")
+	}
 	resp, err := c.Put(fmt.Sprintf("/v1/configs/%s:%s", escapeConfigPath(category), action), nil)
 	if err != nil {
 		return nil, err

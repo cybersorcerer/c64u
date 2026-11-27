@@ -122,3 +122,14 @@ func TestConfigCategoryStore_Errors(t *testing.T) {
 		t.Errorf("err = %v", err)
 	}
 }
+
+// An unset shell variable must not send PUT /v1/configs/:reset_to_default,
+// whose effect on the device is unknown - possibly every category.
+func TestConfigCategoryStore_RejectsEmptyCategory(t *testing.T) {
+	var method, path string
+	srv := storeServer(t, 200, `{"reset":[],"errors":[]}`, &method, &path)
+	_, err := newTestClient(srv.URL).ConfigCategoryStore("reset_to_default", "  ")
+	if err == nil || method != "" {
+		t.Errorf("err = %v, request = %q %q; want an error and no request", err, method, path)
+	}
+}
