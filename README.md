@@ -450,6 +450,7 @@ c64u machine read-mem <addr> [--length N]      # Read memory (hex dump)
 c64u machine read-mem <addr> --to <addr>       # Read an address range, end inclusive
 c64u machine read-mem <addr> --output <file>   # Write the raw bytes to a file (-o)
 c64u machine read-mem <addr> --raw             # Write the raw bytes to stdout
+c64u machine read-mem <addr> --disasm          # Disassemble (6502, illegal opcodes too)
 c64u machine sendkey <string> [--delay <ms>]   # Send keystrokes to keyboard buffer
 c64u machine input <event...>                  # Keys, joysticks, mouse at the hardware level
 c64u machine input move:300,-40 tap:mouse:left # Move the mouse, click (fw 1.2.1)

@@ -29,7 +29,7 @@ func (r Result) String() string {
 	if r.Illegal {
 		illegal = "*"
 	}
-	s := fmt.Sprintf("$%04X  %-8s  %s%-13s", r.Address, hex, illegal, instr)
+	s := fmt.Sprintf("$%04X  %-9s %s%-13s", r.Address, hex, illegal, instr)
 	if r.Comment != "" {
 		s += "  ; " + r.Comment
 	}
@@ -79,6 +79,19 @@ func DisassembleBlock(startAddr uint16, mem []byte) []Result {
 		results = append(results, r)
 		addr += uint16(n)
 		offset += n
+	}
+	return results
+}
+
+// DisassembleRange disassembles the instructions that start within the first n
+// bytes of mem. mem may hold a few bytes more, so the last instruction is shown
+// whole; without them its operand is cut short.
+func DisassembleRange(start uint16, mem []byte, n int) []Result {
+	var results []Result
+	for offset := 0; offset < n && offset < len(mem); {
+		r, size := Disassemble(start+uint16(offset), mem[offset:])
+		results = append(results, r)
+		offset += size
 	}
 	return results
 }

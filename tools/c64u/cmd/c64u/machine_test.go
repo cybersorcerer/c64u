@@ -90,3 +90,19 @@ func TestInputErrorTitle(t *testing.T) {
 		}
 	}
 }
+
+// --disasm reads up to two bytes more so the last instruction is whole, but
+// never past $FFFF.
+func TestDisasmReadLength(t *testing.T) {
+	cases := []struct{ addr, length, want int }{
+		{0xC000, 16, 18},
+		{0xFFFA, 6, 6},
+		{0xFFF0, 15, 16},
+		{0x0000, 0x10000, 0x10000},
+	}
+	for _, c := range cases {
+		if got := disasmReadLength(c.addr, c.length); got != c.want {
+			t.Errorf("disasmReadLength($%04X, %d) = %d, want %d", c.addr, c.length, got, c.want)
+		}
+	}
+}

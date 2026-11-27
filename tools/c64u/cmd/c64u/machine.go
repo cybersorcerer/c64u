@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/api"
+	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/disasm"
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/petscii"
 	"github.com/spf13/cobra"
 )
@@ -309,6 +310,12 @@ returned it, with nothing added or removed.
 With --raw, standard output carries the memory and nothing else — no
 confirmation is printed even when a file was written, so a pipe stays clean.
 
+With --disasm the memory is shown as 6502 assembly instead, one instruction per
+line, illegal opcodes marked with *. An instruction that starts inside the range
+is shown whole. The disassembler starts at the given address, so start it on an
+instruction. DMA sees what the CPU sees: ROM and I/O where they are banked in,
+not the RAM underneath.
+
 Addresses may be written as 0400, $0400 or 0x0400.
 
 Examples:
@@ -318,6 +325,7 @@ Examples:
   c64u machine read-mem 0000 --to ffff -o memory.bin          # whole address space
   c64u machine read-mem 0400 --length 1000 --raw | xxd        # pipe the bytes
   c64u machine read-mem 0400 --to 07e7 -o s.bin --raw | xxd    # file and pipe
+  c64u machine read-mem e5cd --length 16 --disasm             # KERNAL code
   c64u machine read-mem d020 --length 1`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -340,8 +348,18 @@ Examples:
 			}
 		}
 
+		dis, _ := cmd.Flags().GetBool("disasm")
+		readLen := length
+		if dis {
+			if raw || outPath != "" {
+				formatter.Error("Conflicting flags", []string{"--disasm cannot be combined with --raw or --output"})
+				return
+			}
+			readLen = disasmReadLength(addr, length)
+		}
+
 		address := fmt.Sprintf("%04x", addr)
-		resp, err := apiClient.MachineReadMem(address, length)
+		resp, err := apiClient.MachineReadMem(address, readLen)
 		if err != nil {
 			formatter.Error("Failed to read memory", []string{err.Error()})
 			return
@@ -349,6 +367,11 @@ Examples:
 
 		if resp.HasErrors() {
 			formatter.Error("API returned errors", resp.Errors)
+			return
+		}
+
+		if dis {
+			printDisasm(addr, resp.RawBody, length)
 			return
 		}
 
@@ -707,5 +730,44 @@ func init() {
 	machineReadMemCmd.Flags().String("to", "", "Read up to and including this address, instead of --length")
 	machineReadMemCmd.Flags().StringP("output", "o", "", "Write the raw bytes to this file instead of a hex dump")
 	machineReadMemCmd.Flags().Bool("raw", false, "Write the raw bytes to stdout instead of a hex dump, for piping")
+	machineReadMemCmd.Flags().Bool("disasm", false, "Show the memory as 6502 assembly instead of a hex dump")
 	machineReadMemCmd.MarkFlagsMutuallyExclusive("length", "to")
+}
+
+// disasmReadLength reads up to two bytes past the range, the most an
+// instruction starting in it can need, but never past $FFFF.
+func disasmReadLength(addr, length int) int {
+	return min(length+2, max(length, 0x10000-addr))
+}
+
+// printDisasm shows the instructions that start within the first length bytes.
+func printDisasm(addr int, mem []byte, length int) {
+	results := disasm.DisassembleRange(uint16(addr), mem, length)
+	if jsonOut {
+		rows := make([]map[string]interface{}, len(results))
+		for i, r := range results {
+			hex := make([]string, len(r.Bytes))
+			for j, b := range r.Bytes {
+				hex[j] = fmt.Sprintf("%02X", b)
+			}
+			rows[i] = map[string]interface{}{
+				"address":  fmt.Sprintf("$%04X", r.Address),
+				"bytes":    strings.Join(hex, " "),
+				"mnemonic": r.Mnemonic,
+				"operand":  r.Operand,
+				"comment":  r.Comment,
+				"illegal":  r.Illegal,
+			}
+		}
+		formatter.PrintData(map[string]interface{}{
+			"address":      fmt.Sprintf("$%04X", addr),
+			"instructions": rows,
+		})
+		return
+	}
+	formatter.PrintHeader(fmt.Sprintf("Disassembly from $%04X (%d bytes)", addr, length))
+	fmt.Println()
+	for _, r := range results {
+		fmt.Println(strings.TrimRight(r.String(), " "))
+	}
 }

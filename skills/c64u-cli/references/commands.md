@@ -39,6 +39,7 @@ c64u machine menu-button                       # as if the Menu button was press
 c64u machine poweroff                          # U64 only
 
 c64u machine read-mem <address> [--length N | --to ADDR] [-o FILE] [--raw]
+c64u machine read-mem <address> [--length N | --to ADDR] --disasm   # 6502 assembly, illegal opcodes marked *
 c64u machine write-mem <address> <hexdata>
 c64u machine write-mem-file <address> <file>
 c64u machine sendkey <string> [--delay ms]
@@ -88,6 +89,13 @@ reports pending (3 path steps, press, release); four `move:32512,0` in a row fil
 **`menu-screen`** returns the menu as a 40x25 character matrix in ASCII plus a colour matrix.
 Open the menu with `menu-button` first; with no menu on screen the device answers 404. Together
 with `input` it drives and reads the menu without the video stream.
+
+**`read-mem --disasm`** shows the range as 6502 assembly, one instruction per line, with illegal
+opcodes marked `*` and I/O registers named in a comment. An instruction that starts inside the
+range is shown whole (up to two bytes are read past it, never past `$FFFF`). It decodes from the
+given address, so start on an instruction. `--json` gives `address`, `bytes`, `mnemonic`,
+`operand`, `comment`, `illegal` per instruction; `--raw` and `-o` are refused with it. Checked on
+1.2.1: `read-mem e5cd --length 16 --disasm` shows the KERNAL's `LDA $C6 / STA $CC / STA $0292`.
 
 **Addresses** may be written `0400`, `$0400` or `0x0400`.
 

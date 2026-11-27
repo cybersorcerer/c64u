@@ -259,3 +259,44 @@ func TestLookup_JSR(t *testing.T) {
 		t.Errorf("JSR length = %d, want 3", ins.InstructionLength())
 	}
 }
+
+// An instruction that starts inside the range is shown whole, from the bytes
+// past its end; one that starts after it is not shown.
+func TestDisassembleRange(t *testing.T) {
+	got := DisassembleRange(0xC000, []byte{0xA9, 0x00, 0x8D, 0x20, 0xD0}, 3)
+	if len(got) != 2 {
+		t.Fatalf("got %d instructions, want 2: %v", len(got), got)
+	}
+	if got[1].Address != 0xC002 || got[1].Mnemonic != "STA" || got[1].Operand != "$D020" || len(got[1].Bytes) != 3 {
+		t.Errorf("second = %+v, want STA $D020 at $C002 with 3 bytes", got[1])
+	}
+
+	got = DisassembleRange(0xC000, []byte{0xA9, 0x00, 0xEA, 0xEA}, 2)
+	if len(got) != 1 {
+		t.Errorf("got %d instructions, want only the one starting in range", len(got))
+	}
+}
+
+// At the end of memory there are no bytes past the range: the operand is cut.
+func TestDisassembleRange_Truncated(t *testing.T) {
+	got := DisassembleRange(0xFFFF, []byte{0x8D}, 1)
+	if len(got) != 1 || len(got[0].Bytes) != 1 || got[0].Address != 0xFFFF {
+		t.Errorf("got %+v, want one instruction of 1 byte at $FFFF", got)
+	}
+}
+
+func TestDisassembleRange_Illegal(t *testing.T) {
+	got := DisassembleRange(0x1000, []byte{0x02}, 1)
+	if len(got) != 1 || !got[0].Illegal {
+		t.Errorf("got %+v, want one illegal instruction", got)
+	}
+}
+
+// The mnemonic column lines up whatever the instruction length.
+func TestResultString_Aligned(t *testing.T) {
+	one, _ := Disassemble(0x1000, []byte{0xEA})
+	three, _ := Disassemble(0x1000, []byte{0x8D, 0x20, 0xD0})
+	if a, b := strings.Index(one.String(), "NOP"), strings.Index(three.String(), "STA"); a != b {
+		t.Errorf("mnemonic at column %d and %d:\n%q\n%q", a, b, one.String(), three.String())
+	}
+}
