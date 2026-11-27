@@ -199,6 +199,9 @@ This creates `~/.config/c64u/config.toml` with default settings.
 
 ### 2. Edit Configuration
 
+Open `~/.config/c64u/config.toml` in a text editor and set the address of your
+C64 Ultimate:
+
 ```toml
 # ~/.config/c64u/config.toml
 host = "192.168.1.100"
@@ -211,6 +214,49 @@ port = 80
 c64u about        # C64 Ultimate API version
 c64u info         # Device information
 ```
+
+### 4. Add the Wi-Fi MAC (optional, for `machine poweron`)
+
+`c64u machine poweron` switches the device on over the network. A switched-off
+device cannot report its address, so `c64u` reads it from `config.toml`. There
+is no command that writes it; copy it in by hand while the device is on:
+
+1. Read the Wi-Fi MAC from the device:
+
+   ```bash
+   c64u info
+   ```
+
+   ```text
+     ...
+     Ethernet MAC:      02:15:41:2E:BA:C4
+     Wi-Fi MAC:         9C:13:9E:ED:D5:EC    <- this one
+   ```
+
+   Take the **Wi-Fi MAC**. The device wakes only over Wi-Fi, so the Ethernet
+   MAC does nothing. If no Wi-Fi MAC is listed, the device has no Wi-Fi and
+   cannot be switched on over the network.
+
+2. Open `~/.config/c64u/config.toml` and add a `wifi_mac` line next to `host`:
+
+   ```toml
+   host = "192.168.1.100"
+   port = 80
+   wifi_mac = "9C:13:9E:ED:D5:EC"
+   ```
+
+   With several devices it goes into that device's entry, as shown in
+   [Several Devices](#several-devices). A file made by `cli-config init` from
+   v1.2.0 on already has a commented-out `# wifi_mac = ...` line to fill in.
+
+3. Check that `c64u` reads it:
+
+   ```bash
+   c64u cli-config show          # shows "Wi-Fi MAC: 9C:13:9E:ED:D5:EC"
+   ```
+
+The device also needs Wake On Wi-Fi switched on once; see
+[Switching Off and On Over the Network](#switching-off-and-on-over-the-network).
 
 ## Configuration
 
@@ -225,6 +271,7 @@ default = "living-room"
 [devices.living-room]
 host = "192.168.1.100"
 port = 80
+wifi_mac = "9C:13:9E:ED:D5:EC"   # optional, from 'c64u -D living-room info'
 
 [devices.attic]
 host = "c64u-attic.local"
@@ -259,31 +306,32 @@ against your own computer.
 
 ### Wi-Fi MAC for Wake-on-LAN
 
-`c64u machine poweron` switches the device on with a Wake-on-LAN packet for its
-**Wi-Fi** MAC address. A switched-off device cannot tell its address, so put it
-into the config file while the device is on:
-
-```bash
-c64u info                    # look for "Wi-Fi MAC: 9C:13:9E:ED:D5:EC"
-```
+`wifi_mac` is the Wi-Fi MAC address `c64u machine poweron` wakes the device
+with. How to get it into the file is step 4 of the
+[Quick Start](#4-add-the-wi-fi-mac-optional-for-machine-poweron): read it with
+`c64u info` (the line `Wi-Fi MAC`, not `Ethernet MAC`) while the device is on,
+and write it next to the device's `host`:
 
 ```toml
 # ~/.config/c64u/config.toml - flat form
 host = "192.168.1.100"
 wifi_mac = "9C:13:9E:ED:D5:EC"
 
-# or per device
+# or per device: read it with 'c64u -D living-room info'
 [devices.living-room]
 host = "192.168.1.100"
 wifi_mac = "9C:13:9E:ED:D5:EC"
 ```
 
-Take the **Wi-Fi MAC**, not the Ethernet MAC: the device wakes only on Wi-Fi.
-`c64u cli-config show` shows the `wifi_mac` it will use. `--mac` on the command
-line outranks it. Without either, `poweron` uses the address `machine poweroff`
-remembered. `wifi_mac` belongs to its device, so a one-off `--host` does not use it.
-The device side needs setting up once too; see
-[Switching Off and On Over the Network](#switching-off-and-on-over-the-network).
+Where `poweron` takes the address from, first match wins:
+
+1. `--mac 9C:13:9E:ED:D5:EC` on the command line
+2. `wifi_mac` in `config.toml`, for the device in use
+3. the address the last `c64u machine poweroff` of that device remembered, in
+   `~/.config/c64u/wifi_macs.json` on this computer
+
+`c64u cli-config show` shows the `wifi_mac` it will use. A one-off `--host`
+names another machine, so it does not use the configured `wifi_mac`.
 
 ### Network Password
 
@@ -595,9 +643,10 @@ once, with the device on:
    c64u config save-to-flash "U64 Specific Settings"
    ```
 
-3. **Put the Wi-Fi MAC into `config.toml`.** `c64u info` shows it as `Wi-Fi MAC`;
-   add `wifi_mac = "9C:13:9E:ED:D5:EC"` next to the device's `host` — see
-   [Wi-Fi MAC for Wake-on-LAN](#wi-fi-mac-for-wake-on-lan). This step can be left
+3. **Put the Wi-Fi MAC into `config.toml`:** run `c64u info`, copy the line
+   `Wi-Fi MAC`, and add `wifi_mac = "9C:13:9E:ED:D5:EC"` next to the device's
+   `host` — step by step in
+   [Quick Start, step 4](#4-add-the-wi-fi-mac-optional-for-machine-poweron). This step can be left
    out: `machine poweroff` remembers the address in `~/.config/c64u/wifi_macs.json`,
    but only for a device it switched off itself, and only on that computer.
 4. **Try it:**
