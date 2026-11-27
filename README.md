@@ -19,6 +19,59 @@ A command-line interface for controlling the [Commodore C64 Ultimate](https://co
 - **Agent Skills**: Portable C64 knowledge packs for AI coding agents — Claude Code, opencode, pi, Hermes and others
 - **Ultimate Wedge**: A cartridge that adds directory, load, save, copy, text-viewing, disk-mount, memory-dump and REU-image commands to stock BASIC, straight onto the Ultimate filesystem
 
+## What's New in v1.2.0
+
+Most of this needs firmware 1.2.1 on the C64 Ultimate; the commands say so when the device is
+older.
+
+**New**
+
+- **Switch the machine on over the network** — `c64u machine poweron` sends a Wake-on-LAN packet
+  and waits until the device answers. It needs a one-time setup on the device and the Wi-Fi MAC
+  in `config.toml`: see [Switching Off and On Over the Network](#switching-off-and-on-over-the-network).
+- **Remote FTP servers** — `c64u fs servers add` makes a NAS or another computer appear on the
+  device under `/ftp/<alias>/`, so `drives mount` and `runners run-prg` take images and programs
+  straight from it. The device reads the list when it is switched on.
+- **SoftIEC partitions** — `c64u drives softiec partitions set` saves which directories SoftIEC
+  serves; the device loads them when it is switched on, or at once from the Ultimate menu.
+- **Video window as keyboard, joystick and mouse** — keys are held like on real hardware, so games,
+  the Ultimate menu and the machine code monitor work, not only BASIC; gamepads are joysticks;
+  the mouse works in GEOS.
+- **Configuration backup** — `c64u config restore` puts a backup from `config export` back and
+  saves it to flash; `c64u config import` copies a setup onto a second device.
+- `c64u machine read-mem --disasm` disassembles, illegal opcodes included.
+- `c64u machine input` drives the mouse: `move:X,Y`, `tap:mouse:left`, the wheel.
+- `c64u machine heap`, `c64u drives unlink`.
+- `c64u config save-to-flash`, `load-from-flash` and `reset-to-default` take a category.
+- Wedge 1.1.0 — `@CP` copies a file, `@SM` saves the 64 KB RAM to a file, `@RL`/`@RS` load and
+  save the REU image.
+- `c64u info` shows the Ethernet and Wi-Fi MAC addresses; `c64u cli-config show` shows the
+  configured `wifi_mac`.
+
+**Changed** — check these if you script against `c64u`:
+
+- `c64u files pack-d64` leaves `.prg`, `.seq`, `.usr` and `.rel` out of the C64 file name; that
+  information is in the file type. `hello.prg` is now loaded with `LOAD"HELLO",8`, not
+  `LOAD"HELLO.PRG",8`. Other extensions stay part of the name.
+- In the video window **Esc is RUN/STOP**. It used to arm a reset; resetting is now Mod+R pressed
+  twice.
+- `c64u machine poweroff` first remembers the Wi-Fi MAC for `poweron` and warns when Wake On
+  Wi-Fi is off.
+- Text output prints nested values as indented lists with sorted keys instead of Go's `map[...]`
+  notation. `--json` output is unchanged.
+- `streams listen` retries a refused start for 6 seconds instead of 90, then explains a
+  "Network Host Resolve Error" — see [Troubleshooting](#troubleshooting).
+- The Linux ARM64 binary now has the video and audio stream too; all Linux builds load the
+  graphics and sound libraries only when a stream opens.
+
+**Fixed**
+
+- The debug stream trace printed the GAME, EXROM, IRQ and NMI signals inverted; it now prints
+  them when they are asserted. Trace output is buffered and drops fewer packets.
+- The video window resends held keys after a reset, no longer types stray characters for dead
+  keys, and retries while the device is still releasing the previous stream.
+- The TUI's Streams tab shows why a stream failed to start.
+
 ## The Ultimate Wedge
 
 A C64 out of the box cannot reach the Ultimate filesystem from the `READY`
@@ -203,6 +256,34 @@ There is deliberately **no default host**. A C64 Ultimate is always a separate
 machine on the network, so `localhost` could only ever be wrong: with nothing
 configured, `c64u` stops and says so instead of reporting a connection timeout
 against your own computer.
+
+### Wi-Fi MAC for Wake-on-LAN
+
+`c64u machine poweron` switches the device on with a Wake-on-LAN packet for its
+**Wi-Fi** MAC address. A switched-off device cannot tell its address, so put it
+into the config file while the device is on:
+
+```bash
+c64u info                    # look for "Wi-Fi MAC: 9C:13:9E:ED:D5:EC"
+```
+
+```toml
+# ~/.config/c64u/config.toml - flat form
+host = "192.168.1.100"
+wifi_mac = "9C:13:9E:ED:D5:EC"
+
+# or per device
+[devices.living-room]
+host = "192.168.1.100"
+wifi_mac = "9C:13:9E:ED:D5:EC"
+```
+
+Take the **Wi-Fi MAC**, not the Ethernet MAC: the device wakes only on Wi-Fi.
+`c64u cli-config show` shows the `wifi_mac` it will use. `--mac` on the command
+line outranks it. Without either, `poweron` uses the address `machine poweroff`
+remembered. `wifi_mac` belongs to its device, so a one-off `--host` does not use it.
+The device side needs setting up once too; see
+[Switching Off and On Over the Network](#switching-off-and-on-over-the-network).
 
 ### Network Password
 
@@ -471,19 +552,6 @@ c64u machine debug-reg                         # Read debug register (U64 only)
 c64u machine debug-reg-set <value>             # Write debug register (U64 only)
 ```
 
-`machine poweron` wakes a C64 Ultimate that `machine poweroff` switched off. It
-needs Wi-Fi and **Wake On Wi-Fi** enabled and saved to flash — off by default:
-
-```bash
-c64u config set "U64 Specific Settings" "Wake On Wi-Fi" Enabled
-c64u config save-to-flash "U64 Specific Settings"
-```
-
-A switched-off device cannot report its Wi-Fi MAC, so `poweron` takes it from
-`--mac`, then from `wifi_mac = "9C:13:9E:ED:D5:EC"` in the device entry of
-`config.toml`, then from the last `machine poweroff`, which remembers it in
-`~/.config/c64u/wifi_macs.json`. `poweroff` also warns when Wake On Wi-Fi is off.
-
 **Reading memory** (`read-mem`) shows a hex dump by default. `--output` (`-o`)
 writes the bytes to a file and `--raw` writes them to standard output, both
 exactly as the C64 returned them — neither adds or removes anything. Given
@@ -508,6 +576,46 @@ somewhere rather than an error.
 **Keyboard injection** (`sendkey`) converts ASCII strings to PETSCII and injects them into the C64 keyboard buffer via DMA. Strings longer than 10 characters are sent in chunks (default 100ms delay). Escape sequences: `\n` (Return), `\f1`–`\f8` (F1–F8), `\clr`, `\del`, `\home`, `\cup` (cursor up), `\cdn` (cursor down), `\cleft` (cursor left), `\cright` (cursor right).
 
 > **Note — `\stop` (RUN/STOP):** The sequence `\stop` writes PETSCII `$03` into the keyboard buffer. This only works when the C64 is idle (e.g. at the BASIC prompt or waiting for `INPUT`). While a BASIC program is running, the BASIC ROM reads the RUN/STOP state directly from the CIA1 hardware register at `$DC01` — not from the keyboard buffer. DMA writes cannot reach I/O-mapped CIA registers, so `\stop` has no effect on a running program.
+
+#### Switching Off and On Over the Network
+
+`machine poweroff` switches the C64 Ultimate off; `machine poweron` switches it
+on again with a Wake-on-LAN packet. The device wakes only over **Wi-Fi**, and
+only with **Wake On Wi-Fi** enabled and saved — it is off by default. Set it up
+once, with the device on:
+
+1. **Connect the device to your Wi-Fi network** in the Ultimate menu, in the same
+   network as the computer running `c64u`. A cable may stay plugged in as well;
+   the packet is a broadcast and has to reach the device's Wi-Fi.
+2. **Enable Wake On Wi-Fi and save it to flash.** Set in memory only, it is gone
+   after the next power-off:
+
+   ```bash
+   c64u config set "U64 Specific Settings" "Wake On Wi-Fi" Enabled
+   c64u config save-to-flash "U64 Specific Settings"
+   ```
+
+3. **Put the Wi-Fi MAC into `config.toml`.** `c64u info` shows it as `Wi-Fi MAC`;
+   add `wifi_mac = "9C:13:9E:ED:D5:EC"` next to the device's `host` — see
+   [Wi-Fi MAC for Wake-on-LAN](#wi-fi-mac-for-wake-on-lan). This step can be left
+   out: `machine poweroff` remembers the address in `~/.config/c64u/wifi_macs.json`,
+   but only for a device it switched off itself, and only on that computer.
+4. **Try it:**
+
+   ```bash
+   c64u machine poweroff       # warns if Wake On Wi-Fi is still off
+   c64u machine poweron        # sends the packet, waits until the device answers
+   ```
+
+   `poweron` reports `Machine is on after 4s` and where the MAC came from, or
+   gives up after a minute. A device that is already on is left alone.
+   `--no-wait` returns right after sending; `--mac` names the address for this
+   call.
+
+With Ethernet and Wi-Fi in the same subnet, firmware 1.2.1 cannot start streams
+to most computers — see "Network Host Resolve Error" under
+[Troubleshooting](#troubleshooting) for a Wi-Fi setup that keeps Wake-on-LAN and
+streaming both working.
 
 #### Drive Operations
 
@@ -598,6 +706,8 @@ c64u files create-dnp <path> --tracks N [--name NAME]
 
 # Pack local directory into D64 image (EXPERIMENTAL)
 c64u files pack-d64 <source-dir> <output-file> [--name NAME] [--id ID] [--tracks N]
+# hello.prg becomes HELLO (type PRG): LOAD"HELLO",8 - .prg .seq .usr .rel set the type,
+# other extensions stay in the name; names are cut to 16 characters
 ```
 
 #### Filesystem Operations (FTP)
@@ -672,19 +782,22 @@ tools/c64u/
 │   ├── api/           # REST API client
 │   ├── audio/         # Audio stream receiver and playback
 │   ├── config/        # Configuration handling
+│   ├── crt/           # Writes .crt cartridge images
 │   ├── debug/         # Debug logging
 │   ├── debugger/      # Live disassembler TUI (bus trace decoder)
 │   ├── disasm/        # 6502/6510 disassembler incl. illegal opcodes
 │   ├── diskimage/     # Local disk image creation
-│   ├── network/       # Local IP detection
+│   ├── inputsync/     # Keyboard, joystick and mouse state sent with machine input
+│   ├── network/       # Local IP detection, stream start retries
 │   ├── output/        # Output formatting
 │   ├── petscii/       # ASCII to PETSCII conversion for keyboard injection
-│   ├── softiec/       # SoftIEC drive: settings discovery and directory control
+│   ├── remoteftp/     # Remote FTP servers the device mounts under /ftp
+│   ├── softiec/       # SoftIEC drive: settings, directory, saved partitions
 │   ├── tui/           # Interactive terminal UI (Bubble Tea)
-│   └── video/         # Video stream receiver and rendering (Ebitengine)
+│   ├── video/         # Video stream window, keyboard/joystick/mouse (Ebitengine)
+│   └── wol/           # Wake-on-LAN for machine poweron
 ├── go.mod
-├── Makefile
-└── README.md
+└── Makefile
 
 skills/                # Agent Skills knowledge packs (see skills/README.md)
 ├── c64-knowledge/     # C64 hardware, 6502, graphics, disk formats, toolchain
@@ -814,6 +927,31 @@ cat ~/.local/share/c64u/c64u.log
 # Check configuration
 c64u cli-config show
 ```
+
+**`machine poweron` says the machine did not answer.** Check, with the device on:
+`c64u config get "U64 Specific Settings" "Wake On Wi-Fi"` must say `Enabled` *and*
+have been saved with `c64u config save-to-flash "U64 Specific Settings"`; the
+device must be connected to Wi-Fi; `wifi_mac` must be the **Wi-Fi MAC** from
+`c64u info`, not the Ethernet one; and the computer must be in the same network,
+since the packet is a broadcast that routers do not forward.
+
+**A stream fails with "Network Host Resolve Error".** Firmware 1.2.1 looks the
+destination up over Wi-Fi when Ethernet and Wi-Fi share a subnet, and fails for
+most computers (fixed in the upstream firmware source, commit `5d42e1db`). Either switch Wi-Fi off, or —
+to keep Wake-on-LAN — give Wi-Fi an address outside the subnet:
+
+```bash
+c64u config set "WiFi settings" "Use DHCP" Disabled
+c64u config set "WiFi settings" "Static IP" 192.168.1.5          # a free address
+c64u config set "WiFi settings" "Static Netmask" 255.255.255.255
+c64u config save-to-flash "WiFi settings"
+c64u machine reboot                                              # read at boot only
+```
+
+**SoftIEC partitions or remote FTP servers do not show up.** Both are saved in
+files the device reads when it is switched on; `c64u machine reboot` is not
+enough. Run `c64u machine poweroff` and `c64u machine poweron`, or load them in
+the Ultimate menu as described under SoftIEC and Filesystem Operations.
 
 ## API Reference
 

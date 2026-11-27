@@ -18,16 +18,20 @@ Every command accepts the global flags below. `<>` is required, `[]` optional.
 ## Device
 
 ```
-c64u info                          # product, hostname, unique id, core/firmware/fpga versions
+c64u info                          # product, hostname, unique id, versions, Ethernet/Wi-Fi MAC
 c64u about                         # API version reported by the device
 c64u version                       # version of the CLI itself
 ```
 
 ```json
-// c64u info --json
-{ "core_version": "1.49", "firmware_version": "1.1.0", "fpga_version": "122",
-  "hostname": "C64U", "product": "C64 Ultimate", "unique_id": "C4B420" }
+// c64u info --json (firmware 1.2.1)
+{ "core_version": "1.50", "ethernet_mac": "02:15:41:2E:BA:C4", "firmware_version": "1.2.1",
+  "fpga_version": "126", "git_commit_hash": "31687dbd", "hostname": "C64U",
+  "product": "C64 Ultimate", "unique_id": "C4B420", "wifi_mac": "9C:13:9E:ED:D5:EC" }
 ```
+
+`wifi_mac` is the address `machine poweron` needs; copy it into the device entry of
+`config.toml` as `wifi_mac = "..."` while the device is on.
 
 ## Machine control and memory
 
@@ -202,6 +206,10 @@ answering about its own filesystem, not a message about your disk. Use a device 
 c64u files pack-d64 ./programs mydisk.d64 --name "MY DISK" --id 01
 c64u fs upload mydisk.d64 /Temp/mydisk.d64
 ```
+
+`pack-d64` turns `.prg`, `.seq`, `.usr` and `.rel` into the file type and leaves them out of the
+name: `hello.prg` is `LOAD"HELLO",8` (since v1.2.0; before, it was `HELLO.PRG`). Other
+extensions stay in the name, cut to 16 characters.
 
 ```
 c64u files create-d64 <device-path> [--tracks N] [--name NAME]

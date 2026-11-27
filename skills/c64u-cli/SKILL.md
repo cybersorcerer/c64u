@@ -42,6 +42,7 @@ default = "living-room"
 
 [devices.living-room]
 host = "192.168.1.100"
+wifi_mac = "9C:13:9E:ED:D5:EC"   # optional, for machine poweron; c64u info shows it
 
 [devices.attic]
 host = "c64u-attic.local"
