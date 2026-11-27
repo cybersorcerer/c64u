@@ -401,3 +401,46 @@ func TestSyncer_WheelHeldBackWhilePending(t *testing.T) {
 		t.Errorf("sent %d wheel steps after the pause, want 1", sum)
 	}
 }
+
+// Firmware without machine:input must be known before the first keystroke:
+// the keystroke that drew the 404 used to be lost.
+func TestSyncer_ProbeFindsMissingEndpoint(t *testing.T) {
+	f := &fakeSender{status: 404}
+	y := newSyncer(t, f)
+	y.Probe()
+	if !y.Unsupported() {
+		t.Fatal("Unsupported() = false right after a probe that drew a 404")
+	}
+	if got := f.snapshot(); len(got) != 1 || got[0][0].Kind != "release_all" {
+		t.Errorf("calls = %+v, want one release_all", got)
+	}
+}
+
+func TestSyncer_ProbeOnCurrentFirmware(t *testing.T) {
+	f := &fakeSender{}
+	y := newSyncer(t, f)
+	y.Probe()
+	if y.Unsupported() {
+		t.Fatal("Unsupported() = true on a 200")
+	}
+	y.Update(State{Keys: Set{"a": true}})
+	eventually(t, "the key after the probe", func() bool { return len(f.snapshot()) == 2 })
+	if got := f.snapshot()[1]; !reflect.DeepEqual(got, []api.InputEvent{kbd("press", "a")}) {
+		t.Errorf("second call = %+v, want the press of a", got)
+	}
+}
+
+// Device finding: machine reset drops every injected input. Resync sends the
+// held state again, after a release_all.
+func TestSyncer_ResyncResendsHeld(t *testing.T) {
+	f := &fakeSender{}
+	y := newSyncer(t, f)
+	y.Update(State{Joy: [3]Set{2: {"fire": true}}})
+	eventually(t, "the press", callCount(f))
+	y.Resync()
+	eventually(t, "the resync", func() bool { return len(f.snapshot()) == 2 })
+	got := f.snapshot()[1]
+	if got[0].Kind != "release_all" || !held(f.snapshot())["joystick:fire"] {
+		t.Errorf("resync call = %+v, want release_all and fire held again", got)
+	}
+}

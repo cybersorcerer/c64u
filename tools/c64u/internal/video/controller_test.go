@@ -20,6 +20,7 @@ type fakeSync struct {
 	mu          sync.Mutex
 	updates     []inputsync.State
 	releaseAll  int
+	resync      int
 	closed      time.Duration
 	unsupported bool
 	err         error
@@ -31,6 +32,7 @@ func (f *fakeSync) Update(s inputsync.State) {
 	f.updates = append(f.updates, s)
 }
 func (f *fakeSync) ReleaseAll() { f.mu.Lock(); f.releaseAll++; f.mu.Unlock() }
+func (f *fakeSync) Resync()     { f.mu.Lock(); f.resync++; f.mu.Unlock() }
 func (f *fakeSync) Close(d time.Duration) {
 	f.mu.Lock()
 	f.closed = d
@@ -155,6 +157,22 @@ func TestController_ResetNeedsSecondPress(t *testing.T) {
 	}
 	c.tick(cmd(ebiten.KeyR, t0.Add(2000*time.Millisecond)))
 	waitFor(t, "the reset", func() bool { return d.count(&d.reset) == 1 })
+}
+
+// Device finding: a reset drops every injected input, so a fire button held
+// through Mod+R must be sent again once the reset is done.
+func TestController_ResetResendsHeldInput(t *testing.T) {
+	c, s, d := newTestController(t)
+	c.tick(cmd(ebiten.KeyR, t0))
+	c.tick(cmd(ebiten.KeyR, t0.Add(500*time.Millisecond)))
+	waitFor(t, "the resync after the reset", func() bool {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return s.resync == 1
+	})
+	if n := d.count(&d.reset); n != 1 {
+		t.Errorf("resets = %d, want 1 before the resync", n)
+	}
 }
 
 func TestController_MenuHotkey(t *testing.T) {

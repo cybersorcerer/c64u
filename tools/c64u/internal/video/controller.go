@@ -26,6 +26,7 @@ const closeTimeout = 500 * time.Millisecond
 type syncer interface {
 	Update(inputsync.State)
 	ReleaseAll()
+	Resync()
 	Close(time.Duration)
 	Err() error
 	Unsupported() bool
@@ -254,7 +255,11 @@ func (c *controller) hotkey(action hotkeyAction) {
 	case hkReset:
 		if c.resetPending() {
 			c.resetArmed = time.Time{}
-			go c.dev.MachineReset() //nolint:errcheck
+			go func() {
+				c.dev.MachineReset() //nolint:errcheck
+				// the reset dropped every injected input; send the held ones again
+				c.sync.Resync()
+			}()
 		} else {
 			c.resetArmed = c.now
 		}

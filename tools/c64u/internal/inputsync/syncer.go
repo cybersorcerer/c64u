@@ -69,6 +69,19 @@ func New(s Sender) *Syncer {
 	return y
 }
 
+// Probe sends release_all and waits for the answer, so a firmware without
+// machine:input is known before the first keystroke instead of costing it.
+// Call it once, before the first Update. Other errors are left to the first
+// real call, which retries.
+func (y *Syncer) Probe() {
+	resp, err := y.sender.MachineInput([]api.InputEvent{{Kind: "release_all"}})
+	if err == nil && resp.StatusCode == 404 {
+		y.mu.Lock()
+		y.unsupported = true
+		y.mu.Unlock()
+	}
+}
+
 // Update replaces the held keys, joystick inputs and mouse buttons, and adds
 // the taps and motion of held to what is waiting to be sent.
 func (y *Syncer) Update(held State) {
@@ -135,6 +148,16 @@ func (y *Syncer) release(kind string, port int, name string) {
 func (y *Syncer) ReleaseAll() {
 	y.mu.Lock()
 	y.want, y.log, y.resync = State{}, nil, true
+	y.mu.Unlock()
+	y.signal()
+}
+
+// Resync has the next call start with release_all and send everything held
+// again. Use it after a machine reset, which drops every injected input while
+// the host keys and buttons stay down.
+func (y *Syncer) Resync() {
+	y.mu.Lock()
+	y.resync = true
 	y.mu.Unlock()
 	y.signal()
 }

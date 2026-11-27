@@ -58,7 +58,11 @@ firmware that has the endpoint - 1.2.0 on the C64 Ultimate, 3.15 on the other pr
 two refusals mean different things: `404` is a firmware without the endpoint, `501` is a
 product without Ultimate 64 input hardware, which a cartridge in a real C64 never has.
 
-The buffer is **10 bytes**. Longer strings are chunked with `--delay` between chunks, and the
+`c64u machine reset` releases everything held through `machine input`: a `press:joy2:fire`
+before the reset reads as released afterwards (`$DC00` back to `$7F`). A press sent right after
+the reset call returns does stick. The video window sends what is still held again after Mod+R.
+
+The `sendkey` buffer is **10 bytes**. Longer strings are chunked with `--delay` between chunks, and the
 machine has to consume each chunk. If the running program does not drain the buffer, the rest
 is lost.
 
@@ -166,4 +170,7 @@ buffer, with the same BASIC-only limitation as `sendkey`.
   program and not inside the menu. Open the monitor through the menu instead: Mod+U in the window
   (or `c64u machine menu-button`), then F1 › Developer › Machine Code Monitor.
 - The device takes about 25 ms per input call on a LAN. The window sends what changed since the
-  last call, so input is delayed by about one call but never queues up.
+  last call, so input is delayed by about one call but never queues up. The price: pressing the
+  same key twice within one call arrives as a single press.
+- On firmware without `machine:input` the window notices before the first keystroke and types
+  through the keyboard buffer from the start.

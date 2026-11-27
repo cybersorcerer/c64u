@@ -300,7 +300,9 @@ func Listen(localIP string, startFn func(ip string) error, stopFn func() error, 
 		return err
 	}
 
-	ctrl := newController(inputsync.New(dev), dev, runtime.GOOS, ebiten.KeyName)
+	input := inputsync.New(dev)
+	input.Probe()
+	ctrl := newController(input, dev, runtime.GOOS, ebiten.KeyName)
 	g := newGame(conn, stopFn, ctrl)
 	go g.receiveLoop()
 	fmt.Println(hotkeyHelp(runtime.GOOS))
