@@ -380,6 +380,14 @@ your layout's labels.
 
 Losing focus or closing the window releases everything the window was holding.
 
+**Tested on** — macOS with a German keyboard, an Xbox controller and a trackpad, against a C64
+Ultimate on firmware 1.2.1. The Windows and Linux builds are compiled from the same code and the
+Linux window opens under GNOME on Wayland, but keyboard, gamepad and mouse are untested there, as
+are other keyboard layouts (US, French, …). If you try them, please report what works and what
+does not in the [issues](https://github.com/cybersorcerer/c64u/issues): your system, your
+layout, and what arrived on the C64 (`c64u machine read-mem 0400 --length 40` shows the first
+screen line).
+
 **Audio Stream**: Plays 48 kHz stereo 16-bit PCM from the C64 audio mixer with automatic gap compensation.
 
 **Debug Stream**: Streams raw 6510/VIC/1541 CPU bus data for clock-cycle-accurate program tracing (firmware ≥ 3.7 required).
