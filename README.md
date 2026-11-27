@@ -9,14 +9,15 @@ A command-line interface for controlling the [Commodore C64 Ultimate](https://co
 - **SoftIEC Control**: Load from the Ultimate filesystem at the BASIC prompt — no disk image needed; enable the DOS emulation drive, set its device number, and point it at a directory
 - **Live Video Stream**: Display C64 video output in a native window that is also the C64's keyboard, joystick and mouse — type into BASIC, play games with a gamepad, use GEOS with the mouse, drive the Ultimate menu and its machine code monitor (firmware 1.2.0 / 3.15; older firmware falls back to the keyboard buffer)
 - **Live Audio Stream**: Play back C64 audio in real time
-- **FTP Integration**: Access the C64 Ultimate filesystem
+- **FTP Integration**: Access the C64 Ultimate filesystem, and add remote FTP servers - a NAS, another computer - whose disk images and programs the device then mounts and runs like its own (firmware 1.2.1)
+- **Power Control**: Switch the machine off, and on again over the network with Wake-on-LAN
 - **Flexible Configuration**: Config file, environment variables, or CLI flags
 - **Multiple Output Formats**: Human-readable text or JSON for scripting
 - **Debug Logging**: Built-in debug mode for troubleshooting
 - **Cross-Platform**: Builds for macOS, Linux, and Windows
 - **Easy Integration**: Works seamlessly with c64.nvim, VSCode, and scripts
 - **Agent Skills**: Portable C64 knowledge packs for AI coding agents — Claude Code, opencode, pi, Hermes and others
-- **Ultimate Wedge**: A cartridge that adds directory, load, save, text-viewing and disk-mount commands to stock BASIC, straight onto the Ultimate filesystem
+- **Ultimate Wedge**: A cartridge that adds directory, load, save, copy, text-viewing, disk-mount, memory-dump and REU-image commands to stock BASIC, straight onto the Ultimate filesystem
 
 ## The Ultimate Wedge
 
@@ -34,8 +35,11 @@ in [`c64/wedge`](c64/wedge/README.md) removes that detour:
 @MT<id>:NAME  mount a disk image         @UM<id>    unmount the disk
 @SW<id>       swap to the next disk      @V         show the version
 @TI           show date and time         @DA<0/1>   drive A off, on
-@DB<0/1>      drive B off, on
+@DB<0/1>      drive B off, on            @RL / @RS  load / save the REU image
+@CP:NAME=DIR  copy into a directory      @SM[:PATH] save 64K RAM to a file
 ```
+
+`@CP`, `@SM`, `@RL` and `@RS` need firmware 1.2.1.
 
 `<id>` is the drive's bus id and may be left out. It is set per drive in the
 Ultimate's configuration, so it differs between machines and drive A is not
@@ -268,8 +272,9 @@ Full-screen terminal UI, organised as five tabs:
 - **Streams**: Start the video, audio or debug stream
 
 The TUI covers the commands as they were before firmware 1.2.1. The newer ones - `machine input`,
-`read-mem --disasm`, `config restore`/`import`, per-category flash operations, `drives unlink` and
-`machine heap` - are command-line only for now.
+`machine menu-screen`, `read-mem --disasm`, `config restore`/`import`, per-category flash
+operations, `drives unlink`, `drives softiec partitions`, `fs servers`, `machine heap` and
+`machine poweron` - are command-line only for now.
 
 Global keys, in every view:
 
@@ -450,6 +455,7 @@ c64u machine resume                            # Resume from pause
 c64u machine poweroff                          # Power off, remembering the Wi-Fi MAC
 c64u machine poweron [--mac MAC] [--no-wait]   # Wake-on-LAN, waits until it answers
 c64u machine menu-button                       # Simulate Menu button press
+c64u machine menu-screen                       # Read the open Ultimate menu as text (fw 1.2.0)
 c64u machine write-mem <addr> <data>           # Write hex data to memory
 c64u machine write-mem-file <addr> <file>      # Write file to memory
 c64u machine read-mem <addr> [--length N]      # Read memory (hex dump)
