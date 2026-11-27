@@ -112,6 +112,15 @@ result. It does not start at all where those are missing, not even for `c64u ver
 machine without them, build from source with `CGO_ENABLED=0`: that yields a static binary
 without the two stream commands.
 
+## A video stream can refuse to restart for a while
+
+On firmware 1.2.1, `streams start video` sometimes answers `Network Host Resolve Error` after the
+video window was closed, for any destination IP, while audio and debug streams still start. The
+device resolves nothing; it is still releasing the previous stream. It recovered on its own
+after about 50 seconds. Calling `streams stop video` between attempts kept it from recovering
+once, and only `c64u machine reboot` cleared it. `streams listen video` retries on its own for
+up to 90 seconds without stopping in between, and suggests the reboot after that.
+
 ## Configuration changes are volatile by default
 
 `c64u config set` takes effect at once but is lost on power-off. Follow it with
