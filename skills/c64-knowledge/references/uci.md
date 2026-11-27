@@ -119,7 +119,7 @@ makes it the safe probe for what a given firmware supports.
 | FILE_STAT | `$08` | |
 | DELETE_FILE | `$09` | |
 | RENAME_FILE | `$0A` | |
-| COPY_FILE | `$0B` | |
+| COPY_FILE | `$0B` | `$01 $0B <name> $00 <directory>` |
 | CHANGE_DIR | `$11` | |
 | GET_PATH | `$12` | |
 | OPEN_DIR | `$13` | |
@@ -162,7 +162,7 @@ Status strings follow the Commodore convention, `00,OK` on success, and errors s
 | FINISH_CAPTURE | `$03` | `$04 $03` |
 | FREEZE | `$05` | `$04 $05` |
 | REBOOT | `$06` | `$04 $06` |
-| LOAD_REU / SAVE_REU | `$08` / `$09` | `$04 $08 <filename>` |
+| LOAD_REU / SAVE_REU | `$08` / `$09` | `$04 $08 <3+ bytes, ignored>` |
 | U64_SAVEMEM | `$0F` | `$04 $0F <filename>` |
 | DECODE_TRACK | `$11` | `$04 $11 <trk> <max_sec> <gcr_addr> <bin_addr> <gcr_len>` |
 | EASYFLASH_ERASE | `$20` | `$04 $20 $00 <bank> <baseaddr>` |
@@ -176,46 +176,52 @@ Status strings follow the Commodore convention, `00,OK` on success, and errors s
 | SET_PALETTE_COLOR | `$53` | `$04 $53 <index> <r> <g> <b>` |
 | RESET_PALETTE | `$54` | `$04 $54` |
 
-`COPY_FILE` (`$0B`) does not work on firmware 1.1.0, though it is documented exactly like
-`RENAME_FILE` (`$0A`): `$01 $0b <source> $00 <destination>`. Measured on hardware, it never
-produces a copy. The reply follows whichever name comes first - `FILE EXISTS` when that name
-exists, `FILE DOESN'T EXIST` when it does not - in both argument orders, with bare and with
-absolute names, with the destination null terminated or not, and with a blank in place of the
-separator. `RENAME_FILE` over the identical byte stream, differing only in the command byte,
-renames the file. Verified from a 6502 program with the outgoing bytes logged and read back
-over DMA, and by hand at the keyboard, and repeated on an Ultimate II+L on firmware 3.15a -
-same replies there, so this is not a C64U-only problem and not fixed in the newest firmware.
-Commodore has confirmed the bug and says a fix is coming in a future firmware release. Do not re-derive this; check a newer firmware instead.
+`COPY_FILE` (`$0B`) copies a file **into a directory**, keeping its name: `$01 $0B <name> $00
+<directory>`, with `<name>` relative to the DOS target's current directory (set it with
+`CHANGE_DIR`) and `<directory>` absolute. The documentation describes it like `RENAME_FILE`, with a
+new file name as the second argument, and that is wrong: upstream the handler calls
+`fcopy(path, name, destination, name, false)`, so the destination is a path and the copy never
+overwrites. Checked on firmware 1.2.1: `savemem1.bin` into `/Temp/cache` (with or without a
+trailing `/`) answers `00,OK` and the copy appears; the same call again answers `FILE EXISTS`; a
+file name as destination answers `PATH DOESN'T EXIST`, and an absolute source with a file name as
+destination answers `FILE EXISTS` without copying. The earlier tests on 1.1.0 and 3.15a, which
+concluded COPY_FILE was broken (and which Commodore acknowledged as a bug), only ever tried a file
+name as destination; most likely they hit the same misunderstanding, but they were not repeated
+with a directory on those versions.
 
 `LOAD_REU` (`$08`) on the control target hangs the interface on firmware 1.1.0. Sending
 `$04 $08 <filename>` leaves the status register at `$11` (busy) forever; ABORT takes it to
 `$15` and no control bit gets further, a C64 reset does not clear it, and every UCI command
 after it hangs as well - the Ultimate has to lose power. Measured on hardware with the file
 present and absent. This is GideonZ/1541ultimate issue #740, fixed in PR #741 (merged
-2026-07-31); the Ultimate-II firmware 3.15 notes carry it, the C64U 1.1.0 line does not yet.
-`SAVE_REU` (`$09`) shares the same code path and argument, so treat it as equally unsafe until
-a fixed firmware is on the machine. Do not re-derive this; check the firmware version instead.
-Firmware 3.15a has the fix - measured on an Ultimate II+L, where the same call answers
-`85,REU FILE CANNOT BE OPENED` and leaves the interface idle.
+2026-07-31). `SAVE_REU` (`$09`) shares the code path. **Firmware 1.2.1 has the fix**, as do
+3.15a on the Ultimate II+L: check the version before sending either to an older machine.
+
+Measured on 1.2.1 with `REU Size` set to 128 KB: `SAVE_REU` answers `00,OK` and writes the REU
+to the `REU Preload Image` path; `LOAD_REU` answers `00,OK` and reads it back; a missing image
+answers `85,REU FILE CANNOT BE OPENED`, and the interface stays usable after each. Both also send
+a data reply: a 32-bit little-endian byte count (`$FFFFFFFF` on failure) followed by text such as
+`REU SAVE: SAVED 131072 BYTES FROM $000000 TO /TEMP/TEST.REU` or `REU LOAD: FAILED TO OPEN
+/TEMP/NONE.REU: FILE DOESN'T EXIST`. `SAVE_REU` overwrites the configured image without asking.
 
 The documented format `$04 $08 <filename>` is wrong: **the filename is ignored**. Upstream the
 handler calls `REUPreloader::LoadREU(char *status)`, whose argument is an output buffer for the
 status text, and the path it actually uses is the `REU Preload Image` configuration item. What
 the command really needs is length: `if (command->length >= 5)`, so at least three bytes have
-to follow the two command bytes or the reply is `81,INVALID PARAMS`. Measured on 3.15a:
+to follow the two command bytes or the reply is `81,INVALID PARAMS`. Measured on 3.15a and 1.2.1:
 `$04 $08 "AB"` answers `81,INVALID PARAMS`, `$04 $08 "ABC"` answers `00,OK` and loads the
 configured image, and a full but nonsensical name answers `00,OK` just the same. To load a
 different image, change `REU Preload Image` over the REST API first - the UCI cannot name one.
 
-`U64_SAVEMEM` (`$0F`) reports `00,OK` on firmware 1.1.0 without writing anything. Tried with an
-absolute path, a relative path and no path at all (where the firmware is supposed to use
-`/temp/c64_memory.bin`); no file appears, over FTP or in the Ultimate's own directory listing,
-and not with a delay either. The status is not a stale one - an error from the preceding
-command does not carry over. Unlike `LOAD_REU` it leaves the interface idle, so it is safe to
-send; it simply does nothing. For comparison, an Ultimate II+L on 3.15a answers
-`21,UNKNOWN COMMAND` - the command is guarded by `#ifdef U64` upstream, and a build without it
-rejects the command properly. So the C64U reply is a wrong success, not an unimplemented
-command reporting itself honestly.
+`U64_SAVEMEM` (`$0F`) writes the C64's 64 KB of RAM to a file - on firmware 1.2.1. It saves the
+RAM itself, **including what lies under the BASIC and KERNAL ROMs and the I/O area**, which no
+other path reaches (REST `read-mem` sees the ROMs there). `$04 $0F /Temp/mem.bin` writes that
+file; with no name it writes `/Temp/c64_memory.bin`. Checked on 1.2.1: both 65536 bytes, `$0801`
+matching the running program and `$E000` holding RAM (`00 00 ff ff`), not the KERNAL.
+
+On firmware 1.1.0 the same command answered `00,OK` without writing anything, with an absolute
+path, a relative path or none, so check the version first. An Ultimate II+L on 3.15a answers
+`21,UNKNOWN COMMAND` - the command is guarded by `#ifdef U64` upstream.
 
 `GET_DRVINFO` answers with a count byte followed by three bytes per drive: type, IEC bus
 address, power state (`$00` off, `$01` on). Types are `$00` 1541, `$01` 1571, `$02` 1581,
@@ -232,7 +238,10 @@ so colour 15 is bytes 45-47. `SET_PALETTE` wants exactly 48 bytes, making a 50-b
 `SET_PALETTE_COLOR` is exactly six bytes with the index in 0-15. A wrong length or index gives
 `81,INVALID PARAMS` and changes nothing. The documentation lists the Ultimate 64 family
 including the Commodore 64 Ultimate as supported; other products answer `21,UNKNOWN COMMAND`.
-Not verified on the C64U's 1.1.0, which predates 3.15.
+Checked on a C64 Ultimate on firmware 1.2.1: `GET_PALETTE` returned 48 bytes (colour 6 was
+`2c 29 b1`), `SET_PALETTE_COLOR 6` to `ff 00 00` and a full `SET_PALETTE` both read back as set,
+`RESET_PALETTE` restored `2c 29 b1`, and index 16, a five-byte `SET_PALETTE_COLOR` and a 47-byte
+`SET_PALETTE` each answered `81,INVALID PARAMS`.
 
 ## Network (`$03`)
 
@@ -302,6 +311,7 @@ run on the hardware named next to it.
 `examples/uci-identify.asm` performs the full round trip and was run on a C64 Ultimate
 (core 1.49, firmware 1.1.0). The DOS target answered `ULTIMATE-II DOS V1.2` on the data queue
 and `00,OK` on the status queue.
+The same round trip on firmware 1.2.1 (core 1.50) gave the same reply.
 
 `GET_DRVINFO` was run from the wedge on the same machine and reported bus 9 / 1541 / on and
 bus 10 / 1541 / on, matching the device's own Drive A and Drive B settings. Changing drive B
