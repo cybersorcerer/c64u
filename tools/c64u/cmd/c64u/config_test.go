@@ -44,3 +44,28 @@ func TestSortedKeys(t *testing.T) {
 		t.Errorf("sortedKeys(empty) = %v, want empty", got)
 	}
 }
+
+func TestCategoryStoreOutcome(t *testing.T) {
+	cases := []struct {
+		action string
+		names  []string
+		msg    string
+		ok     bool
+	}{
+		{"save_to_flash", []string{"Drive A Settings"}, "Saved to flash", true},
+		{"save_to_flash", []string{}, `Nothing to save: no unsaved changes match "Drive*"`, true},
+		{"load_from_flash", []string{"Drive A Settings"}, "Reloaded from flash", true},
+		{"load_from_flash", []string{}, `No category matches "Drive*"`, false},
+		{"reset_to_default", []string{"Drive A Settings"}, "Reset to defaults", true},
+		{"reset_to_default", []string{}, `No category matches "Drive*"`, false},
+	}
+	for _, c := range cases {
+		msg, data, ok := categoryStoreOutcome(c.action, "Drive*", c.names)
+		if msg != c.msg || ok != c.ok {
+			t.Errorf("%s %v: got %q, %v; want %q, %v", c.action, c.names, msg, ok, c.msg, c.ok)
+		}
+		if ok && data["category"] != "Drive*" {
+			t.Errorf("%s: data = %v", c.action, data)
+		}
+	}
+}

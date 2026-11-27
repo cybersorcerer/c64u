@@ -400,7 +400,7 @@ Examples:
   c64u config save-to-flash "Drive A Settings"`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 1 {
-			categoryStore("save_to_flash", args[0], "Saved to flash", "Failed to save config to flash")
+			categoryStore("save_to_flash", args[0], "Failed to save config to flash")
 			return
 		}
 		if err := apiClient.SaveConfigToFlash(); err != nil {
@@ -432,7 +432,7 @@ Examples:
   c64u config load-from-flash "Drive A Settings"`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 1 {
-			categoryStore("load_from_flash", args[0], "Reloaded from flash", "Failed to load config from flash")
+			categoryStore("load_from_flash", args[0], "Failed to load config from flash")
 			return
 		}
 		if err := apiClient.LoadConfigFromFlash(); err != nil {
@@ -465,7 +465,7 @@ Examples:
   c64u config reset-to-default "Drive A Settings"`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 1 {
-			categoryStore("reset_to_default", args[0], "Reset to defaults", "Failed to reset config")
+			categoryStore("reset_to_default", args[0], "Failed to reset config")
 			return
 		}
 		if err := apiClient.ResetConfigToDefault(); err != nil {
@@ -477,23 +477,42 @@ Examples:
 	},
 }
 
+// categoryStoreDone is the success message of each store action.
+var categoryStoreDone = map[string]string{
+	"save_to_flash":    "Saved to flash",
+	"load_from_flash":  "Reloaded from flash",
+	"reset_to_default": "Reset to defaults",
+}
+
 // categoryStore runs a store action on the categories matching category and
 // lists the ones the device acted on.
-func categoryStore(action, category, done, failed string) {
+func categoryStore(action, category, failed string) {
 	names, err := apiClient.ConfigCategoryStore(action, category)
 	if err != nil {
 		formatter.Error(failed, []string{err.Error()})
 		return
 	}
-	data := map[string]interface{}{"category": category, api.ConfigStoreMembers[action]: names}
+	msg, data, ok := categoryStoreOutcome(action, category, names)
+	if !ok {
+		formatter.Error(msg, nil)
+		return
+	}
+	formatter.Success(msg, data)
+}
+
+// categoryStoreOutcome turns the names a store action acted on into the
+// message and data to print; ok is false when nothing matched.
+func categoryStoreOutcome(action, category string, names []string) (msg string, data map[string]interface{}, ok bool) {
+	data = map[string]interface{}{"category": category, api.ConfigStoreMembers[action]: names}
 	switch {
 	case len(names) > 0:
-		formatter.Success(done, data)
+		return categoryStoreDone[action], data, true
 	case action == "save_to_flash":
-		// the firmware writes only categories with unsaved changes
-		formatter.Success(fmt.Sprintf("Nothing to save: no unsaved changes match %q", category), data)
+		// the firmware writes only categories with unsaved changes, and answers
+		// a name that matches nothing the same way
+		return fmt.Sprintf("Nothing to save: no unsaved changes match %q", category), data, true
 	default:
-		formatter.Error(fmt.Sprintf("No category matches %q", category), nil)
+		return fmt.Sprintf("No category matches %q", category), nil, false
 	}
 }
 

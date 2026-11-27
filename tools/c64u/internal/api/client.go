@@ -219,24 +219,23 @@ func (c *Client) parseResponse(resp *http.Response) (*Response, error) {
 	// Try to parse as JSON
 	if len(body) > 0 {
 		// First try to unmarshal into a generic map to get all fields
+		// Not JSON or invalid JSON: keep the raw body, but still check the
+		// status below - a plain-text 404 is not a success.
 		var jsonData map[string]interface{}
-		if err := json.Unmarshal(body, &jsonData); err != nil {
-			// Not JSON or invalid JSON - store as raw body
-			return apiResp, nil
-		}
-
-		// Extract errors array if present
-		if errors, ok := jsonData["errors"].([]interface{}); ok {
-			for _, e := range errors {
-				if errStr, ok := e.(string); ok {
-					apiResp.Errors = append(apiResp.Errors, errStr)
+		if err := json.Unmarshal(body, &jsonData); err == nil {
+			// Extract errors array if present
+			if errors, ok := jsonData["errors"].([]interface{}); ok {
+				for _, e := range errors {
+					if errStr, ok := e.(string); ok {
+						apiResp.Errors = append(apiResp.Errors, errStr)
+					}
 				}
+				delete(jsonData, "errors")
 			}
-			delete(jsonData, "errors")
-		}
 
-		// Store remaining data
-		apiResp.Data = jsonData
+			// Store remaining data
+			apiResp.Data = jsonData
+		}
 	}
 
 	// Check HTTP status code

@@ -670,6 +670,15 @@ func fieldLines(indent, key string, value interface{}) []string {
 
 // itemLines renders one list element as "- " followed by its fields.
 func itemLines(indent string, item interface{}) []string {
+	if list, ok := item.([]interface{}); ok {
+		lines := fieldLines(indent, "-", list)
+		if len(lines) == 1 {
+			// "  -: 1, 2" from fieldLines; a list item carries no colon
+			return []string{indent + "- " + strings.TrimPrefix(lines[0], indent+"-: ")}
+		}
+		lines[0] = indent + "-"
+		return lines
+	}
 	m, ok := item.(map[string]interface{})
 	if !ok || len(m) == 0 {
 		text := "none"
@@ -694,22 +703,40 @@ func hasNested(items []interface{}) bool {
 }
 
 // scalarText prints whole JSON numbers, which decode as float64, without an
-// exponent: %v turns 1583280 into 1.58328e+06.
+// exponent: %v turns 1583280 into 1.58328e+06. JSON null reads "none".
 func scalarText(v interface{}) string {
+	if v == nil {
+		return "none"
+	}
 	if n, ok := v.(float64); ok && n == float64(int64(n)) {
 		return fmt.Sprintf("%d", int64(n))
 	}
 	return fmt.Sprintf("%v", v)
 }
 
-// styleLine colours a fieldLines line: the label up to the first ": " and the
-// value after it, or the whole line when it only introduces nested lines.
+// styleLine colours a fieldLines line: label and value as splitLine cuts them.
 func (f *Formatter) styleLine(line string) string {
 	if f.NoColor {
 		return line
 	}
-	if i := strings.Index(line, ": "); i >= 0 {
-		return labelStyle.Render(line[:i+1]) + " " + valueStyle.Render(line[i+2:])
+	label, value := splitLine(line)
+	if value == "" {
+		return labelStyle.Render(label)
 	}
-	return labelStyle.Render(line)
+	return labelStyle.Render(label) + " " + valueStyle.Render(value)
+}
+
+// splitLine cuts a fieldLines line into its label and value, which a single
+// space separates: "  free: 1" into "  free:" and "1", a list item "  - 1, 2"
+// into "  -" and "1, 2". A line that only introduces nested lines is all label.
+func splitLine(line string) (label, value string) {
+	if i := strings.Index(line, ": "); i >= 0 {
+		return line[:i+1], line[i+2:]
+	}
+	trimmed := strings.TrimLeft(line, " ")
+	if strings.HasPrefix(trimmed, "- ") {
+		i := len(line) - len(trimmed) + 1
+		return line[:i], line[i+1:]
+	}
+	return line, ""
 }

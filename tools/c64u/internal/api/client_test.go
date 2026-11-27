@@ -169,3 +169,21 @@ func TestNonJSONResponse(t *testing.T) {
 		t.Fatal("resp should not be nil")
 	}
 }
+
+// Older firmware may answer a missing route with a plain-text 404; that must
+// not read as success.
+func TestNonJSONErrorResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("Not found")) //nolint:errcheck
+	}))
+	defer srv.Close()
+
+	resp, err := newTestClient(srv.URL).Get("/v1/machine:heap", nil)
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if !resp.HasErrors() || string(resp.RawBody) != "Not found" {
+		t.Errorf("errors = %v, body = %q; want an error and the raw body kept", resp.Errors, resp.RawBody)
+	}
+}

@@ -105,3 +105,28 @@ func assertLines(t *testing.T, got, want []string) {
 		t.Errorf("got:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
+
+func TestFieldLines_ListOfLists(t *testing.T) {
+	v := []interface{}{[]interface{}{float64(1), float64(2)}, []interface{}{}}
+	assertLines(t, fieldLines("  ", "rows", v), []string{"  rows:", "    - 1, 2", "    - none"})
+}
+
+func TestFieldLines_NullReadsNone(t *testing.T) {
+	assertLines(t, fieldLines("  ", "image", nil), []string{"  image: none"})
+}
+
+// The colour split: a label and the value after it; a list item's text is a
+// value, not a label.
+func TestSplitLine(t *testing.T) {
+	cases := []struct{ line, label, value string }{
+		{"  free: 1583280", "  free:", "1583280"},
+		{"  mouse:", "  mouse:", ""},
+		{"    - inputs: none", "    - inputs:", "none"},
+		{"    - 1, 2", "    -", "1, 2"},
+	}
+	for _, c := range cases {
+		if l, v := splitLine(c.line); l != c.label || v != c.value {
+			t.Errorf("splitLine(%q) = %q, %q; want %q, %q", c.line, l, v, c.label, c.value)
+		}
+	}
+}
