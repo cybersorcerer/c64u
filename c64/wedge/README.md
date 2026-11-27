@@ -16,6 +16,8 @@ JiffyDOS.
 @MT<id>:NAME  mount a disk image      @UM<id>    unmount the disk
 @SW<id>       swap to the next disk   @TI        show date and time
 @DA<0/1>      drive A off, on         @DB<0/1>   drive B off, on
+@CP:NAME=DIR  copy into a directory   @SM[:PATH] save 64K RAM to a file
+@RL           load the REU image      @RS        save the REU image
 ```
 
 `<id>` in `@MT`, `@UM` and `@SW` is the drive's bus id and may be left out;
@@ -51,6 +53,22 @@ back.
 `@RN` takes both names in one line, old first, separated by `=`. Commodore DOS
 writes the same operation the other way round (`R:new=old`), so the order is
 worth a second look before assuming.
+
+`@CP` copies a file **into a directory** and keeps its name: `@CP:GAME.PRG=/USB0/BACKUP`. It
+never overwrites; a file of that name already there answers `FILE EXISTS`.
+
+`@SM` writes the C64's 64 KB of RAM to a file, including what lies under the ROMs and the I/O
+area, which nothing else on the machine can read. The path has to be absolute
+(`@SM:/USB0/MEM.BIN`); without one it goes to `/Temp/c64_memory.bin`.
+
+`@RL` and `@RS` load and save the REU image that the Ultimate's `REU Preload Image` setting
+names - they take no name of their own, because the firmware ignores one. `@RS` replaces that
+image without asking; the previous one is kept beside it as `.bu` (`preload.reu` becomes
+`preload.bu`).
+
+These four need firmware 1.2.1. On 1.1.0, `@CP` was only ever tried with a file name as target,
+`@SM` answers `00,OK` and writes nothing, and `@RL` hangs the command interface until the
+Ultimate is switched off and on again.
 
 ## Two prefixes, because of JiffyDOS
 

@@ -17,8 +17,9 @@
 //   @$         directory, straight to the screen
 //   @CD:NAME   change directory        @MD:NAME  create directory
 //   @RM:NAME   delete file             @SV:NAME  save the BASIC program
-//   @RN:A=B    rename file
+//   @RN:A=B    rename file             @CP:A=DIR copy file into directory
 //   @T:NAME    show a text file        @DR       list the drives
+//   @SM[:PATH] save 64K RAM to a file  @RL/@RS   load/save the REU image
 //   @MT<id>:NAME  mount a disk image   @UM<id>   unmount the disk
 //   @SW<id>       swap to the next disk
 //   /NAME      load                    ^NAME     load and run
@@ -590,10 +591,10 @@ doRename:
         jsr twoNameCommand
         jmp endOfCommand
 
-// @CP works and is reachable, but is deliberately absent from the help table:
-// on firmware 1.1.0 the Ultimate never performs the copy, so advertising it
-// would send people looking for a mistake of their own. Keep it - the day a
-// firmware fixes COPY_FILE, only the help row has to come back.
+// @CP:NAME=DIR copies NAME into the directory DIR under its own name, and never
+// overwrites (FILE EXISTS). The firmware documentation describes the second
+// argument as a new file name, like rename; upstream it is passed to fcopy() as
+// a path. Checked on firmware 1.2.1.
 doCopy:
         lda #DOS_COPY_FILE
         jsr twoNameCommand
@@ -630,35 +631,25 @@ doTime:
         jsr showTime
         jmp endOfCommand
 
-// The REU image commands take a filename like the DOS ones, but they live on
-// the control target - which is what makes them cheap: the DOS pair ($21/$22)
-// would want a 32-bit address and length instead.
+// @RL and @RS load and save the REU image named by the "REU Preload Image"
+// setting. The firmware ignores any name in the command and only checks that at
+// least three bytes follow the command code, so the wedge sends three filler
+// bytes; anything typed after RL or RS is skipped with the rest of the line.
 //
-// Both are reachable but deliberately absent from the help table, like @CP.
-// On firmware 1.1.0 LOAD_REU never completes: the interface stays busy, no
-// control bit releases it, a C64 reset does not either, and every later UCI
-// command hangs too - only pulling the power brings it back. Measured here and
-// the same as GideonZ/1541ultimate issue #740, which names the cause (the
-// filename is read from the reply buffer instead of the command buffer) and is
-// fixed in PR #741, merged 2026-07-31. SAVE_REU shares that code path, so it is
-// assumed to behave identically and was not tried.
-//
-// On an Ultimate II+L with firmware 3.15a, which has the fix, the same command
-// answers cleanly. It also showed that the filename is ignored: the firmware
-// loads whatever the "REU Preload Image" setting points at, and only checks
-// that the command is at least five bytes long. So ":NAME" here is padding, not
-// an argument. Before these two are ever advertised, the syntax should drop the
-// name and send three filler bytes instead.
+// Firmware 1.1.0 must not get these: LOAD_REU never completes there, and every
+// later UCI command hangs until the Ultimate loses power (GideonZ/1541ultimate
+// issue #740, fixed in PR #741). Firmware 1.2.1 has the fix - checked: both
+// answer 00,OK, a missing image 85,REU FILE CANNOT BE OPENED, and the interface
+// stays usable. SAVE_REU replaces the configured image without asking; the old
+// one is kept beside it with the extension .bu.
 doReuLoad:
-        ldy #TARGET_CONTROL
         lda #CTRL_LOAD_REU
-        jsr simpleNameCommand
+        jsr reuImage
         jmp endOfCommand
 
 doReuSave:
-        ldy #TARGET_CONTROL
         lda #CTRL_SAVE_REU
-        jsr simpleNameCommand
+        jsr reuImage
         jmp endOfCommand
 
 doSaveMem:
@@ -1528,12 +1519,8 @@ simpleNameCommand:
 // Commands shaped "<code> <old>=<new>". A is the DOS command byte; the two
 // names go into one command, separated by a zero byte.
 //
-// Rename works. Copy ($0B) is documented with the same shape, and everything
-// measured here says the command leaves correctly - rename over this very
-// routine renames the file - but on firmware 1.1.0 no copy ever appeared: the
-// reply follows whichever name comes first, FILE EXISTS when it is there and
-// FILE DOESN'T EXIST when it is not, in both argument orders and with bare or
-// absolute names. It is kept so the behaviour can be checked at the keyboard.
+// Rename takes a new file name as the second name; copy ($0B) takes a directory
+// there and keeps the name (see doCopy).
 twoNameCommand:
         sta dosCommand
         jsr uciPresent
@@ -1610,17 +1597,39 @@ printUciReply:
         jsr uciAccept
         rts
 
-// Writes all 64 KB of C64 memory to a file. The name is optional - without one
-// the Ultimate uses /temp/c64_memory.bin - so unlike the other name commands an
-// empty name is not an error.
+// Sends LOAD_REU or SAVE_REU (in A) with the three filler bytes the firmware
+// wants in place of the name it ignores, and prints the status.
+reuImage:
+        sta dosCommand
+        jsr uciPresent
+        bcc !go+
+        rts
+!go:
+        lda #TARGET_CONTROL
+        sta UCI_CMD_DATA
+        lda dosCommand
+        sta UCI_CMD_DATA
+        ldx #3
+!pad:
+        sta UCI_CMD_DATA                // any byte will do
+        dex
+        bne !pad-
+        lda #PUSH_CMD
+        sta UCI_CONTROL
+        jsr uciWait
+        jsr printStatus
+        jmp uciAccept
+
+// Writes the C64's 64 KB of RAM to a file - the RAM itself, including what lies
+// under the ROMs and the I/O area. The path is optional - without one the
+// Ultimate uses /Temp/c64_memory.bin - so unlike the other name commands an
+// empty name is not an error. It has to be absolute: the control target has no
+// current directory, and a relative name answers PATH DOESN'T EXIST.
 //
-// Reachable but kept out of the help table, like @CP and the REU pair: on
-// firmware 1.1.0 the command answers 00,OK and writes nothing at all. Measured
-// with an absolute name, a relative name and no name, checked both over FTP and
-// through the wedge's own directory listing, and the status is genuinely fresh -
-// an error from the command before it does not survive into the reply. It does
-// not wedge the interface the way LOAD_REU does, it just lies. Put the help row
-// back once a firmware actually produces the file.
+// The firmware takes the name straight from the command buffer without ending
+// it, so it runs on into whatever a longer earlier command left there and the
+// save fails with PATH DOESN'T EXIST - hence the zero byte after the name.
+// Checked on firmware 1.2.1; firmware 1.1.0 answers 00,OK and writes nothing.
 saveMemory:
         jsr uciPresent
         bcc !go+
@@ -1634,7 +1643,11 @@ saveMemory:
         lda #CTRL_SAVE_MEM
         sta UCI_CMD_DATA
         jsr sendFilename
-
+        cpx #$00
+        beq !push+
+        lda #$00                        // the firmware does not end the name
+        sta UCI_CMD_DATA
+!push:
         lda #PUSH_CMD
         sta UCI_CONTROL
         jsr uciWait
@@ -2252,9 +2265,13 @@ helpRows:   .text "$           DIRECTORY"
             .byte 0
             .text "RN:OLD=NEW  RENAME FILE"
             .byte 0
+            .text "CP:NAME=DIR COPY FILE INTO DIR"
+            .byte 0
             .text "T:NAME      SHOW TEXT FILE"
             .byte 0
             .text "SV:NAME     SAVE BASIC PROGRAM"
+            .byte 0
+            .text "SM[:PATH]   SAVE 64K RAM TO FILE"
             .byte 0
             .text "/NAME       LOAD"
             .byte 0
@@ -2269,9 +2286,9 @@ helpRows:   .text "$           DIRECTORY"
             .byte 0
             .text "DR          LIST DRIVE IDS"
             .byte 0
-            .text "DA<0/1>     DRIVE A OFF/ON"
+            .text "DA/DB<0/1>  DRIVE A/B OFF/ON"
             .byte 0
-            .text "DB<0/1>     DRIVE B OFF/ON"
+            .text "RL/RS       LOAD/SAVE REU IMAGE"
             .byte 0
             .text "TI          SHOW DATE AND TIME"
             .byte 0

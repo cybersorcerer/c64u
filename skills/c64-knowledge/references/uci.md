@@ -202,7 +202,8 @@ to the `REU Preload Image` path; `LOAD_REU` answers `00,OK` and reads it back; a
 answers `85,REU FILE CANNOT BE OPENED`, and the interface stays usable after each. Both also send
 a data reply: a 32-bit little-endian byte count (`$FFFFFFFF` on failure) followed by text such as
 `REU SAVE: SAVED 131072 BYTES FROM $000000 TO /TEMP/TEST.REU` or `REU LOAD: FAILED TO OPEN
-/TEMP/NONE.REU: FILE DOESN'T EXIST`. `SAVE_REU` overwrites the configured image without asking.
+/TEMP/NONE.REU: FILE DOESN'T EXIST`. `SAVE_REU` replaces the configured image without asking, but
+keeps the previous one: saving over `/Temp/w.reu` left the old image as `/Temp/w.bu`.
 
 The documented format `$04 $08 <filename>` is wrong: **the filename is ignored**. Upstream the
 handler calls `REUPreloader::LoadREU(char *status)`, whose argument is an output buffer for the
@@ -215,8 +216,16 @@ different image, change `REU Preload Image` over the REST API first - the UCI ca
 
 `U64_SAVEMEM` (`$0F`) writes the C64's 64 KB of RAM to a file - on firmware 1.2.1. It saves the
 RAM itself, **including what lies under the BASIC and KERNAL ROMs and the I/O area**, which no
-other path reaches (REST `read-mem` sees the ROMs there). `$04 $0F /Temp/mem.bin` writes that
-file; with no name it writes `/Temp/c64_memory.bin`. Checked on 1.2.1: both 65536 bytes, `$0801`
+other path reaches (REST `read-mem` sees the ROMs there). `$04 $0F /Temp/mem.bin $00` writes that
+file; with no name it writes `/Temp/c64_memory.bin`.
+
+**End the name with a zero byte.** Upstream the handler uses `command->message + 2` as the file
+name without terminating it, so the name runs on into whatever a longer earlier command left in
+the buffer, and the save fails with `87,DISK ERR: PATH DOESN'T EXIST` - for every name, until
+the buffer happens to be clean. Checked on 1.2.1: after palette and REU commands every name
+failed that way, and the same names with `$00` appended all worked. The name has to be absolute
+(the control target has no current directory; a relative name fails the same way), and the
+root is matched without regard to case (`/TEMP/C.BIN` works). Checked on 1.2.1: both 65536 bytes, `$0801`
 matching the running program and `$E000` holding RAM (`00 00 ff ff`), not the KERNAL.
 
 On firmware 1.1.0 the same command answered `00,OK` without writing anything, with an absolute
