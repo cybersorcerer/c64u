@@ -79,6 +79,11 @@ func (c *Client) MachineReadMem(address string, length int) (*Response, error) {
 	return c.Get("/v1/machine:readmem", params)
 }
 
+// MachineHeap reads the firmware's FreeRTOS heap statistics (firmware 1.2.1)
+func (c *Client) MachineHeap() (*Response, error) {
+	return c.Get("/v1/machine:heap", nil)
+}
+
 // MachineDebugReg reads debug register $D7FF (U64-only)
 func (c *Client) MachineDebugReg() (*Response, error) {
 	return c.Get("/v1/machine:debugreg", nil)

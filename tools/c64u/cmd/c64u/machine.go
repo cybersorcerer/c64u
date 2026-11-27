@@ -398,6 +398,35 @@ Examples:
 // Debug Register (U64 only)
 // ============================================================================
 
+var machineHeapCmd = &cobra.Command{
+	Use:   "heap",
+	Args:  cobra.NoArgs,
+	Short: "Show firmware heap statistics",
+	Long: `Show the firmware's heap in bytes: free, min_ever_free (the lowest it has been
+since boot) and total. A diagnostic for firmware leaks, not for driving the machine.
+
+Sample free before and after a task; a drop that does not come back is a leak.
+min_ever_free never recovers, so it shows headroom but cannot tell a leak from a
+passing peak. Needs firmware 1.2.1.
+
+Example:
+  c64u machine heap`,
+	Run: func(cmd *cobra.Command, args []string) {
+		resp, err := apiClient.MachineHeap()
+		if err != nil {
+			formatter.Error("Failed to read heap statistics", []string{err.Error()})
+			return
+		}
+
+		if resp.HasErrors() {
+			formatter.Error("API returned errors", resp.Errors)
+			return
+		}
+
+		formatter.PrintResponse(resp, "Heap statistics")
+	},
+}
+
 var machineDebugRegCmd = &cobra.Command{
 	Use:   "debug-reg",
 	Args:  cobra.NoArgs,
@@ -647,6 +676,7 @@ func init() {
 	machineCmd.AddCommand(machineReadMemCmd)
 
 	// Add debug register commands
+	machineCmd.AddCommand(machineHeapCmd)
 	machineCmd.AddCommand(machineDebugRegCmd)
 	machineCmd.AddCommand(machineDebugRegSetCmd)
 

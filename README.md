@@ -451,6 +451,7 @@ c64u machine read-mem <addr> --to <addr>       # Read an address range, end incl
 c64u machine read-mem <addr> --output <file>   # Write the raw bytes to a file (-o)
 c64u machine read-mem <addr> --raw             # Write the raw bytes to stdout
 c64u machine sendkey <string> [--delay <ms>]   # Send keystrokes to keyboard buffer
+c64u machine heap                              # Firmware heap statistics (fw 1.2.1)
 c64u machine debug-reg                         # Read debug register (U64 only)
 c64u machine debug-reg-set <value>             # Write debug register (U64 only)
 ```

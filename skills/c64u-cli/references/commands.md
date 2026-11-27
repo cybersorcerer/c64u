@@ -46,6 +46,7 @@ c64u machine sendkey <string> [--delay ms]
 c64u machine input [event...] [--show]         # key matrix and joystick, C64U 1.2.0+ / U64 3.15+
 c64u machine menu-screen                       # the firmware menu as text, C64U 1.2.0+ / 3.15+
 
+c64u machine heap                              # firmware heap: free, min_ever_free, total (fw 1.2.1)
 c64u machine debug-reg                         # read $D7FF, U64 only
 c64u machine debug-reg-set <value>             # write $D7FF, U64 only
 ```
