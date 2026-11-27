@@ -582,9 +582,9 @@ c64u config show "Drive A Settings"            # Show category (wildcards suppor
 c64u config get "Drive A Settings" "Drive Type"
 c64u config set "Drive A Settings" "Drive Type" "1581"
 c64u config set-multiple settings.json         # Set multiple from JSON
-c64u config save-to-flash
-c64u config load-from-flash
-c64u config reset-to-default
+c64u config save-to-flash [category]           # Optional category or pattern (fw 1.2.1)
+c64u config load-from-flash [category]
+c64u config reset-to-default [category]
 c64u config export [file]                      # Export all settings to JSON
 ```
 

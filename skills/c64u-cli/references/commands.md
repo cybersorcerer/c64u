@@ -196,13 +196,18 @@ c64u config get  <category> <item>
 c64u config set  <category> <item> <value>
 c64u config set-multiple <json-file>
 c64u config export [output-file]
-c64u config save-to-flash                      # persist across power cycles
-c64u config load-from-flash
-c64u config reset-to-default
+c64u config save-to-flash [category]           # persist across power cycles
+c64u config load-from-flash [category]
+c64u config reset-to-default [category]
 ```
 
 Settings changed with `set` apply immediately but are lost on power-off unless
 `save-to-flash` follows.
+
+With a category name or pattern (firmware 1.2.1) the three act on the matching categories
+only and list them. `save-to-flash` writes only categories with unsaved changes, and the
+firmware answers a name that matches nothing the same way as one with nothing to save:
+`Nothing to save`. `load-from-flash` and `reset-to-default` fail when nothing matches.
 
 The category names contain spaces and must be quoted:
 

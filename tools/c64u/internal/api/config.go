@@ -135,3 +135,32 @@ func (c *Client) ResetConfigToDefault() error {
 	}
 	return nil
 }
+
+// ConfigStoreMembers names the response member that lists the categories each
+// store action acted on.
+var ConfigStoreMembers = map[string]string{
+	"save_to_flash":    "written",
+	"load_from_flash":  "loaded",
+	"reset_to_default": "reset",
+}
+
+// ConfigCategoryStore runs a store action - save_to_flash, load_from_flash or
+// reset_to_default - on the categories matching category, a name or pattern
+// (firmware 1.2.1). It returns the names the device reports it acted on.
+func (c *Client) ConfigCategoryStore(action, category string) ([]string, error) {
+	resp, err := c.Put(fmt.Sprintf("/v1/configs/%s:%s", escapeConfigPath(category), action), nil)
+	if err != nil {
+		return nil, err
+	}
+	if resp.HasErrors() {
+		return nil, fmt.Errorf("API error: %s", strings.Join(resp.Errors, ", "))
+	}
+	names := []string{}
+	list, _ := resp.Data[ConfigStoreMembers[action]].([]interface{})
+	for _, n := range list {
+		if s, ok := n.(string); ok {
+			names = append(names, s)
+		}
+	}
+	return names, nil
+}

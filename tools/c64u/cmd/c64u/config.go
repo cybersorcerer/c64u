@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/api"
 	"github.com/spf13/cobra"
 )
 
@@ -384,16 +385,24 @@ Examples:
 // ============================================================================
 
 var configSaveToFlashCmd = &cobra.Command{
-	Use:   "save-to-flash",
-	Args:  cobra.NoArgs,
+	Use:   "save-to-flash [category]",
+	Args:  cobra.MaximumNArgs(1),
 	Short: "Save configuration to flash memory",
 	Long: `Save current configuration to non-volatile flash memory.
 
 This makes the current settings permanent across reboots.
 
+With a category (a name or pattern, firmware 1.2.1) only the matching
+categories with unsaved changes are written, and the output lists them.
+
 Examples:
-  c64u config save-to-flash`,
+  c64u config save-to-flash
+  c64u config save-to-flash "Drive A Settings"`,
 	Run: func(cmd *cobra.Command, args []string) {
+		if len(args) == 1 {
+			categoryStore("save_to_flash", args[0], "Saved to flash", "Failed to save config to flash")
+			return
+		}
 		if err := apiClient.SaveConfigToFlash(); err != nil {
 			formatter.Error("Failed to save config to flash", []string{err.Error()})
 			return
@@ -408,16 +417,24 @@ Examples:
 // ============================================================================
 
 var configLoadFromFlashCmd = &cobra.Command{
-	Use:   "load-from-flash",
-	Args:  cobra.NoArgs,
+	Use:   "load-from-flash [category]",
+	Args:  cobra.MaximumNArgs(1),
 	Short: "Load configuration from flash memory",
 	Long: `Load configuration from non-volatile flash memory.
 
 WARNING: This discards any unsaved changes to the current configuration.
 
+With a category (a name or pattern, firmware 1.2.1) only the matching
+categories are reloaded, and only their unsaved changes are lost.
+
 Examples:
-  c64u config load-from-flash`,
+  c64u config load-from-flash
+  c64u config load-from-flash "Drive A Settings"`,
 	Run: func(cmd *cobra.Command, args []string) {
+		if len(args) == 1 {
+			categoryStore("load_from_flash", args[0], "Reloaded from flash", "Failed to load config from flash")
+			return
+		}
 		if err := apiClient.LoadConfigFromFlash(); err != nil {
 			formatter.Error("Failed to load config from flash", []string{err.Error()})
 			return
@@ -432,17 +449,25 @@ Examples:
 // ============================================================================
 
 var configResetToDefaultCmd = &cobra.Command{
-	Use:   "reset-to-default",
-	Args:  cobra.NoArgs,
+	Use:   "reset-to-default [category]",
+	Args:  cobra.MaximumNArgs(1),
 	Short: "Reset configuration to factory defaults",
 	Long: `Reset current configuration to factory default values.
 
 WARNING: This does not affect saved values in flash memory.
 Use save-to-flash after reset to make defaults permanent.
 
+With a category (a name or pattern, firmware 1.2.1) only the matching
+categories are reset; their unsaved changes are lost.
+
 Examples:
-  c64u config reset-to-default`,
+  c64u config reset-to-default
+  c64u config reset-to-default "Drive A Settings"`,
 	Run: func(cmd *cobra.Command, args []string) {
+		if len(args) == 1 {
+			categoryStore("reset_to_default", args[0], "Reset to defaults", "Failed to reset config")
+			return
+		}
 		if err := apiClient.ResetConfigToDefault(); err != nil {
 			formatter.Error("Failed to reset config", []string{err.Error()})
 			return
@@ -450,6 +475,26 @@ Examples:
 
 		formatter.Success("Configuration reset to defaults", nil)
 	},
+}
+
+// categoryStore runs a store action on the categories matching category and
+// lists the ones the device acted on.
+func categoryStore(action, category, done, failed string) {
+	names, err := apiClient.ConfigCategoryStore(action, category)
+	if err != nil {
+		formatter.Error(failed, []string{err.Error()})
+		return
+	}
+	data := map[string]interface{}{"category": category, api.ConfigStoreMembers[action]: names}
+	switch {
+	case len(names) > 0:
+		formatter.Success(done, data)
+	case action == "save_to_flash":
+		// the firmware writes only categories with unsaved changes
+		formatter.Success(fmt.Sprintf("Nothing to save: no unsaved changes match %q", category), data)
+	default:
+		formatter.Error(fmt.Sprintf("No category matches %q", category), nil)
+	}
 }
 
 // ============================================================================
