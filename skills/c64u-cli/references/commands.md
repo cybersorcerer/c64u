@@ -67,7 +67,9 @@ c64u machine input wheel:-2                     # two detents toward the user
 c64u machine input release-all
 ```
 
-A batch holds 1 to 64 events and has to serialise to under 4096 bytes; `restore` must stand
+A batch holds 1 to 64 events and has to serialise to under 4096 bytes and at most 1024 JSON
+values (about 330 mouse path steps; on 1.2.1 the keys count too - two paths of 337 steps in all
+pass, 338 are refused); the CLI checks both before sending; `restore` must stand
 alone and can only be tapped. The state that results is printed after every batch, as with
 `--show`. Verified on a C64 Ultimate on firmware 1.2.1: `tap:h tap:i` types `HI` at the READY
 prompt, and `press:joy2:up+fire` turns `$DC00` from `$7F` into `$6E` until `release-all`.
@@ -83,8 +85,9 @@ out as a path of up to 256 steps 20 ms apart. The device queues 1024 mouse repor
 429 when a batch does not fit - the CLI shows "The device refused the input" with the room left;
 `pending` in the printed state counts what is still queued. `release-all`, a reset and a reboot
 detach the mouse (`attached: false`). Verified on 1.2.1: `move:300,-40 tap:mouse:left` leaves 5
-reports pending (3 path steps, press, release); four `move:32512,0` in a row fill the queue to
-1000 and the fifth is refused with room for 32.
+reports pending (3 path steps, press, release); five `move:32512,0` calls in a row, with the
+queue draining one report per 20 ms meanwhile, reached 1000 pending and the fifth was refused
+with room for 32.
 
 **`menu-screen`** returns the menu as a 40x25 character matrix in ASCII plus a colour matrix.
 Open the menu with `menu-button` first; with no menu on screen the device answers 404. Together

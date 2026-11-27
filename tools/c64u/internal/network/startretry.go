@@ -8,12 +8,14 @@ import (
 )
 
 // streamBusy is how firmware 1.2.1 answers a stream start while it is busy: for
-// about 50 seconds after the video window closed, and now and then for debug. The text is misleading: the device resolves nothing.
+// about 50 seconds after the video window closed, and now and then for debug.
+// The text is misleading: the device resolves nothing.
 const streamBusy = "Network Host Resolve Error"
 
 const (
 	startRetryInterval = 5 * time.Second
-	startRetryLimit    = 90 * time.Second
+	// StartRetryLimit is how long StartWithRetry keeps trying; notices name it.
+	StartRetryLimit = 90 * time.Second
 )
 
 // StartWithRetry starts a stream, retrying while the device is busy. It prints
@@ -26,7 +28,7 @@ func StartWithRetry(start func(ip string) error, ip, notice, giveUpHint string, 
 		if err == nil || !strings.Contains(err.Error(), streamBusy) {
 			return err
 		}
-		if waited >= startRetryLimit {
+		if waited >= StartRetryLimit {
 			return fmt.Errorf("%w; %s", err, giveUpHint)
 		}
 		if waited == 0 {

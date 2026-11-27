@@ -355,6 +355,10 @@ Examples:
 				formatter.Error("Conflicting flags", []string{"--disasm cannot be combined with --raw or --output"})
 				return
 			}
+			if err := disasmRangeError(addr, length); err != nil {
+				formatter.Error("Invalid range", []string{err.Error()})
+				return
+			}
 			readLen = disasmReadLength(addr, length)
 		}
 
@@ -602,7 +606,8 @@ apart. The wheel turns -64..64 detents per axis. The device queues up to 1024
 mouse reports and refuses a batch that does not fit, naming the room left.
 release-all, a reset and a reboot detach the mouse.
 
-A batch holds 1 to 64 events and must serialise to under 4096 bytes.
+A batch holds 1 to 64 events and must serialise to under 4096 bytes and at most
+1024 JSON values, which is about 330 mouse path steps.
 
 The state that results is printed afterwards, as with --show.
 
@@ -732,6 +737,18 @@ func init() {
 	machineReadMemCmd.Flags().Bool("raw", false, "Write the raw bytes to stdout instead of a hex dump, for piping")
 	machineReadMemCmd.Flags().Bool("disasm", false, "Show the memory as 6502 assembly instead of a hex dump")
 	machineReadMemCmd.MarkFlagsMutuallyExclusive("length", "to")
+}
+
+// disasmRangeError rejects a range --disasm cannot show: an empty one, or one
+// running past $FFFF, where the printed addresses would wrap.
+func disasmRangeError(addr, length int) error {
+	if length < 1 {
+		return fmt.Errorf("--disasm needs a length of at least 1, got %d", length)
+	}
+	if addr+length > 0x10000 {
+		return fmt.Errorf("$%04X + %d bytes runs past $FFFF", addr, length)
+	}
+	return nil
 }
 
 // disasmReadLength reads up to two bytes past the range, the most an

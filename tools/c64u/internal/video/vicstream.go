@@ -296,7 +296,7 @@ func Listen(localIP string, startFn func(ip string) error, stopFn func() error, 
 		return fmt.Errorf("listen UDP :%d: %w", VideoPort, err)
 	}
 
-	notice := "The device is still releasing the previous video stream, retrying for up to 1m30s..."
+	notice := fmt.Sprintf("The device is still releasing the previous video stream, retrying for up to %v...", network.StartRetryLimit)
 	hint := "the device did not release the previous video stream, restart it with: c64u machine reboot"
 	if err := network.StartWithRetry(startFn, localIP, notice, hint, os.Stdout, time.Sleep); err != nil {
 		conn.Close()

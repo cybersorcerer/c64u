@@ -533,7 +533,7 @@ Examples:
 			}
 			return nil
 		}
-		notice := "The device is busy and refused the debug stream, retrying for up to 1m30s..."
+		notice := fmt.Sprintf("The device is busy and refused the debug stream, retrying for up to %v...", network.StartRetryLimit)
 		hint := "the device stayed busy, restart it with: c64u machine reboot"
 		if err := network.StartWithRetry(start, listenIP, notice, hint, os.Stderr, time.Sleep); err != nil {
 			formatter.Error("Failed to start debug stream", []string{err.Error()})

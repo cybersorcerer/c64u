@@ -106,3 +106,23 @@ func TestDisasmReadLength(t *testing.T) {
 		}
 	}
 }
+
+// --disasm needs a range inside the address space: printed addresses would
+// otherwise wrap through $0000 (review finding).
+func TestDisasmRangeError(t *testing.T) {
+	cases := []struct {
+		addr, length int
+		ok           bool
+	}{
+		{0xC000, 16, true},
+		{0xFFF0, 16, true},
+		{0xFFF0, 17, false},
+		{0x0400, 0, false},
+		{0x0400, -1, false},
+	}
+	for _, c := range cases {
+		if err := disasmRangeError(c.addr, c.length); (err == nil) != c.ok {
+			t.Errorf("disasmRangeError($%04X, %d) = %v, want ok=%v", c.addr, c.length, err, c.ok)
+		}
+	}
+}

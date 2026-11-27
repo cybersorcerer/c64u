@@ -246,8 +246,8 @@ func TestSplitInputBatches(t *testing.T) {
 	var flat []InputEvent
 	for _, b := range batches {
 		body, _ := json.Marshal(map[string]interface{}{"events": b})
-		if len(body) > MaxInputBodyBytes {
-			t.Errorf("batch serialises to %d bytes, over %d", len(body), MaxInputBodyBytes)
+		if len(body) >= MaxInputBodyBytes {
+			t.Errorf("batch serialises to %d bytes, not under %d", len(body), MaxInputBodyBytes)
 		}
 		if len(b) > MaxInputEvents {
 			t.Errorf("batch has %d events, over %d", len(b), MaxInputEvents)
@@ -330,6 +330,58 @@ func TestParseInputEvent_MouseRejects(t *testing.T) {
 		"move:32513,0", "move:0,-32513", "move:0,0", "move:1", "move:a,b", "move:",
 		"wheel:0", "wheel:65", "wheel:-65", "wheel:0,0", "wheel:1,2,3", "wheel:x",
 	} {
+		if ev, err := ParseInputEvent(arg); err == nil {
+			t.Errorf("%s accepted as %+v", arg, ev)
+		}
+	}
+}
+
+// Two long paths fit the byte limit but not the device's 1024 JSON values
+// (review finding): the batch is refused locally, and the split cuts it.
+func TestMachineInput_ValueLimit(t *testing.T) {
+	a, _ := ParseInputEvent("move:32512,0")
+	b, _ := ParseInputEvent("move:12700,0") // 356 steps in all, about 2900 bytes
+	events := []InputEvent{a, b}
+
+	c := &Client{}
+	if _, err := c.MachineInput(events); err == nil || !strings.Contains(err.Error(), "1024") {
+		t.Errorf("err = %v, want the 1024 JSON value limit named", err)
+	}
+	if got := SplitInputBatches(events); len(got) != 2 {
+		t.Errorf("split into %d batch(es), want 2", len(got))
+	}
+}
+
+// The device wants the body under 4096 bytes, not at most.
+func TestInputBodyFits(t *testing.T) {
+	if inputBodyFits(4096, 1) || !inputBodyFits(4095, 1024) || inputBodyFits(100, 1025) {
+		t.Error("inputBodyFits must accept under 4096 bytes and up to 1024 values only")
+	}
+}
+
+func TestJSONValues(t *testing.T) {
+	ev, _ := ParseInputEvent("move:300,0") // 3 steps
+	body, _ := json.Marshal(map[string]interface{}{"events": []InputEvent{ev}})
+	// The device counts keys too (found on 1.2.1: two paths of 337 steps in all
+	// pass, 338 do not): body object, "events", array = 3; event object, "kind",
+	// "mouse", "path", array = 5; 3 steps x (array + 2 ints) = 9.
+	if got := jsonValues(body); got != 3+5+9 {
+		t.Errorf("jsonValues = %d, want 17", got)
+	}
+
+	// The device boundary itself: 337 steps in two events fit, 338 do not.
+	for steps, fits := range map[int]bool{337: true, 338: false} {
+		a, b := InputEvent{Kind: "mouse", Path: make([][2]int, steps/2)}, InputEvent{Kind: "mouse", Path: make([][2]int, steps-steps/2)}
+		body, _ := json.Marshal(map[string]interface{}{"events": []InputEvent{a, b}})
+		if got := jsonValues(body) <= MaxInputJSONValues; got != fits {
+			t.Errorf("%d steps: fits = %v, the device says %v", steps, got, fits)
+		}
+	}
+}
+
+// The extremes of int must not slip past the range checks (review finding).
+func TestParseInputEvent_MouseExtremes(t *testing.T) {
+	for _, arg := range []string{"move:-9223372036854775808,0", "move:0,-9223372036854775808", "wheel:-9223372036854775808", "wheel:0,-9223372036854775808"} {
 		if ev, err := ParseInputEvent(arg); err == nil {
 			t.Errorf("%s accepted as %+v", arg, ev)
 		}

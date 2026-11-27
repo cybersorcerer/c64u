@@ -8,15 +8,18 @@ import (
 	"strings"
 )
 
-// Limits the REST API enforces on one batch. The two are independent: 64 events
-// with short names stay inside both, 64 events with long ones do not, so the
-// body has to be measured as well as counted.
+// Limits the REST API enforces on one batch. They are independent: 64 events
+// with short names stay inside all of them, 64 events with long ones do not, and
+// mouse paths reach the JSON value limit (about 330 steps) before the byte limit,
+// so the body has to be counted, measured and its values counted. The body must
+// stay under MaxInputBodyBytes.
 const (
-	MaxInputEvents    = 64
-	MaxInputBodyBytes = 4096
-	MaxKeyboardInputs = 8
-	MaxJoystickInputs = 7
-	MaxMouseInputs    = 3
+	MaxInputEvents     = 64
+	MaxInputBodyBytes  = 4096
+	MaxInputJSONValues = 1024
+	MaxKeyboardInputs  = 8
+	MaxJoystickInputs  = 7
+	MaxMouseInputs     = 3
 )
 
 // InputEvent is one entry of a machine:input batch. A release_all event carries
@@ -49,26 +52,28 @@ type MouseWheel struct {
 }
 
 // SplitInputBatches cuts events into batches the device accepts, keeping their
-// order: at most MaxInputEvents each, and each serialising to at most
-// MaxInputBodyBytes as a request body.
+// order: at most MaxInputEvents each, and each serialising to a request body the
+// device accepts (see inputBodyFits).
 func SplitInputBatches(events []InputEvent) [][]InputEvent {
 	// {"events":[]} plus one comma per event after the first
 	const overhead = len(`{"events":[]}`)
+	const overheadValues = 3 // the body object, "events" and its array
 	var batches [][]InputEvent
 	var cur []InputEvent
-	size := overhead
+	size, values := overhead, overheadValues
 	for _, ev := range events {
 		encoded, _ := json.Marshal(ev)
-		add := len(encoded)
+		add, addValues := len(encoded), jsonValues(encoded)
 		if len(cur) > 0 {
 			add++
 		}
-		if len(cur) == MaxInputEvents || (len(cur) > 0 && size+add > MaxInputBodyBytes) {
+		if len(cur) == MaxInputEvents || (len(cur) > 0 && !inputBodyFits(size+add, values+addValues)) {
 			batches = append(batches, cur)
-			cur, size, add = nil, overhead, len(encoded)
+			cur, size, values, add = nil, overhead, overheadValues, len(encoded)
 		}
 		cur = append(cur, ev)
 		size += add
+		values += addValues
 	}
 	if len(cur) > 0 {
 		batches = append(batches, cur)
@@ -223,14 +228,18 @@ func (c *Client) MachineInput(events []InputEvent) (*Response, error) {
 	body := map[string]interface{}{"events": events}
 
 	// The device refuses an oversized body outright, so measure it here and say
-	// which of the two limits was hit rather than passing on a bare 400.
+	// which limit was hit rather than passing on a bare 400.
 	encoded, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
-	if len(encoded) > MaxInputBodyBytes {
-		return nil, fmt.Errorf("the batch serialises to %d bytes, over the %d byte limit: send fewer events per call",
+	if len(encoded) >= MaxInputBodyBytes {
+		return nil, fmt.Errorf("the batch serialises to %d bytes, the device needs it under %d: send fewer events per call",
 			len(encoded), MaxInputBodyBytes)
+	}
+	if n := jsonValues(encoded); n > MaxInputJSONValues {
+		return nil, fmt.Errorf("the batch holds %d JSON values, over the device's limit of %d (about 330 mouse path steps): send fewer events per call",
+			n, MaxInputJSONValues)
 	}
 
 	return c.PostJSON("/v1/machine:input", body)
@@ -315,7 +324,7 @@ func mouseMoveEvent(s string) (InputEvent, error) {
 		return InputEvent{}, fmt.Errorf("move:%s moves nowhere", s)
 	}
 	limit := 127 * MaxMousePathSteps
-	if abs(x) > limit || abs(y) > limit {
+	if x < -limit || x > limit || y < -limit || y > limit {
 		return InputEvent{}, fmt.Errorf("move:%s is too far: at most %d on each axis in one event", s, limit)
 	}
 	steps := max((abs(x)+126)/127, (abs(y)+126)/127)
@@ -343,7 +352,7 @@ func mouseWheelEvent(s string) (InputEvent, error) {
 	if v == 0 && h == 0 {
 		return InputEvent{}, fmt.Errorf("wheel:%s turns nothing", s)
 	}
-	if abs(v) > 64 || abs(h) > 64 {
+	if v < -64 || v > 64 || h < -64 || h > 64 {
 		return InputEvent{}, fmt.Errorf("wheel:%s is out of range: -64 to 64 detents", s)
 	}
 	return InputEvent{Kind: "mouse", Wheel: &MouseWheel{Vertical: v, Horizontal: h}}, nil
@@ -354,4 +363,36 @@ func abs(v int) int {
 		return -v
 	}
 	return v
+}
+
+// inputBodyFits reports whether a request body of this many bytes and JSON
+// values is one the device accepts: under 4096 bytes, at most 1024 values.
+func inputBodyFits(bytes, values int) bool {
+	return bytes < MaxInputBodyBytes && values <= MaxInputJSONValues
+}
+
+// jsonValues counts an encoded JSON document the way the device does. Its docs
+// say "JSON values", but on firmware 1.2.1 the keys count as well: every object,
+// array, key, string, number, boolean and null is one.
+func jsonValues(encoded []byte) int {
+	var v interface{}
+	if json.Unmarshal(encoded, &v) != nil {
+		return 0
+	}
+	return countValues(v)
+}
+
+func countValues(v interface{}) int {
+	n := 1
+	switch t := v.(type) {
+	case map[string]interface{}:
+		for _, e := range t {
+			n += 1 + countValues(e) // the key counts too
+		}
+	case []interface{}:
+		for _, e := range t {
+			n += countValues(e)
+		}
+	}
+	return n
 }

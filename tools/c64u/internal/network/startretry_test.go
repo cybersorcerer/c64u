@@ -65,3 +65,10 @@ func TestStartWithRetry_GivesUpAfter90Seconds(t *testing.T) {
 		t.Errorf("slept %v over %d calls, want 90s and 19 calls", slept, calls)
 	}
 }
+
+// The notices name the limit, so it has to be exported to format them.
+func TestStartRetryLimit(t *testing.T) {
+	if StartRetryLimit.String() != "1m30s" {
+		t.Errorf("StartRetryLimit = %v, want 1m30s", StartRetryLimit)
+	}
+}
