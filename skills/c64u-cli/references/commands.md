@@ -255,7 +255,8 @@ identity last, then saves to flash. `import` skips the identity - `Ethernet Sett
 tries every setting in the body and names the ones it rejects; those land under `failed` and
 the rest is applied. Checked on 1.2.1: a fresh export restored with `--dry-run` reports 0
 changes; an import with an unknown item reported it as failed, still changed `Disk swap delay`
-and left `Host Name` as it was.
+and left `Host Name` as it was; a real `restore` set `Disk swap delay` back from 3 to 1 and the
+value survived `load-from-flash`.
 
 `Network Password` goes last, after the identity: it takes effect at once (checked on 1.2.1 - the
 next request without it got `Forbidden`), so `c64u` carries on with the new password and says so;
