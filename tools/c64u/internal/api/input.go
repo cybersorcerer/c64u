@@ -21,8 +21,8 @@ const (
 
 // InputEvent is one entry of a machine:input batch. A release_all event carries
 // nothing else, which is why every other field is omitted when empty. Mouse
-// buttons use Inputs and Transition like keys do; Move and Wheel are the other
-// two mouse reports.
+// buttons use Inputs and Transition like keys do; Move, Wheel and Path are the
+// other mouse reports.
 type InputEvent struct {
 	Kind       string      `json:"kind"`
 	Port       int         `json:"port,omitempty"`
@@ -30,6 +30,8 @@ type InputEvent struct {
 	Transition string      `json:"transition,omitempty"`
 	Move       *MouseMove  `json:"move,omitempty"`
 	Wheel      *MouseWheel `json:"wheel,omitempty"`
+	Path       [][2]int    `json:"path,omitempty"`
+	IntervalMS int         `json:"interval_ms,omitempty"`
 }
 
 // MouseMove is one relative mouse report, -127..127 on each axis; positive is
@@ -86,10 +88,16 @@ var keyboardInputs = map[string]bool{
 	"space": true, "commodore": true, "run_stop": true, "restore": true,
 }
 
+var mouseInputs = map[string]bool{"left": true, "right": true, "middle": true}
+
 var joystickInputs = map[string]bool{
 	"up": true, "down": true, "left": true, "right": true,
 	"fire": true, "fire2": true, "fire3": true,
 }
+
+// MaxMousePathSteps is the most steps one path event takes; with 127 counts per
+// step that bounds a move to 32512 counts on either axis.
+const MaxMousePathSteps = 256
 
 func init() {
 	for c := 'a'; c <= 'z'; c++ {
@@ -104,10 +112,19 @@ func init() {
 //
 //	tap:commodore+o      a keyboard event
 //	press:joy2:up+fire   a joystick event on port 2
+//	tap:mouse:left       a mouse button event (port 1)
+//	move:300,-40         a relative mouse move
+//	wheel:-2             turns the mouse wheel
 //	release-all          clears every injected input
 func ParseInputEvent(arg string) (InputEvent, error) {
 	if arg == "release-all" || arg == "release_all" {
 		return InputEvent{Kind: "release_all"}, nil
+	}
+	if rest, ok := strings.CutPrefix(arg, "move:"); ok {
+		return mouseMoveEvent(rest)
+	}
+	if rest, ok := strings.CutPrefix(arg, "wheel:"); ok {
+		return mouseWheelEvent(rest)
 	}
 
 	transition, rest, found := strings.Cut(arg, ":")
@@ -120,6 +137,13 @@ func ParseInputEvent(arg string) (InputEvent, error) {
 		return InputEvent{}, fmt.Errorf("unknown transition %q in %q: expected press, release or tap", transition, arg)
 	}
 
+	if buttons, ok := strings.CutPrefix(rest, "mouse:"); ok {
+		names := strings.Split(buttons, "+")
+		if err := checkInputs(names, mouseInputs, MaxMouseInputs, "mouse"); err != nil {
+			return InputEvent{}, err
+		}
+		return InputEvent{Kind: "mouse", Inputs: names, Transition: transition}, nil
+	}
 	if port, names, ok := cutJoystick(rest); ok {
 		return joystickEvent(port, names, transition)
 	}
@@ -190,7 +214,7 @@ func sortedKeys(m map[string]bool) []string {
 	return keys
 }
 
-// MachineInput applies a batch of keyboard, joystick and release-all events.
+// MachineInput applies a batch of keyboard, joystick, mouse and release-all events.
 func (c *Client) MachineInput(events []InputEvent) (*Response, error) {
 	if len(events) < 1 || len(events) > MaxInputEvents {
 		return nil, fmt.Errorf("a batch takes 1 to %d events, got %d", MaxInputEvents, len(events))
@@ -260,4 +284,74 @@ func DecodeMenuScreen(body []byte) (*MenuScreen, error) {
 		screen.Colors = body[menuScreenCells : 2*menuScreenCells]
 	}
 	return screen, nil
+}
+
+// parseInts reads exactly n comma separated integers.
+func parseInts(s string, n int) ([]int, error) {
+	parts := strings.Split(s, ",")
+	if len(parts) != n {
+		return nil, fmt.Errorf("expected %d comma separated numbers, got %q", n, s)
+	}
+	nums := make([]int, n)
+	for i, p := range parts {
+		v, err := strconv.Atoi(p)
+		if err != nil {
+			return nil, fmt.Errorf("%q is not a number", p)
+		}
+		nums[i] = v
+	}
+	return nums, nil
+}
+
+// mouseMoveEvent sends a move that fits one report as it is and splits a larger
+// one into a path of steps within ±127 that add up to it exactly.
+func mouseMoveEvent(s string) (InputEvent, error) {
+	xy, err := parseInts(s, 2)
+	if err != nil {
+		return InputEvent{}, fmt.Errorf("move:%s: %v, use move:X,Y", s, err)
+	}
+	x, y := xy[0], xy[1]
+	if x == 0 && y == 0 {
+		return InputEvent{}, fmt.Errorf("move:%s moves nowhere", s)
+	}
+	limit := 127 * MaxMousePathSteps
+	if abs(x) > limit || abs(y) > limit {
+		return InputEvent{}, fmt.Errorf("move:%s is too far: at most %d on each axis in one event", s, limit)
+	}
+	steps := max((abs(x)+126)/127, (abs(y)+126)/127)
+	if steps == 1 {
+		return InputEvent{Kind: "mouse", Move: &MouseMove{X: x, Y: y}}, nil
+	}
+	path := make([][2]int, steps)
+	for i := range path {
+		path[i] = [2]int{x*(i+1)/steps - x*i/steps, y*(i+1)/steps - y*i/steps}
+	}
+	return InputEvent{Kind: "mouse", Path: path}, nil
+}
+
+func mouseWheelEvent(s string) (InputEvent, error) {
+	parts := 1
+	if strings.Contains(s, ",") {
+		parts = 2
+	}
+	vh, err := parseInts(s, parts)
+	if err != nil {
+		return InputEvent{}, fmt.Errorf("wheel:%s: %v, use wheel:V or wheel:V,H", s, err)
+	}
+	vh = append(vh, 0)
+	v, h := vh[0], vh[1]
+	if v == 0 && h == 0 {
+		return InputEvent{}, fmt.Errorf("wheel:%s turns nothing", s)
+	}
+	if abs(v) > 64 || abs(h) > 64 {
+		return InputEvent{}, fmt.Errorf("wheel:%s is out of range: -64 to 64 detents", s)
+	}
+	return InputEvent{Kind: "mouse", Wheel: &MouseWheel{Vertical: v, Horizontal: h}}, nil
+}
+
+func abs(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
 }

@@ -263,3 +263,75 @@ func TestSplitInputBatches(t *testing.T) {
 		}
 	}
 }
+
+func TestParseInputEvent_Mouse(t *testing.T) {
+	cases := map[string]string{
+		"tap:mouse:left":         `{"kind":"mouse","inputs":["left"],"transition":"tap"}`,
+		"press:mouse:left+right": `{"kind":"mouse","inputs":["left","right"],"transition":"press"}`,
+		"release:mouse:middle":   `{"kind":"mouse","inputs":["middle"],"transition":"release"}`,
+		"move:10,-5":             `{"kind":"mouse","move":{"x":10,"y":-5}}`,
+		"move:0,127":             `{"kind":"mouse","move":{"x":0,"y":127}}`,
+		"wheel:-2":               `{"kind":"mouse","wheel":{"vertical":-2}}`,
+		"wheel:1,-3":             `{"kind":"mouse","wheel":{"vertical":1,"horizontal":-3}}`,
+		"wheel:0,64":             `{"kind":"mouse","wheel":{"horizontal":64}}`,
+	}
+	for arg, want := range cases {
+		ev, err := ParseInputEvent(arg)
+		if err != nil {
+			t.Errorf("%s: %v", arg, err)
+			continue
+		}
+		got, _ := json.Marshal(ev)
+		if string(got) != want {
+			t.Errorf("%s = %s, want %s", arg, got, want)
+		}
+	}
+}
+
+// Moves beyond one report become a path whose steps each fit and add up exactly.
+func TestParseInputEvent_MousePath(t *testing.T) {
+	cases := []struct {
+		arg   string
+		x, y  int
+		steps int
+	}{
+		{"move:300,-40", 300, -40, 3},
+		{"move:-128,0", -128, 0, 2},
+		{"move:5,-1000", 5, -1000, 8},
+		{"move:32512,0", 32512, 0, 256},
+	}
+	for _, c := range cases {
+		ev, err := ParseInputEvent(c.arg)
+		if err != nil {
+			t.Errorf("%s: %v", c.arg, err)
+			continue
+		}
+		if ev.Kind != "mouse" || ev.Move != nil || len(ev.Path) != c.steps {
+			t.Errorf("%s: kind %q, move %v, %d steps; want a %d step path", c.arg, ev.Kind, ev.Move, len(ev.Path), c.steps)
+			continue
+		}
+		sx, sy := 0, 0
+		for i, s := range ev.Path {
+			if s[0] < -127 || s[0] > 127 || s[1] < -127 || s[1] > 127 {
+				t.Errorf("%s: step %d = %v exceeds ±127", c.arg, i, s)
+			}
+			sx += s[0]
+			sy += s[1]
+		}
+		if sx != c.x || sy != c.y {
+			t.Errorf("%s: steps add up to %d,%d", c.arg, sx, sy)
+		}
+	}
+}
+
+func TestParseInputEvent_MouseRejects(t *testing.T) {
+	for _, arg := range []string{
+		"tap:mouse:left+left", "tap:mouse:side", "tap:mouse:",
+		"move:32513,0", "move:0,-32513", "move:0,0", "move:1", "move:a,b", "move:",
+		"wheel:0", "wheel:65", "wheel:-65", "wheel:0,0", "wheel:1,2,3", "wheel:x",
+	} {
+		if ev, err := ParseInputEvent(arg); err == nil {
+			t.Errorf("%s accepted as %+v", arg, ev)
+		}
+	}
+}

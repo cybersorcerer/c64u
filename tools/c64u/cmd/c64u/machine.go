@@ -514,6 +514,15 @@ Examples:
 	},
 }
 
+// inputErrorTitle names what went wrong: a missing endpoint, or a batch the
+// device refused, such as a full mouse queue (429).
+func inputErrorTitle(status int) string {
+	if status == http.StatusNotFound || status == http.StatusNotImplemented {
+		return "Input is not available on this device"
+	}
+	return "The device refused the input"
+}
+
 // inputUnavailable turns the two ways this endpoint can be missing into an
 // answer that says which one it is, since both look like a plain failure.
 func inputUnavailable(resp *api.Response) []string {
@@ -537,8 +546,8 @@ func inputUnavailable(resp *api.Response) []string {
 
 var machineInputCmd = &cobra.Command{
 	Use:   "input [event...]",
-	Short: "Press, release or tap keys and joystick directions",
-	Long: `Inject keyboard and joystick input at the hardware level.
+	Short: "Press, release or tap keys, joystick directions and mouse buttons",
+	Long: `Inject keyboard, joystick and mouse input at the hardware level.
 
 Unlike 'sendkey', which fills the KERNAL keyboard buffer, this drives the key
 matrix and the joystick ports, so programs that scan the hardware themselves -
@@ -552,6 +561,9 @@ atomically: if any event is invalid, nothing is applied.
   tap:<inputs>       press and release
   release-all        clear every injected input
   joyN:<inputs>      after a transition, addresses joystick port 1 or 2
+  mouse:<buttons>    after a transition, addresses the mouse
+  move:X,Y           moves the mouse; positive is right and down
+  wheel:V[,H]        turns the vertical (and horizontal) wheel by detents
 
 Inputs are joined with '+'. A keyboard event takes up to 8 of: letters a-z,
 digits 0-9, f1, f3, f5, f7, left_shift, right_shift, ctrl, commodore, run_stop,
@@ -560,17 +572,27 @@ plus, minus, star, slash, equals, comma, period, colon, semicolon, at, pound,
 arrow_up, arrow_left. A joystick event takes up to 7 of: up, down, left, right,
 fire, fire2, fire3. restore has to stand alone and can only be tapped.
 
+The mouse is a 1351 on control port 1. A mouse event takes up to 3 buttons of:
+left, right, middle. A move within -127..127 on both axes is one report;
+larger ones, up to 32512 per axis, are sent as a path of up to 256 steps 20 ms
+apart. The wheel turns -64..64 detents per axis. The device queues up to 1024
+mouse reports and refuses a batch that does not fit, naming the room left.
+release-all, a reset and a reboot detach the mouse.
+
 A batch holds 1 to 64 events and must serialise to under 4096 bytes.
 
 The state that results is printed afterwards, as with --show.
 
 Requires the Ultimate 64 input hardware: a Commodore 64 Ultimate on firmware
-1.2.0 or newer, or an Ultimate 64 on 3.15 or newer.
+1.2.0 or newer, or an Ultimate 64 on 3.15 or newer. Mouse events need firmware 1.2.1
+on the Commodore 64 Ultimate.
 
 Examples:
   c64u machine input --show
   c64u machine input tap:commodore+o
   c64u machine input press:joy2:up+fire
+  c64u machine input move:300,-40 tap:mouse:left
+  c64u machine input press:left_shift tap:mouse:left release:left_shift
   c64u machine input press:left_shift tap:a release:left_shift
   c64u machine input release-all`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -583,7 +605,7 @@ Examples:
 				return
 			}
 			if resp.HasErrors() {
-				formatter.Error("Input is not available on this device", inputUnavailable(resp))
+				formatter.Error(inputErrorTitle(resp.StatusCode), inputUnavailable(resp))
 				return
 			}
 			formatter.PrintData(resp.Data)
@@ -606,7 +628,7 @@ Examples:
 			return
 		}
 		if resp.HasErrors() {
-			formatter.Error("Input is not available on this device", inputUnavailable(resp))
+			formatter.Error(inputErrorTitle(resp.StatusCode), inputUnavailable(resp))
 			return
 		}
 

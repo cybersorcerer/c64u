@@ -43,7 +43,7 @@ c64u machine write-mem <address> <hexdata>
 c64u machine write-mem-file <address> <file>
 c64u machine sendkey <string> [--delay ms]
 
-c64u machine input [event...] [--show]         # key matrix and joystick, C64U 1.2.0+ / U64 3.15+
+c64u machine input [event...] [--show]         # keys, joysticks, mouse; C64U 1.2.0+ / U64 3.15+
 c64u machine menu-screen                       # the firmware menu as text, C64U 1.2.0+ / 3.15+
 
 c64u machine heap                              # firmware heap: free, min_ever_free, total (fw 1.2.1)
@@ -61,6 +61,8 @@ batch, applied atomically:
 c64u machine input tap:commodore+o             # C= and O together, as one keystroke
 c64u machine input press:joy2:up+fire          # held until released
 c64u machine input press:left_shift tap:a release:left_shift
+c64u machine input move:300,-40 tap:mouse:left # mouse on port 1 (firmware 1.2.1)
+c64u machine input wheel:-2                     # two detents toward the user
 c64u machine input release-all
 ```
 
@@ -72,6 +74,16 @@ Two failure modes are worth telling apart, and the CLI does: **404** means the f
 the endpoint (1.2.0 on the C64 Ultimate, 3.15 elsewhere), **501** means the product has no
 Ultimate 64 input hardware - a cartridge in a real C64 never will, because the keyboard is the
 C64's.
+
+**Mouse** (firmware 1.2.1) is a 1351 on control port 1: `press:`/`release:`/`tap:mouse:` with up
+to three of `left`, `right`, `middle`; `move:X,Y` (positive is right and down) and `wheel:V[,H]`
+(-64..64 detents). A move within -127..127 is one report; larger ones, up to 32512 per axis, go
+out as a path of up to 256 steps 20 ms apart. The device queues 1024 mouse reports and answers
+429 when a batch does not fit - the CLI shows "The device refused the input" with the room left;
+`pending` in the printed state counts what is still queued. `release-all`, a reset and a reboot
+detach the mouse (`attached: false`). Verified on 1.2.1: `move:300,-40 tap:mouse:left` leaves 5
+reports pending (3 path steps, press, release); four `move:32512,0` in a row fill the queue to
+1000 and the fifth is refused with room for 32.
 
 **`menu-screen`** returns the menu as a 40x25 character matrix in ASCII plus a colour matrix.
 Open the menu with `menu-button` first; with no menu on screen the device answers 404. Together

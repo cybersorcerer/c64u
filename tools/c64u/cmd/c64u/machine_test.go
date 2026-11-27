@@ -75,3 +75,18 @@ func TestCheckWriteData(t *testing.T) {
 		}
 	}
 }
+
+// A full mouse queue (429) or a refused batch (400) is not a missing endpoint.
+func TestInputErrorTitle(t *testing.T) {
+	cases := map[int]string{
+		404: "Input is not available on this device",
+		501: "Input is not available on this device",
+		429: "The device refused the input",
+		400: "The device refused the input",
+	}
+	for status, want := range cases {
+		if got := inputErrorTitle(status); got != want {
+			t.Errorf("inputErrorTitle(%d) = %q, want %q", status, got, want)
+		}
+	}
+}
