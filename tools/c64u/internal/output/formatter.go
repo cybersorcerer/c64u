@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -106,16 +107,8 @@ func (f *Formatter) Success(message string, data map[string]interface{}) {
 		} else {
 			fmt.Printf("%s %s\n", successStyle.Render("✓"), message)
 		}
-		if data != nil && len(data) > 0 {
-			for key, value := range data {
-				if f.NoColor {
-					fmt.Printf("  %s: %v\n", key, value)
-				} else {
-					fmt.Printf("  %s %s\n",
-						labelStyle.Render(key+":"),
-						valueStyle.Render(fmt.Sprintf("%v", value)))
-				}
-			}
+		for _, line := range mapLines("  ", data) {
+			fmt.Println(f.styleLine(line))
 		}
 	}
 }
@@ -176,8 +169,8 @@ func (f *Formatter) PrintData(data interface{}) {
 				fmt.Printf("  - %s\n", item)
 			}
 		case map[string]interface{}:
-			for key, value := range v {
-				fmt.Printf("  %s: %v\n", key, value)
+			for _, line := range mapLines("  ", v) {
+				fmt.Println(line)
 			}
 		default:
 			fmt.Printf("%v\n", data)
@@ -622,4 +615,101 @@ func runeWidth(str string) int {
 		}
 	}
 	return width
+}
+
+// mapLines renders every key of m, sorted, as fieldLines does.
+func mapLines(indent string, m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var lines []string
+	for _, k := range keys {
+		lines = append(lines, fieldLines(indent, k, m[k])...)
+	}
+	return lines
+}
+
+// fieldLines renders one key and its value as plain text lines. Nested maps
+// and lists of maps go indented below the key, a list of plain values stays on
+// one line, and an empty map or list reads "none".
+func fieldLines(indent, key string, value interface{}) []string {
+	head := indent + key + ":"
+	switch v := value.(type) {
+	case map[string]interface{}:
+		if len(v) == 0 {
+			return []string{head + " none"}
+		}
+		return append([]string{head}, mapLines(indent+"  ", v)...)
+	case []string:
+		if len(v) == 0 {
+			return []string{head + " none"}
+		}
+		return []string{head + " " + strings.Join(v, ", ")}
+	case []interface{}:
+		if len(v) == 0 {
+			return []string{head + " none"}
+		}
+		if !hasNested(v) {
+			texts := make([]string, len(v))
+			for i, item := range v {
+				texts[i] = scalarText(item)
+			}
+			return []string{head + " " + strings.Join(texts, ", ")}
+		}
+		lines := []string{head}
+		for _, item := range v {
+			lines = append(lines, itemLines(indent+"  ", item)...)
+		}
+		return lines
+	default:
+		return []string{head + " " + scalarText(v)}
+	}
+}
+
+// itemLines renders one list element as "- " followed by its fields.
+func itemLines(indent string, item interface{}) []string {
+	m, ok := item.(map[string]interface{})
+	if !ok || len(m) == 0 {
+		text := "none"
+		if !ok {
+			text = scalarText(item)
+		}
+		return []string{indent + "- " + text}
+	}
+	lines := mapLines(indent+"  ", m)
+	lines[0] = indent + "- " + strings.TrimPrefix(lines[0], indent+"  ")
+	return lines
+}
+
+func hasNested(items []interface{}) bool {
+	for _, item := range items {
+		switch item.(type) {
+		case map[string]interface{}, []interface{}:
+			return true
+		}
+	}
+	return false
+}
+
+// scalarText prints whole JSON numbers, which decode as float64, without an
+// exponent: %v turns 1583280 into 1.58328e+06.
+func scalarText(v interface{}) string {
+	if n, ok := v.(float64); ok && n == float64(int64(n)) {
+		return fmt.Sprintf("%d", int64(n))
+	}
+	return fmt.Sprintf("%v", v)
+}
+
+// styleLine colours a fieldLines line: the label up to the first ": " and the
+// value after it, or the whole line when it only introduces nested lines.
+func (f *Formatter) styleLine(line string) string {
+	if f.NoColor {
+		return line
+	}
+	if i := strings.Index(line, ": "); i >= 0 {
+		return labelStyle.Render(line[:i+1]) + " " + valueStyle.Render(line[i+2:])
+	}
+	return labelStyle.Render(line)
 }

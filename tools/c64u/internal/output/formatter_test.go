@@ -1,6 +1,9 @@
 package output
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // Files on the C64 Ultimate filesystem often have no extension at all. Slicing
 // from an unguarded strings.LastIndex panicked on those, which took down every
@@ -44,5 +47,61 @@ func TestFileHelpersKnownTypes(t *testing.T) {
 	}
 	if got := GetFileTypeLabel("anything", true); got != "DIR" {
 		t.Errorf("GetFileTypeLabel(dir) = %q, want DIR", got)
+	}
+}
+
+// Nested response data used to print as Go syntax: "map[inputs:[] port:1]".
+func TestFieldLines_NestedValues(t *testing.T) {
+	data := map[string]interface{}{
+		"joysticks": []interface{}{
+			map[string]interface{}{"port": float64(1), "inputs": []interface{}{}},
+		},
+		"mouse": map[string]interface{}{"pending": float64(0), "attached": false},
+	}
+	var got []string
+	for _, k := range []string{"joysticks", "mouse"} {
+		got = append(got, fieldLines("  ", k, data[k])...)
+	}
+	want := []string{
+		"  joysticks:",
+		"    - inputs: none",
+		"      port: 1",
+		"  mouse:",
+		"    attached: false",
+		"    pending: 0",
+	}
+	assertLines(t, got, want)
+}
+
+// JSON numbers arrive as float64; %v printed 1583280 as 1.58328e+06.
+func TestFieldLines_Scalars(t *testing.T) {
+	cases := []struct {
+		key   string
+		value interface{}
+		want  string
+	}{
+		{"free", float64(1583280), "  free: 1583280"},
+		{"ratio", 0.5, "  ratio: 0.5"},
+		{"written", []interface{}{"A", "B"}, "  written: A, B"},
+		{"empty", map[string]interface{}{}, "  empty: none"},
+		{"name", "x", "  name: x"},
+	}
+	for _, c := range cases {
+		assertLines(t, fieldLines("  ", c.key, c.value), []string{c.want})
+	}
+}
+
+// Map iteration order is random; the output must not be.
+func TestSortedFields(t *testing.T) {
+	m := map[string]interface{}{"b": "2", "a": "1", "c": "3"}
+	for i := 0; i < 20; i++ {
+		assertLines(t, mapLines("  ", m), []string{"  a: 1", "  b: 2", "  c: 3"})
+	}
+}
+
+func assertLines(t *testing.T, got, want []string) {
+	t.Helper()
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("got:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
