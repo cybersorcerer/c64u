@@ -605,7 +605,20 @@ c64u fs rm <path>
 c64u fs mv <source> <dest>
 c64u fs cp <source> <dest>
 c64u fs cat <path>
+c64u fs servers                                # Remote FTP servers under /ftp/<alias>/
+c64u fs servers add nas 192.168.1.20 --user c64 --server-password secret --folder /c64
+c64u fs servers remove nas
 ```
+
+With a remote FTP server added — a NAS, another computer — its files appear
+on the device under `/ftp/<alias>/` and work like local ones:
+`c64u drives mount a /ftp/nas/games/disk.d64`,
+`c64u runners run-prg /ftp/nas/demo.prg`. The list lives in
+`/Flash/config/ftp_servers`, which the device reads when it is switched on, so
+follow a change with `c64u machine poweroff` and `c64u machine poweron` — or
+add the server in the Ultimate menu (Disk File Browser > FTP > New Host), which
+works at once. The password is stored readable on the device; give it an
+account that may only read.
 
 #### Hardware Configuration
 

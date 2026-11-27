@@ -203,6 +203,16 @@ and read `Disabled` again after that power-on. Saved, it woke 4 of 4 within 2-4 
 Wi-Fi on a static `/32` address (checked 2026-11-27). The wired interface does not wake the
 device. A switched-off device cannot report its MAC, which is why `machine poweroff` caches it.
 
+## Remote FTP servers load at power-on
+
+`c64u fs servers add` writes `/Flash/config/ftp_servers` (`{"version":1,"servers":[{alias, host,
+port, user, password, folder}]}`, the same file the menu writes). Firmware 1.2.1 reads it only when
+switched on, and unlike a SoftIEC `.ipr` it has no Load action in the menu, so a change needs
+`machine poweroff` and `machine poweron` - or adding the server in the menu, which works at once.
+The password is URL-encoded the way the firmware's `url_encode` does it: letters, digits and
+`_-.*` stay, the rest becomes lowercase `%xx` (`pa ss&w=rd` logged in as `pa%20ss%26w%3drd`;
+checked 2026-11-27 against an FTP server on another computer).
+
 ## JSON key casing is not uniform
 
 Most commands emit snake_case (`core_version`, `bus_id`). `c64u fs ls --json` emits PascalCase
