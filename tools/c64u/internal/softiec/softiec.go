@@ -231,12 +231,29 @@ func SetBusID(d Device, s *Settings, id int) error {
 
 // ReadStatus reports the drive's live state from the drives list.
 func ReadStatus(d Device) (Status, error) {
-	resp, err := d.DrivesList()
-	if err != nil {
+	fields, err := iecFields(d)
+	if err != nil || fields == nil {
 		return Status{}, err
 	}
+	st := Status{Present: true}
+	st.Enabled, _ = fields["enabled"].(bool)
+	st.LastError, _ = fields["last_error"].(string)
+	if id, ok := fields["bus_id"].(float64); ok {
+		st.BusID = int(id)
+	}
+	st.Path = firstPartitionPath(fields)
+	return st, nil
+}
+
+// iecFields finds the SoftIEC drive in the drives list; nil when the device
+// has none.
+func iecFields(d Device) (map[string]interface{}, error) {
+	resp, err := d.DrivesList()
+	if err != nil {
+		return nil, err
+	}
 	if resp.HasErrors() {
-		return Status{}, fmt.Errorf("%s", strings.Join(resp.Errors, "; "))
+		return nil, fmt.Errorf("%s", strings.Join(resp.Errors, "; "))
 	}
 	drives, _ := resp.Data["drives"].([]interface{})
 	for _, entry := range drives {
@@ -248,21 +265,12 @@ func ReadStatus(d Device) (Status, error) {
 			if !strings.Contains(strings.ToLower(name), "iec") {
 				continue
 			}
-			fields, ok := info.(map[string]interface{})
-			if !ok {
-				continue
+			if fields, ok := info.(map[string]interface{}); ok {
+				return fields, nil
 			}
-			st := Status{Present: true}
-			st.Enabled, _ = fields["enabled"].(bool)
-			st.LastError, _ = fields["last_error"].(string)
-			if id, ok := fields["bus_id"].(float64); ok {
-				st.BusID = int(id)
-			}
-			st.Path = firstPartitionPath(fields)
-			return st, nil
 		}
 	}
-	return Status{}, nil
+	return nil, nil
 }
 
 func firstPartitionPath(fields map[string]interface{}) string {

@@ -186,7 +186,7 @@ this reports what it actually serves.
 
 Firmware 1.2 and newer confine SoftIEC to its partitions, and out of the box the
 only one is the RAM disk (/Temp/). A directory outside the partitions cannot be
-reached this way.
+reached this way; add a partition for it with 'c64u drives softiec partitions set'.
 
 Example:
   c64u drives softiec root /Usb0/development`,
@@ -211,6 +211,128 @@ Example:
 	},
 }
 
+// partitionsTakeEffect is said wherever the partition file changes.
+const partitionsTakeEffect = "Takes effect when the C64 Ultimate is switched off and on again; " +
+	"c64u machine reboot is not enough"
+
+var softiecPartitionsCmd = &cobra.Command{
+	Use:   "partitions",
+	Short: "Show SoftIEC partitions, active now and saved for the next power-on",
+	Long: `Show the SoftIEC partitions: the ones the drive serves now, and the ones saved
+in ` + softiec.PartitionFile + ` for the next power-on.
+
+The device only reads that file when it is switched on, so the two lists differ
+after 'partitions set' or 'partitions clear' until it has been switched off and
+on again. 'c64u machine reboot' restarts only the C64 and does not read it.
+
+The drive reports partition names only through the file, so the active list
+shows numbers and paths.
+
+Examples:
+  c64u drives softiec partitions
+  c64u drives softiec partitions set 1=RAMDISK:/Temp 2=USB:/USB0/
+  c64u drives softiec partitions clear`,
+	Args: cobra.NoArgs,
+	Run: func(cmd *cobra.Command, args []string) {
+		active, err := softiec.ActivePartitions(apiClient)
+		if err != nil {
+			formatter.Error("Failed to read SoftIEC partitions", []string{err.Error()})
+			return
+		}
+		saved, ok, err := softiec.SavedPartitions(apiClient)
+		if err != nil {
+			formatter.Error("Failed to read "+softiec.PartitionFile, []string{err.Error()})
+			return
+		}
+		data := map[string]interface{}{"active": partitionRows(active)}
+		if ok {
+			data["saved"] = partitionRows(saved)
+		} else {
+			data["saved"] = "none - the device starts with 1 = /Temp"
+		}
+		formatter.Success("SoftIEC partitions", data)
+	},
+}
+
+// partitionRows lists partitions for the formatter; a name only when there is one.
+func partitionRows(parts []softiec.Partition) []interface{} {
+	rows := []interface{}{}
+	for _, p := range parts {
+		row := map[string]interface{}{"number": p.Number, "path": p.Path}
+		if p.Name != "" {
+			row["name"] = p.Name
+		}
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+var softiecPartitionsSetCmd = &cobra.Command{
+	Use:   "set N=[NAME:]PATH...",
+	Short: "Save the SoftIEC partitions for the next power-on",
+	Long: `Save the SoftIEC partitions the device sets up when it is switched on.
+
+Each argument is one partition: its number (1-255), an optional name of up to
+16 characters, and an absolute path to a directory on the device. The paths are
+checked before anything is written.
+
+The list replaces the device's own: partition 1 (the RAM disk on /Temp) is gone
+unless you name it, and the lowest number becomes the current partition, the
+one LOAD"$",11 lists.
+
+` + partitionsTakeEffect + `.
+
+Examples:
+  c64u drives softiec partitions set 1=RAMDISK:/Temp 2=USB:/USB0/
+  c64u drives softiec partitions set 2=/USB0/games`,
+	Args: cobra.MinimumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		var parts []softiec.Partition
+		for _, arg := range args {
+			p, err := softiec.ParsePartition(arg)
+			if err != nil {
+				formatter.Error("Invalid partition", []string{err.Error()})
+				return
+			}
+			parts = append(parts, p)
+		}
+		if err := softiec.SavePartitions(apiClient, parts); err != nil {
+			formatter.Error("Failed to save SoftIEC partitions", []string{err.Error()})
+			return
+		}
+		saved, _, _ := softiec.SavedPartitions(apiClient)
+		formatter.Success("SoftIEC partitions saved", map[string]interface{}{
+			"saved": partitionRows(saved),
+			"note":  partitionsTakeEffect,
+		})
+	},
+}
+
+var softiecPartitionsClearCmd = &cobra.Command{
+	Use:   "clear",
+	Short: "Delete the saved SoftIEC partitions",
+	Long: `Delete ` + softiec.PartitionFile + `, so the device starts with its own single
+partition, 1 = /Temp.
+
+` + partitionsTakeEffect + `.
+
+Example:
+  c64u drives softiec partitions clear`,
+	Args: cobra.NoArgs,
+	Run: func(cmd *cobra.Command, args []string) {
+		existed, err := softiec.ClearPartitions(apiClient)
+		if err != nil {
+			formatter.Error("Failed to delete "+softiec.PartitionFile, []string{err.Error()})
+			return
+		}
+		if !existed {
+			formatter.Success("No SoftIEC partitions were saved", nil)
+			return
+		}
+		formatter.Success("SoftIEC partitions deleted", map[string]interface{}{"note": partitionsTakeEffect})
+	},
+}
+
 func init() {
 	drivesCmd.AddCommand(softiecCmd)
 	softiecCmd.AddCommand(softiecStatusCmd)
@@ -218,6 +340,9 @@ func init() {
 	softiecCmd.AddCommand(softiecDisableCmd)
 	softiecCmd.AddCommand(softiecBusIDCmd)
 	softiecCmd.AddCommand(softiecRootCmd)
+	softiecCmd.AddCommand(softiecPartitionsCmd)
+	softiecPartitionsCmd.AddCommand(softiecPartitionsSetCmd)
+	softiecPartitionsCmd.AddCommand(softiecPartitionsClearCmd)
 
 	softiecEnableCmd.Flags().Int("bus-id", 0, "IEC device number to answer on")
 	softiecDisableCmd.Flags().Bool("completely", false, "Also switch it off for the Command Interface")

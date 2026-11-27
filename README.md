@@ -540,7 +540,15 @@ c64u drives softiec enable [--bus-id N]        # Enable, optionally on another b
 c64u drives softiec disable
 c64u drives softiec bus-id <id>                # Change the device number (8-30)
 c64u drives softiec root <path>                # Point the drive at a directory
+c64u drives softiec partitions                 # Partitions active now and saved for power-on
+c64u drives softiec partitions set 1=RAMDISK:/Temp 2=USB:/USB0/
+c64u drives softiec partitions clear           # Back to the single /Temp partition
 ```
+
+Partitions are saved in `/Flash/config/iec_partitions.ipr` and take effect when
+the C64 Ultimate is switched off and on again — `c64u machine reboot` is not
+enough. The saved list replaces the built-in one, so name partition 1 (`/Temp`)
+if you want to keep it; the lowest number becomes the current partition.
 
 SoftIEC is not a floppy drive, and the drives endpoints do not control it —
 `/v1/drives/softiec:on` answers success while nothing changes. Enabling it and

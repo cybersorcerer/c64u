@@ -183,6 +183,16 @@ All three take a category name or pattern on firmware 1.2.1 and then touch only 
 categories - `save-to-flash "C64 and Cartridge Settings"` persists one change without writing
 other experiments to flash.
 
+## SoftIEC partitions change only at power-on
+
+No REST endpoint sets SoftIEC partitions. `c64u drives softiec partitions set` writes
+`/Flash/config/iec_partitions.ipr`, and firmware 1.2.1 reads that file only when the device is
+switched on: `c64u machine reboot` restarts the C64 and its cartridge, and the active list stays
+as it was (checked 2026-11-27, together with `drives softiec partitions`, which shows both
+lists). The file replaces the built-in list - partition 1 on `/Temp` is gone unless it is named -
+and the lowest number becomes current, the one `LOAD"$",11` lists. The UCI command `$05 $20`
+changes partitions at once, but only from code running on the C64 and only until power-off.
+
 ## JSON key casing is not uniform
 
 Most commands emit snake_case (`core_version`, `bus_id`). `c64u fs ls --json` emits PascalCase
