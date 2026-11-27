@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+	"time"
+)
 
 func TestParseAddress(t *testing.T) {
 	good := map[string]int{
@@ -124,5 +128,39 @@ func TestDisasmRangeError(t *testing.T) {
 		if err := disasmRangeError(c.addr, c.length); (err == nil) != c.ok {
 			t.Errorf("disasmRangeError($%04X, %d) = %v, want ok=%v", c.addr, c.length, err, c.ok)
 		}
+	}
+}
+
+// poweroff warns when machine poweron will not be able to wake the device.
+func TestWakeWarnings(t *testing.T) {
+	if w := wakeWarnings("9c:13:9e:ed:d5:ec", "Enabled"); len(w) != 0 {
+		t.Errorf("ready device warned: %v", w)
+	}
+	w := wakeWarnings("9c:13:9e:ed:d5:ec", "Disabled")
+	if len(w) != 1 || !strings.Contains(w[0], "Wake On Wi-Fi") || !strings.Contains(w[0], "save-to-flash") {
+		t.Errorf("disabled setting: %v", w)
+	}
+	w = wakeWarnings("", "Enabled")
+	if len(w) != 1 || !strings.Contains(w[0], "Wi-Fi MAC") {
+		t.Errorf("no Wi-Fi MAC: %v", w)
+	}
+	// Firmware without the setting: nothing to say about it.
+	if w := wakeWarnings("9c:13:9e:ed:d5:ec", ""); len(w) != 0 {
+		t.Errorf("unknown setting warned: %v", w)
+	}
+}
+
+func TestWaitUntilOn(t *testing.T) {
+	calls := 0
+	var slept time.Duration
+	sleep := func(d time.Duration) { slept += d }
+	took, ok := waitUntilOn(func() bool { calls++; return calls == 3 }, 60*time.Second, 2*time.Second, sleep)
+	if !ok || took != 6*time.Second || slept != 6*time.Second {
+		t.Errorf("came on at the third check: took %v, ok %v, slept %v", took, ok, slept)
+	}
+	slept = 0
+	took, ok = waitUntilOn(func() bool { return false }, 10*time.Second, 2*time.Second, sleep)
+	if ok || took != 10*time.Second || slept != 10*time.Second {
+		t.Errorf("never on: took %v, ok %v, slept %v", took, ok, slept)
 	}
 }

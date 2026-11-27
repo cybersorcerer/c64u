@@ -132,3 +132,29 @@ func TestDeviceNamesAreSorted(t *testing.T) {
 		}
 	}
 }
+
+// A device's Wi-Fi MAC wakes that device, so it comes along with the device -
+// but not when --host names another machine, which the MAC would not wake.
+func TestResolveDeviceWifiMAC(t *testing.T) {
+	devices := map[string]Device{"attic": {Host: "attic.local", WifiMAC: "9C:13:9E:ED:D5:EC"}}
+	for _, explicit := range []bool{false, true} {
+		viper.Reset()
+		t.Setenv("C64U_DEVICE", "")
+		ExplicitHost = explicit
+		t.Cleanup(func() { ExplicitHost = false })
+		cfg := Config{Devices: devices}
+		if explicit {
+			cfg.Host = "one-off.local"
+		}
+		if err := cfg.resolveDevice(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := "9C:13:9E:ED:D5:EC"
+		if explicit {
+			want = ""
+		}
+		if cfg.WifiMAC != want {
+			t.Errorf("explicit host %v: WifiMAC = %q, want %q", explicit, cfg.WifiMAC, want)
+		}
+	}
+}

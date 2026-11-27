@@ -124,9 +124,17 @@ var machineResumeCmd = &cobra.Command{
 var machinePowerOffCmd = &cobra.Command{
 	Use:   "poweroff",
 	Args:  cobra.NoArgs,
-	Short: "Power off the machine (U64 only)",
-	Long:  `Power off the machine. This command only works on Ultimate 64 hardware.`,
+	Short: "Power off the machine",
+	Long: `Power off the machine.
+
+Before switching off, this remembers the device's Wi-Fi MAC address for
+'c64u machine poweron' and warns when Wake On Wi-Fi is disabled, since the
+machine can then only be switched on again at the machine itself.
+
+Example:
+  c64u machine poweroff`,
 	Run: func(cmd *cobra.Command, args []string) {
+		warnings := rememberWifiMAC()
 		resp, err := apiClient.MachinePowerOff()
 		if err != nil {
 			formatter.Error("Failed to power off machine", []string{err.Error()})
@@ -139,6 +147,9 @@ var machinePowerOffCmd = &cobra.Command{
 		}
 
 		formatter.Success("Machine powered off", nil)
+		for _, w := range warnings {
+			formatter.Warning(w)
+		}
 	},
 }
 

@@ -31,6 +31,9 @@ var (
 	noColor   bool
 	debugMode bool
 
+	// wifiMAC is the device's Wi-Fi MAC from config.toml, for machine poweron.
+	wifiMAC string
+
 	// Global instances
 	apiClient *api.Client
 	formatter *output.Formatter
@@ -127,6 +130,8 @@ Configuration Priority:
 		} else {
 			jsonOut = cfg.JSON
 		}
+
+		wifiMAC = cfg.WifiMAC
 
 		// Initialize global instances
 		apiClient = api.NewClient(cfg.Host, cfg.Port, cfg.Verbose)

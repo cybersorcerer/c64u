@@ -104,7 +104,7 @@ out.
 These need an Ultimate 64, not a 1541 Ultimate II:
 
 - `c64u streams` - video, audio, debug
-- `c64u machine poweroff`
+- `c64u machine poweroff`, `poweron`
 - `c64u machine debug-reg`, `debug-reg-set` (register `$D7FF`)
 - `c64u machine input` - and firmware 1.2.0 (C64 Ultimate) or 3.15 (Ultimate 64) on top of that
 
@@ -193,6 +193,15 @@ list stays as it was. Opening the file in the Ultimate menu loads it at once - D
 2026-11-27, together with `drives softiec partitions`, which shows both lists). The file replaces the built-in list - partition 1 on `/Temp` is gone unless it is named -
 and the lowest number becomes current, the one `LOAD"$",11` lists. The UCI command `$05 $20`
 changes partitions at once, but only from code running on the C64 and only until power-off.
+
+## Wake-on-LAN needs Wi-Fi and a saved setting
+
+`c64u machine poweron` broadcasts a magic packet for the device's `wifi_mac`. Firmware 1.2.1
+wakes on it only with `U64 Specific Settings` > `Wake On Wi-Fi` `Enabled` - the default is
+`Disabled` - and only once that is saved to flash: set in memory alone it woke the device once
+and read `Disabled` again after that power-on. Saved, it woke 4 of 4 within 2-4 s, also with
+Wi-Fi on a static `/32` address (checked 2026-11-27). The wired interface does not wake the
+device. A switched-off device cannot report its MAC, which is why `machine poweroff` caches it.
 
 ## JSON key casing is not uniform
 

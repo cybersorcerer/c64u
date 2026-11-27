@@ -36,7 +36,8 @@ c64u machine reset                             # back to a BASIC prompt
 c64u machine reboot
 c64u machine pause | resume
 c64u machine menu-button                       # as if the Menu button was pressed
-c64u machine poweroff                          # U64 only
+c64u machine poweroff                          # remembers the Wi-Fi MAC, warns if it cannot wake
+c64u machine poweron [--mac MAC] [--no-wait]   # Wake-on-LAN; MAC from --mac, wifi_mac in config.toml, last poweroff
 
 c64u machine read-mem <address> [--length N | --to ADDR] [-o FILE] [--raw]
 c64u machine read-mem <address> [--length N | --to ADDR] --disasm   # 6502, illegal opcodes marked *

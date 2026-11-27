@@ -447,7 +447,8 @@ c64u machine reset                             # Reset machine
 c64u machine reboot                            # Reboot with cartridge reinit
 c64u machine pause                             # Pause via DMA
 c64u machine resume                            # Resume from pause
-c64u machine poweroff                          # Power off (U64 only)
+c64u machine poweroff                          # Power off, remembering the Wi-Fi MAC
+c64u machine poweron [--mac MAC] [--no-wait]   # Wake-on-LAN, waits until it answers
 c64u machine menu-button                       # Simulate Menu button press
 c64u machine write-mem <addr> <data>           # Write hex data to memory
 c64u machine write-mem-file <addr> <file>      # Write file to memory
@@ -463,6 +464,19 @@ c64u machine heap                              # Firmware heap statistics (fw 1.
 c64u machine debug-reg                         # Read debug register (U64 only)
 c64u machine debug-reg-set <value>             # Write debug register (U64 only)
 ```
+
+`machine poweron` wakes a C64 Ultimate that `machine poweroff` switched off. It
+needs Wi-Fi and **Wake On Wi-Fi** enabled and saved to flash — off by default:
+
+```bash
+c64u config set "U64 Specific Settings" "Wake On Wi-Fi" Enabled
+c64u config save-to-flash "U64 Specific Settings"
+```
+
+A switched-off device cannot report its Wi-Fi MAC, so `poweron` takes it from
+`--mac`, then from `wifi_mac = "9C:13:9E:ED:D5:EC"` in the device entry of
+`config.toml`, then from the last `machine poweroff`, which remembers it in
+`~/.config/c64u/wifi_macs.json`. `poweroff` also warns when Wake On Wi-Fi is off.
 
 **Reading memory** (`read-mem`) shows a hex dump by default. `--output` (`-o`)
 writes the bytes to a file and `--raw` writes them to standard output, both

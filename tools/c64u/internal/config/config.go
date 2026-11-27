@@ -17,6 +17,8 @@ type Device struct {
 	Host     string `mapstructure:"host"`
 	Port     int    `mapstructure:"port"`
 	Password string `mapstructure:"password"`
+	// WifiMAC is what machine poweron wakes the device with; see package wol.
+	WifiMAC string `mapstructure:"wifi_mac"`
 }
 
 // Config holds the application configuration.
@@ -34,6 +36,10 @@ type Config struct {
 	// Resolved the same way as Host and Port, so a device entry can carry
 	// its own. It is a secret: never print it, show only whether it is set.
 	Password string `mapstructure:"password"`
+
+	// WifiMAC is the Wi-Fi address machine poweron wakes the device with;
+	// empty when the config file does not give one.
+	WifiMAC string `mapstructure:"wifi_mac"`
 
 	Devices map[string]Device `mapstructure:"devices"`
 	Default string            `mapstructure:"default"`
@@ -243,6 +249,11 @@ func (c *Config) resolveDevice() error {
 	if !explicitPassword {
 		c.Password = device.Password
 	}
+	// The MAC wakes this device only, not the one a one-off address names.
+	c.WifiMAC = ""
+	if !explicitHost {
+		c.WifiMAC = device.WifiMAC
+	}
 	return nil
 }
 
@@ -339,6 +350,7 @@ port = 80
 # host = "192.168.1.100"
 # port = 80
 # password = "secret"
+# wifi_mac = "9C:13:9E:ED:D5:EC"   # for 'c64u machine poweron' (Wake-on-LAN)
 #
 # [devices.attic]
 # host = "c64u-attic.local"
