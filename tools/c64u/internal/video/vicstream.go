@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	dbg "github.com/cybersorcerer/c64.nvim/tools/c64u/internal/debug"
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/inputsync"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
@@ -126,6 +127,23 @@ func (g *Game) Update() error {
 	return nil
 }
 
+// lastPads describes the gamepads seen last frame, for the debug log.
+var lastPads string
+
+// logPads writes the connected gamepads to the debug log when they change, so
+// a pad left out for lacking the standard layout can be told from one the
+// system does not report at all.
+func logPads(ids []ebiten.GamepadID) {
+	desc := ""
+	for _, id := range ids {
+		desc += fmt.Sprintf(" [%d %q sdl=%s standard=%v]", id, ebiten.GamepadName(id), ebiten.GamepadSDLID(id), ebiten.IsStandardGamepadLayoutAvailable(id))
+	}
+	if desc != lastPads {
+		lastPads = desc
+		dbg.Log("video: gamepads:%s", desc)
+	}
+}
+
 // readHost collects one frame of keyboard, gamepad and mouse input.
 func readHost() tickInput {
 	in := tickInput{
@@ -146,7 +164,9 @@ func readHost() tickInput {
 		in.Frame.JustPressed[k] = true
 	}
 
-	for _, id := range ebiten.AppendGamepadIDs(nil) {
+	ids := ebiten.AppendGamepadIDs(nil)
+	logPads(ids)
+	for _, id := range ids {
 		if !ebiten.IsStandardGamepadLayoutAvailable(id) {
 			continue
 		}
