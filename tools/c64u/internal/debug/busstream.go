@@ -82,16 +82,16 @@ func format6510(e Entry) string {
 		phi2 = "1"
 	}
 	flags := ""
-	if !e.Game {
+	if e.Game {
 		flags += " GAME"
 	}
-	if !e.ExROM {
+	if e.ExROM {
 		flags += " EXROM"
 	}
-	if !e.IRQ {
+	if e.IRQ {
 		flags += " IRQ"
 	}
-	if !e.NMI {
+	if e.NMI {
 		flags += " NMI"
 	}
 	return fmt.Sprintf("PHI2=%s %s $%04X = $%02X%s", phi2, rw, e.Address, e.Data, flags)
