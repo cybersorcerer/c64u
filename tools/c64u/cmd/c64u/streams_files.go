@@ -74,7 +74,8 @@ Example:
 		}
 
 		if resp.HasErrors() {
-			formatter.Error("API returned errors", resp.Errors)
+			err := network.ExplainStartError(fmt.Errorf("%s", strings.Join(resp.Errors, ", ")))
+			formatter.Error("API returned errors", []string{err.Error()})
 			return
 		}
 
@@ -521,8 +522,7 @@ Examples:
 		}
 
 		// Start stream on C64 Ultimate (IP only, port comes from config)
-		// Firmware 1.2.1 lehnt den Start sporadisch mit "Network Host Resolve Error"
-		// ab, obwohl nichts aufgelöst wird; nach einer Weile klappt es wieder.
+		// "Network Host Resolve Error": siehe network.StartWithRetry
 		start := func(ip string) error {
 			resp, err := apiClient.StreamsStart("debug", ip)
 			if err != nil {
@@ -533,9 +533,7 @@ Examples:
 			}
 			return nil
 		}
-		notice := fmt.Sprintf("The device is busy and refused the debug stream, retrying for up to %v...", network.StartRetryLimit)
-		hint := "the device stayed busy, restart it with: c64u machine reboot"
-		if err := network.StartWithRetry(start, listenIP, notice, hint, os.Stderr, time.Sleep); err != nil {
+		if err := network.StartWithRetry(start, listenIP, os.Stderr, time.Sleep); err != nil {
 			formatter.Error("Failed to start debug stream", []string{err.Error()})
 			return
 		}
@@ -647,12 +645,18 @@ Examples:
 				if err := apiClient.SetConfigItem("Data Streams", "Stream Audio to", fmt.Sprintf("%s:%d", ip, audio.AudioPort)); err != nil {
 					return err
 				}
-				resp, err := apiClient.StreamsStart("audio", ip)
-				if err != nil {
-					return err
+				start := func(ip string) error {
+					resp, err := apiClient.StreamsStart("audio", ip)
+					if err != nil {
+						return err
+					}
+					if resp.HasErrors() {
+						return fmt.Errorf("%s", resp.Errors[0])
+					}
+					return nil
 				}
-				if resp.HasErrors() {
-					return fmt.Errorf("%s", resp.Errors[0])
+				if err := network.StartWithRetry(start, ip, os.Stderr, time.Sleep); err != nil {
+					return err
 				}
 				formatter.Success("Audio stream started", map[string]interface{}{
 					"listening_on": fmt.Sprintf("%s:%d", ip, audio.AudioPort),

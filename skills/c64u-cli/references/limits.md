@@ -128,20 +128,35 @@ opens (X11 or XWayland, OpenGL, PulseAudio or ALSA); every other command runs wi
 a VM without a GPU, Mesa warns `DRI3 error: Could not get DRI3 device` and renders in software;
 the warning is harmless.
 
-## A video stream can refuse to restart for a while
+## A stream start fails with `Network Host Resolve Error`
 
-On firmware 1.2.1, `streams start video` sometimes answers `Network Host Resolve Error` after the
-video window was closed, for any destination IP, while audio and debug streams still start. The
-device resolves nothing; it is still releasing the previous stream. It recovered on its own
-after about 50 seconds. Calling `streams stop video` between attempts kept it from recovering
-once, and only `c64u machine reboot` cleared it. `streams listen video` retries on its own for
-up to 90 seconds without stopping in between, and suggests the reboot after that.
+Streams leave through the wired Ethernet port only. Before a unicast stream starts, the firmware
+sends a small UDP packet to the destination so that its hardware address gets looked up, then
+reads that address from the wired port's ARP table. On firmware 1.2.1, when Ethernet and Wi-Fi
+are both connected to the same subnet, that packet leaves through Wi-Fi instead, so the wired
+table never gets the entry and the start fails with `Network Host Resolve Error` (HTTP 404) - for
+video, audio and debug alike. It only works for a destination that has itself talked to the
+device's wired address recently, which makes it look sporadic.
 
-`streams listen debug` got the same answer once on 1.2.1 and recovered after a few minutes; it
-retries the same way. The cause is open: in later checks the debug stream started at once with
-the video window open (and kept delivering), right after it closed, after `runners
-run-prg-upload` and after `machine reset`. The API notes say video and debug share hardware and
-that starting video stops debug; starting debug beside a running video stream worked.
+Checked on 1.2.1 (build `31687dbd`): with both interfaces up, unicast starts to four LAN hosts
+that had not contacted the device failed 3 of 3; with Wi-Fi off, starts to the router went from
+5 of 5 failing to 5 of 5 working. A start to the multicast group `239.0.1.65` worked while
+unicast failed: multicast needs no lookup. The upstream 1541ultimate firmware fixed it in commit `5d42e1db` ("Bind stream
+primer sockets to the wired interface", 2026-10-17); a reboot does not help.
+
+Ways out, all checked on 1.2.1:
+
+- Turn Wi-Fi off when the cable is plugged in.
+- Keep Wi-Fi (Wake-on-LAN needs it) but take it out of the subnet: `WiFi settings` with
+  `Use DHCP` `Disabled`, a free static address and `Static Netmask` `255.255.255.255`, then
+  `c64u config save-to-flash "WiFi settings"` and `c64u machine reboot` - the Wi-Fi DHCP setting
+  only takes effect at boot. Afterwards fresh hosts streamed 3 of 3, REST still answered on the
+  Wi-Fi address and the clock kept its time. A static address with the normal `/24` mask does
+  not help: what matters is the shared subnet, not DHCP.
+- `c64u streams start` to a multicast group, for receivers that join it.
+
+`streams listen video`, `audio` and `debug` retry for 6 seconds, which helps only if the
+destination happens to talk to the wired address meanwhile, then name the cause.
 
 ## Configuration changes are volatile by default
 
