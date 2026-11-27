@@ -8,6 +8,7 @@ import (
 	"image"
 	"image/color"
 	"net"
+	"os"
 	"runtime"
 	"sync"
 	"time"
@@ -294,7 +295,7 @@ func Listen(localIP string, startFn func(ip string) error, stopFn func() error, 
 		return fmt.Errorf("listen UDP :%d: %w", VideoPort, err)
 	}
 
-	if err := startFn(localIP); err != nil {
+	if err := startStream(startFn, localIP, os.Stdout, time.Sleep); err != nil {
 		conn.Close()
 		return err
 	}
