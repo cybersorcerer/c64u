@@ -1,10 +1,14 @@
 package tui
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/api"
@@ -159,41 +163,56 @@ func (m *StreamsModel) startCmd(s *streamEntry) tea.Cmd {
 			// video.Listen uses Ebiten, which has to own the main thread.
 			// Spawn as a child process so the TUI stays alive.
 			self := selfPath()
-			args := []string{"streams", "listen", "video", "--host", m.host}
+			args := []string{"streams", "listen", "video", "--host", m.host, "--no-color"}
 			cmd := exec.Command(self, args...)
+			var out bytes.Buffer
+			cmd.Stdout, cmd.Stderr = &out, &out
 			s.proc = cmd
 			if err := cmd.Start(); err != nil {
 				return streamErrMsg{s.id, fmt.Errorf("cannot start %s: %w", self, err)}
 			}
-			// Watch for process exit in background
-			go func() {
-				cmd.Wait() //nolint:errcheck
-			}()
+			// Das Kind meldet Fehler nur in seiner Ausgabe (Exit-Code 0); ein
+			// Kill durch doStop ist ein normales Ende.
+			wait := func() tea.Msg {
+				err := cmd.Wait()
+				var exit *exec.ExitError
+				killed := errors.As(err, &exit) && !exit.Exited()
+				if !killed && (err != nil || strings.Contains(out.String(), "✗ Error: ")) {
+					return streamErrMsg{s.id, errors.New(childError(out.Bytes()))}
+				}
+				return streamStoppedMsg{s.id}
+			}
+			started := func() tea.Msg { return streamStartedMsg{s.id} }
+			return tea.BatchMsg{started, wait}
 
 		case "audio":
-			go func() {
-				audio.Listen( //nolint:errcheck
-					localIP,
-					func(ip string) error {
-						if err := m.client.SetConfigItem("Data Streams", "Stream Audio to",
-							fmt.Sprintf("%s:%d", ip, audio.AudioPort)); err != nil {
-							return err
-						}
-						resp, err := m.client.StreamsStart("audio", ip)
-						if err != nil {
-							return err
-						}
-						if resp.HasErrors() {
-							return fmt.Errorf("%s", resp.Errors[0])
-						}
-						return nil
-					},
-					func() error {
-						m.client.StreamsStop("audio") //nolint:errcheck
-						return nil
-					},
-				)
-			}()
+			startAudio := func(ip string) error {
+				if err := m.client.SetConfigItem("Data Streams", "Stream Audio to",
+					fmt.Sprintf("%s:%d", ip, audio.AudioPort)); err != nil {
+					return err
+				}
+				resp, err := m.client.StreamsStart("audio", ip)
+				if err != nil {
+					return err
+				}
+				if resp.HasErrors() {
+					return fmt.Errorf("%s", resp.Errors[0])
+				}
+				return nil
+			}
+			stopAudio := func() error {
+				m.client.StreamsStop("audio") //nolint:errcheck
+				return nil
+			}
+			listen := func(start func(string) error) error {
+				return audio.Listen(localIP, start, stopAudio)
+			}
+			start := func(ip string) error {
+				return network.StartWithRetry(startAudio, ip, io.Discard, time.Sleep)
+			}
+			if err := runUntilStarted(listen, start); err != nil {
+				return streamErrMsg{s.id, err}
+			}
 
 		case "debug":
 			// Debug TUI is blocking and needs the terminal — request TUI to quit
@@ -203,6 +222,41 @@ func (m *StreamsModel) startCmd(s *streamEntry) tea.Cmd {
 
 		return streamStartedMsg{s.id}
 	}
+}
+
+// runUntilStarted runs listen in the background and waits until it has tried
+// to start the stream: it returns the start's error, or listen's own error when
+// it fails before starting. After a good start the listener keeps running.
+func runUntilStarted(listen func(start func(string) error) error, start func(string) error) error {
+	started := make(chan error, 2)
+	go func() {
+		started <- listen(func(ip string) error {
+			err := start(ip)
+			started <- err
+			return err
+		})
+	}()
+	return <-started
+}
+
+// childError is what the video child printed about its failure: the error
+// line with its details, or else the last line it wrote.
+func childError(out []byte) string {
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	for i, line := range lines {
+		msg, ok := strings.CutPrefix(line, "✗ Error: ")
+		if !ok {
+			continue
+		}
+		parts := []string{msg}
+		for _, d := range lines[i+1:] {
+			if detail, ok := strings.CutPrefix(strings.TrimSpace(d), "- "); ok {
+				parts = append(parts, detail)
+			}
+		}
+		return strings.Join(parts, ": ")
+	}
+	return strings.TrimSpace(lines[len(lines)-1])
 }
 
 func (m *StreamsModel) View() string {
