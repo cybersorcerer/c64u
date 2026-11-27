@@ -712,17 +712,15 @@ git push origin v0.9.1
 The GitHub Action builds automatically for all platforms and creates a GitHub Release:
 
 - **macOS** (Intel + Apple Silicon): built on `macos-latest` with CGO — includes video and audio stream
-- **Linux x86_64**: built on `ubuntu-latest` with CGO — includes video and audio stream
-- **Linux ARM64**: built on `ubuntu-latest` without CGO, cross-compiled — no video or audio stream
+- **Linux x86_64**: built on `ubuntu-latest` without CGO — includes video and audio stream
+- **Linux ARM64**: built on `ubuntu-latest` without CGO, cross-compiled — includes video and audio stream
 - **Windows** (x86_64): built on `ubuntu-latest` without CGO — includes video and audio stream
 - **Agent skills**: `c64u-skills.tar.gz`, `c64u-skills.zip`, plus one zip per skill, platform independent
 
-> **Note:** On Linux the stream windows need Ebiten and oto, which reach X11 and ALSA through
-> cgo, so the x86_64 binary is dynamically linked against `libasound.so.2` and `libX11.so.6`.
-> It will not start at all on a machine that lacks them — on a headless server take the ARM64
-> binary's route and build with `CGO_ENABLED=0`, which falls back to stubs and stays static.
-> Windows needs no cgo: Ebiten and oto reach the system libraries directly. Everything else,
-> the TUI and the debugger included, works everywhere.
+> **Note:** On Linux the stream windows load X11 (or XWayland), OpenGL and PulseAudio or ALSA
+> only when a video or audio stream opens, so the binaries start on headless servers too.
+> Windows needs no cgo either: Ebiten and oto reach the system libraries directly. Everything
+> else, the TUI and the debugger included, works everywhere.
 
 The skill archives are built by the same tag push. That job downloads Kick Assembler and
 assembles every example first, so a broken example fails the release instead of shipping. Build
