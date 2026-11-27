@@ -4,6 +4,7 @@ package video
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/inputsync"
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/petscii"
 	"github.com/hajimehoshi/ebiten/v2"
+	"golang.org/x/text/unicode/norm"
 )
 
 // resetConfirmWindow is how long the second reset hotkey press has.
@@ -63,6 +65,10 @@ type controller struct {
 	// stay away from the C64 until released, so letting go of the modifier
 	// first does not type the hotkey's letter.
 	swallowed map[ebiten.Key]bool
+	// deadSpace: Space composed a dead key, so it stays away from the C64
+	// until released. macDead: a C= combination left macOS in a dead-key
+	// state, so the next letter arrives composed (á for a).
+	deadSpace, macDead bool
 
 	buffer    chan []byte // keyboard buffer writes on old firmware
 	closeOnce sync.Once
@@ -100,7 +106,7 @@ func (c *controller) tick(in tickInput) {
 
 	action, mod := detectHotkey(in.Frame, c.keyName, c.goos)
 	c.hotkey(action)
-	frame := c.unswallowed(in.Frame, mod)
+	frame := c.deadKeys(c.unswallowed(in.Frame, mod))
 
 	if c.sync.Unsupported() {
 		c.bufferKeys(frame)
@@ -138,6 +144,61 @@ func (c *controller) tick(in tickInput) {
 		st.Joy[1] = inputsync.Set{}
 	}
 	c.sync.Update(st)
+}
+
+// deadKeys keeps dead-key compositions from adding keys of their own.
+func (c *controller) deadKeys(f hostFrame) hostFrame {
+	if c.mode != modeCharacter {
+		return f
+	}
+	if f.JustPressed[ebiten.KeySpace] && len(f.Chars) > 0 && !slices.Contains(f.Chars, ' ') {
+		c.deadSpace = true
+	}
+	if !f.Pressed[ebiten.KeySpace] {
+		c.deadSpace = false
+	}
+	if c.deadSpace {
+		pressed := map[ebiten.Key]bool{}
+		for k, down := range f.Pressed {
+			if down && k != ebiten.KeySpace {
+				pressed[k] = true
+			}
+		}
+		f.Pressed = pressed
+		f.Chars = slices.DeleteFunc(slices.Clone(f.Chars), func(r rune) bool { return r == ' ' })
+	}
+
+	if c.goos != "darwin" {
+		return f
+	}
+	if f.Pressed[ebiten.KeyAltLeft] {
+		for k, down := range f.JustPressed {
+			if down && k != ebiten.KeyAltLeft {
+				c.macDead = true
+			}
+		}
+	} else if c.macDead && len(f.Chars) > 0 {
+		c.macDead = false
+		chars := make([]rune, len(f.Chars))
+		for i, r := range f.Chars {
+			chars[i] = baseLetter(r)
+		}
+		f.Chars = chars
+	}
+	return f
+}
+
+// baseLetter turns a composed letter the C64 lacks into its base letter: á
+// into a. Anything else stays as it is.
+func baseLetter(r rune) rune {
+	if _, ok := charKeys[r]; ok {
+		return r
+	}
+	base := []rune(norm.NFD.String(string(r)))[0]
+	if _, ok := charKeys[base]; ok {
+		return base
+	}
+	return r
 }
 
 // unswallowed returns the frame without the keys that belong to a hotkey.
@@ -258,6 +319,10 @@ func (c *controller) title() string {
 	}
 	var joy []string
 	for _, port := range c.pads {
+		if port == 1 && c.mouse {
+			joy = append(joy, "pad→1 off") // the mouse has port 1
+			continue
+		}
 		joy = append(joy, fmt.Sprintf("pad→%d", port))
 	}
 	if len(joy) == 0 {

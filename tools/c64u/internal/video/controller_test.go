@@ -248,3 +248,52 @@ func TestController_HotkeyKeysNotLeaked(t *testing.T) {
 		t.Errorf("K pressed again after its release was not sent: %v", got.Keys)
 	}
 }
+
+// Deferred minor: a dead key, then Space, types the accent alone; the Space
+// that composed it must not reach the C64 as well.
+func TestController_DeadKeySpaceTypesOnlyTheAccent(t *testing.T) {
+	c, s, _ := newTestController(t)
+	c.tick(tickInput{Focused: true, Now: t0, Frame: hostFrame{Pressed: pressed(ebiten.KeySpace), JustPressed: pressed(ebiten.KeySpace), Chars: []rune{'^'}}})
+	if got := s.last(); got.Keys["space"] || !reflect.DeepEqual(got.Taps, []inputsync.Tap{ktap("arrow_up")}) {
+		t.Errorf("sent keys %v, taps %v; want only the arrow_up tap", got.Keys, got.Taps)
+	}
+	c.tick(tickInput{Focused: true, Now: t0, Frame: hostFrame{Pressed: pressed(ebiten.KeySpace)}})
+	if s.last().Keys["space"] {
+		t.Error("Space held after it composed the dead key")
+	}
+	c.tick(tickInput{Focused: true, Now: t0})
+	c.tick(tickInput{Focused: true, Now: t0, Frame: hostFrame{Pressed: pressed(ebiten.KeySpace), JustPressed: pressed(ebiten.KeySpace), Chars: []rune{' '}}})
+	if !s.last().Keys["space"] {
+		t.Error("a plain Space was not sent")
+	}
+}
+
+// Deferred minor: on macOS, C=+E (left Option+E) leaves the system's dead-key
+// state behind, so the next letter arrives composed (á) and was dropped.
+func TestController_LetterAfterMacComboKeepsItsBase(t *testing.T) {
+	c, s, _ := newTestController(t)
+	c.tick(tickInput{Focused: true, Now: t0, Frame: hostFrame{Pressed: pressed(ebiten.KeyAltLeft, ebiten.KeyE), JustPressed: pressed(ebiten.KeyE)}})
+	c.tick(tickInput{Focused: true, Now: t0})
+	c.tick(tickInput{Focused: true, Now: t0, Frame: hostFrame{Pressed: pressed(ebiten.KeyA), JustPressed: pressed(ebiten.KeyA), Chars: []rune{'á'}}})
+	if got := s.last().Taps; !reflect.DeepEqual(got, []inputsync.Tap{ktap("a")}) {
+		t.Errorf("taps after C=+E = %v, want a", got)
+	}
+	// Without a C= combination before it, a letter the C64 lacks stays ignored.
+	c.tick(tickInput{Focused: true, Now: t0})
+	c.tick(tickInput{Focused: true, Now: t0, Frame: hostFrame{Pressed: pressed(ebiten.KeyQuote), JustPressed: pressed(ebiten.KeyQuote), Chars: []rune{'ä'}}})
+	if got := s.last().Taps; len(got) != 0 {
+		t.Errorf("taps for a plain ä = %v, want none", got)
+	}
+}
+
+// Deferred minor: while the mouse has port 1, the title must not claim a pad
+// drives it.
+func TestController_TitleShowsPort1PadOffWhileMouseCaptured(t *testing.T) {
+	c, _, _ := newTestController(t)
+	pads := map[ebiten.GamepadID]padFrame{0: {}, 1: {}}
+	c.tick(cmd(ebiten.KeyL, t0))
+	c.tick(tickInput{Focused: true, Now: t0, Pads: pads})
+	if !strings.Contains(c.title(), "Joy: pad→2, pad→1 off,") {
+		t.Errorf("title = %q, want pad→1 marked off", c.title())
+	}
+}
