@@ -236,6 +236,8 @@ c64u config get  <category> <item>
 c64u config set  <category> <item> <value>
 c64u config set-multiple <json-file>
 c64u config export [output-file]
+c64u config restore <file> [--dry-run]         # backup back onto the same device, saved to flash
+c64u config import <file> [--dry-run]          # copy settings, keep the device identity
 c64u config save-to-flash [category]           # persist across power cycles
 c64u config load-from-flash [category]
 c64u config reset-to-default [category]
@@ -243,6 +245,17 @@ c64u config reset-to-default [category]
 
 Settings changed with `set` apply immediately but are lost on power-off unless
 `save-to-flash` follows.
+
+**`restore` vs `import`** - the purpose decides, not a flag. Both read the output of `export`
+(each category nested twice, with an `errors` member) as well as the flat `set-multiple` format,
+compare it with the device and send only what differs; `--dry-run` lists those changes per
+category as `Item: old -> new` and writes nothing. `restore` sends everything, the device
+identity last, then saves to flash. `import` skips the identity - `Ethernet Settings`,
+`WiFi settings`, `Host Name` and `Unique ID` - and changes memory only, like `set`. The firmware
+tries every setting in the body and names the ones it rejects; those land under `failed` and
+the rest is applied. Checked on 1.2.1: a fresh export restored with `--dry-run` reports 0 changes; an import
+with an unknown item reported it as failed and still changed `Disk swap delay`, and left
+`Host Name` as it was.
 
 With a category name or pattern (firmware 1.2.1) the three act on the matching categories
 only and list them. `save-to-flash` writes only categories with unsaved changes, and the

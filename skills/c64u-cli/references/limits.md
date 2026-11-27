@@ -152,10 +152,12 @@ that starting video stops debug; starting debug beside a running video stream wo
 something saves, `load-from-flash` brings them back - checked on the device: `Drive Bus ID`
 went 9 → 8 with `reset-to-default "Drive A Settings"` and back to 9 with
 `load-from-flash "Drive A Settings"`. Unsaved changes made before the reset are gone either way,
-so export first when they matter:
+so export first when they matter, and put the export back with `restore` (see
+`workflows.md`, "Back up and restore the configuration"):
 
 ```sh
 c64u config export config-backup.json
+c64u config restore config-backup.json
 ```
 
 Do not run `save-to-flash` on a device that booted into safe mode: it holds factory defaults in

@@ -591,7 +591,30 @@ c64u config save-to-flash [category]           # Optional category or pattern (f
 c64u config load-from-flash [category]
 c64u config reset-to-default [category]
 c64u config export [file]                      # Export all settings to JSON
+c64u config restore <file> [--dry-run]         # Put a backup back, saved to flash
+c64u config import <file> [--dry-run]          # Copy settings, keep host name and network
 ```
+
+**Back up and restore** the same device:
+
+```bash
+c64u config export backup.json                 # make the backup
+c64u config restore backup.json --dry-run      # see what would change
+c64u config restore backup.json                # everything back, network last, saved to flash
+```
+
+**Copy a setup** onto a second C64 Ultimate:
+
+```bash
+c64u config export my-setup.json                                  # on the first device
+c64u --host c64u-two.local config import my-setup.json --dry-run
+c64u --host c64u-two.local config import my-setup.json            # in memory only
+c64u --host c64u-two.local config save-to-flash                   # keep it
+```
+
+`import` leaves the device identity alone: Ethernet and Wi-Fi settings, host name and unique
+id. Both commands send only what differs, read the output of `export` as well as the flat
+format of `set-multiple`, and report settings the device does not know instead of stopping.
 
 ## Project Structure
 

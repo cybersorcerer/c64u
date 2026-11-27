@@ -192,6 +192,36 @@ c64u config set "C64 and Cartridge Settings" "RAM Expansion Unit" Enabled
 c64u config save-to-flash "C64 and Cartridge Settings"     # firmware 1.2.1; older: no argument
 ```
 
+## Back up and restore the configuration
+
+Before experimenting with settings, take a backup; it is the only way back to more than what
+flash holds.
+
+```sh
+c64u config export backup.json                 # make the backup
+c64u config restore backup.json --dry-run      # see what would change
+c64u config restore backup.json                # everything back, network last, saved to flash
+```
+
+`restore` gives the device the address and name in the file, so use it on the device the backup
+came from. If the network settings in the backup differ, the device may switch address while
+`restore` runs (not tested on the device: it would cut the session). `restore` then says so and
+names the command that finishes the save at the new address.
+
+## Copy a setup to a second C64 Ultimate
+
+```sh
+c64u config export my-setup.json                                  # on the first device
+c64u --host c64u-two.local config import my-setup.json --dry-run
+c64u --host c64u-two.local config import my-setup.json            # in memory only
+c64u --host c64u-two.local config save-to-flash                   # keep it
+```
+
+`import` copies drives, audio, video, time zone, time servers and services, and leaves the
+second device its own Ethernet and Wi-Fi settings, host name and unique id - two devices with
+one static address would fight over it. Until `save-to-flash`, `load-from-flash` undoes the
+import. Settings the second device does not know (other firmware) are listed as failed.
+
 ## Script-friendly output
 
 ```sh

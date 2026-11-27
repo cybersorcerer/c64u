@@ -17,6 +17,7 @@ For C64 hardware questions - register addresses, screen codes, SID frequencies -
 |---|---|
 | Which command does X, what arguments, which JSON comes back | `references/commands.md` |
 | How do I assemble, run and then prove it worked | `references/workflows.md` |
+| How do I back up, restore or copy the device configuration | `references/workflows.md` |
 | Why did my write not stick, why can't I control a game, what is U64-only | `references/limits.md` |
 
 ## Connecting

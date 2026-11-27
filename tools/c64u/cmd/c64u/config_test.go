@@ -3,6 +3,8 @@ package main
 import (
 	"reflect"
 	"testing"
+
+	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/api"
 )
 
 // The config API nests category → item → attributes. Rendering a nested map
@@ -66,6 +68,45 @@ func TestCategoryStoreOutcome(t *testing.T) {
 		}
 		if ok && data["category"] != "Drive*" {
 			t.Errorf("%s: data = %v", c.action, data)
+		}
+	}
+}
+
+func TestSplitIdentity(t *testing.T) {
+	changes := []api.ConfigChange{
+		{Category: "Drive A Settings", Item: "Drive Type", New: "1581"},
+		{Category: "Ethernet Settings", Item: "Static IP", New: "192.168.2.64"},
+		{Category: "Network Settings", Item: "Host Name", New: "C64U"},
+		{Category: "Network Settings", Item: "TimeZone", New: "Western Europe"},
+	}
+	rest, identity := splitIdentity(changes)
+	if len(rest) != 2 || rest[1].Item != "TimeZone" || len(identity) != 2 || identity[0].Item != "Static IP" {
+		t.Errorf("rest = %+v, identity = %+v", rest, identity)
+	}
+}
+
+// After a restore changed the network settings, the hint names where the
+// device will be: its static address, unless the backup uses DHCP.
+func TestStaticAddress(t *testing.T) {
+	static := api.ConfigSettings{"Ethernet Settings": {"Use DHCP": "Disabled", "Static IP": "192.168.2.64"}}
+	if got := staticAddress(static); got != "192.168.2.64" {
+		t.Errorf("static = %q", got)
+	}
+	dhcp := api.ConfigSettings{"Ethernet Settings": {"Use DHCP": "Enabled", "Static IP": "192.168.2.64"}}
+	if got := staticAddress(dhcp); got != "" {
+		t.Errorf("dhcp = %q, want none", got)
+	}
+}
+
+func TestChangeValue(t *testing.T) {
+	cases := map[string]api.ConfigChange{
+		"1541 -> 1581":                 {Category: "Drive A Settings", Item: "Drive Type", Old: "1541", New: "1581"},
+		"(not on this device) -> 0 dB": {Category: "Audio Mixer", Item: "Vol Ultimate", New: "0 dB"},
+		"8 -> 9":                       {Category: "Drive A Settings", Item: "Drive Bus ID", Old: float64(8), New: float64(9)},
+	}
+	for want, ch := range cases {
+		if got := changeValue(ch); got != want {
+			t.Errorf("changeValue = %q, want %q", got, want)
 		}
 	}
 }
