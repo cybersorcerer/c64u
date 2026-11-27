@@ -15,6 +15,7 @@ import (
 
 	dbg "github.com/cybersorcerer/c64.nvim/tools/c64u/internal/debug"
 	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/inputsync"
+	"github.com/cybersorcerer/c64.nvim/tools/c64u/internal/network"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
@@ -295,7 +296,9 @@ func Listen(localIP string, startFn func(ip string) error, stopFn func() error, 
 		return fmt.Errorf("listen UDP :%d: %w", VideoPort, err)
 	}
 
-	if err := startStream(startFn, localIP, os.Stdout, time.Sleep); err != nil {
+	notice := "The device is still releasing the previous video stream, retrying for up to 1m30s..."
+	hint := "the device did not release the previous video stream, restart it with: c64u machine reboot"
+	if err := network.StartWithRetry(startFn, localIP, notice, hint, os.Stdout, time.Sleep); err != nil {
 		conn.Close()
 		return err
 	}
