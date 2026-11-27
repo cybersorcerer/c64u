@@ -68,7 +68,7 @@ Examples:
 }
 
 // applyConfigFile changes the settings in path that differ from the device.
-// restore also applies the identity settings, last, and saves to flash.
+// restore also applies the identity settings and saves to flash.
 func applyConfigFile(path string, restore, dryRun bool) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -86,47 +86,86 @@ func applyConfigFile(path string, restore, dryRun bool) {
 		return
 	}
 
-	rest, identity := splitIdentity(api.DiffConfig(current, wanted))
+	all := api.DiffConfig(current, wanted)
+	unchanged := countSettings(wanted) - len(all)
+	rest, identity := splitIdentity(all)
+	rest, password := splitPassword(rest)
 	if !restore {
 		identity = nil
 	}
-	changes := append(append([]api.ConfigChange{}, rest...), identity...)
+	changes := append(append(append([]api.ConfigChange{}, rest...), identity...), password...)
 
 	if dryRun {
-		formatter.Success(fmt.Sprintf("%d setting(s) would change, nothing written", len(changes)), changeReport(changes, nil))
+		formatter.Success(fmt.Sprintf("%d setting(s) would change, nothing written", len(changes)), changeReport(changes, nil, unchanged))
 		return
 	}
 
+	// Reihenfolge: Rest, dann Identität (kann die Adresse ändern), dann das
+	// Passwort (wirkt sofort, jede spätere Anfrage braucht das neue), dann Flash.
 	failed, err := apiClient.ApplyConfig(rest)
 	if err != nil {
 		formatter.Error("Failed to apply the settings", []string{err.Error()})
 		return
 	}
 	if len(identity) > 0 {
-		idFailed, err := apiClient.ApplyConfig(identity)
-		if err == nil {
-			failed = append(failed, idFailed...)
-			err = apiClient.SaveConfigToFlash()
-		}
+		f, err := apiClient.ApplyConfig(identity)
 		if err != nil {
-			formatter.Error("Network settings changed, the device did not confirm the rest", networkHints(err, wanted))
+			formatter.Error("The device did not confirm the network settings", networkHints(err, wanted, identity))
 			return
 		}
-	} else if restore {
+		failed = append(failed, f...)
+	}
+	passwordChanged := false
+	if len(password) > 0 {
+		f, err := apiClient.ApplyConfig(password)
+		if err != nil {
+			formatter.Error("Failed to change the network password", []string{err.Error()})
+			return
+		}
+		if len(f) == 0 {
+			apiClient.Password = fmt.Sprint(password[0].New)
+			passwordChanged = true
+		}
+		failed = append(failed, f...)
+	}
+	if restore {
 		if err := apiClient.SaveConfigToFlash(); err != nil {
-			formatter.Error("Settings applied but not saved to flash", []string{err.Error(), "Save them with: c64u config save-to-flash"})
+			hints := []string{err.Error(), "Save them with: c64u config save-to-flash"}
+			if len(identity) > 0 {
+				hints = networkHints(err, wanted, identity)
+			}
+			if passwordChanged {
+				hints = append(hints, "The network password changed: pass the new one with --password.")
+			}
+			formatter.Error("Settings applied but not saved to flash", hints)
 			return
 		}
 	}
 
-	title := fmt.Sprintf("%d setting(s) changed", len(changes)-len(failed))
+	title := fmt.Sprintf("%d setting(s) changed", len(changes))
+	if len(failed) > 0 {
+		title = fmt.Sprintf("%d setting(s) sent, the device rejected some (see failed)", len(changes))
+	}
 	switch {
 	case restore:
-		title += " and saved to flash"
+		title += "; saved to flash"
 	case len(changes) > 0:
 		title += " in memory; keep them with: c64u config save-to-flash"
 	}
-	formatter.Success(title, changeReport(changes, failed))
+	report := changeReport(changes, failed, unchanged)
+	if passwordChanged {
+		report["note"] = "The network password changed: pass the new one with --password or C64U_PASSWORD from now on."
+	}
+	formatter.Success(title, report)
+}
+
+// countSettings counts the settings in a file.
+func countSettings(settings api.ConfigSettings) int {
+	n := 0
+	for _, items := range settings {
+		n += len(items)
+	}
+	return n
 }
 
 // readDeviceConfig reads every category the way config export does.
@@ -159,6 +198,24 @@ func splitIdentity(changes []api.ConfigChange) (rest, identity []api.ConfigChang
 	return rest, identity
 }
 
+// isPassword reports the setting that guards the REST API itself.
+func isPassword(ch api.ConfigChange) bool {
+	return ch.Category == "Network Settings" && ch.Item == "Network Password"
+}
+
+// splitPassword takes the network password out: it takes effect at once, so
+// it has to be the last change sent.
+func splitPassword(changes []api.ConfigChange) (rest, password []api.ConfigChange) {
+	for _, ch := range changes {
+		if isPassword(ch) {
+			password = append(password, ch)
+		} else {
+			rest = append(rest, ch)
+		}
+	}
+	return rest, password
+}
+
 // staticAddress is the address the device takes on from settings, if they
 // give it a static one on Ethernet or Wi-Fi.
 func staticAddress(settings api.ConfigSettings) string {
@@ -171,31 +228,51 @@ func staticAddress(settings api.ConfigSettings) string {
 	return ""
 }
 
-// networkHints explains a failure after the network settings were sent: the
-// device may have moved, so saving has to be finished at its new address.
-func networkHints(err error, wanted api.ConfigSettings) []string {
-	hints := []string{err.Error(), "The device may now answer at another address."}
+// networkHints explains a failure after the identity settings were sent. Only
+// Ethernet and Wi-Fi settings can move the device; a new host name cannot.
+func networkHints(err error, wanted api.ConfigSettings, identity []api.ConfigChange) []string {
+	hints := []string{err.Error()}
+	moved := false
+	for _, ch := range identity {
+		if ch.Category == "Ethernet Settings" || ch.Category == "WiFi settings" {
+			moved = true
+		}
+	}
+	if !moved {
+		return append(hints, "The address did not change. Finish with: c64u config save-to-flash")
+	}
+	hints = append(hints, "The device may now answer at another address.")
 	if addr := staticAddress(wanted); addr != "" {
 		return append(hints, "Finish with: c64u --host "+addr+" config save-to-flash")
 	}
 	return append(hints, "Find its new DHCP address, then finish with: c64u --host <address> config save-to-flash")
 }
 
-// changeValue shows a change as "old -> new".
+// changeValue shows a change as "old -> new"; the password stays hidden.
 func changeValue(ch api.ConfigChange) string {
-	old := "(not on this device)"
-	if ch.Old != nil {
+	if isPassword(ch) {
+		return "(hidden) -> (hidden)"
+	}
+	old := "(none)"
+	switch {
+	case ch.Missing:
+		old = "(not on this device)"
+	case ch.Old != nil:
 		old = fmt.Sprint(ch.Old)
 	}
 	return fmt.Sprintf("%s -> %v", old, ch.New)
 }
 
-func changeReport(changes []api.ConfigChange, failed []string) map[string]interface{} {
-	report := map[string]interface{}{}
+func changeReport(changes []api.ConfigChange, failed []string, unchanged int) map[string]interface{} {
+	report := map[string]interface{}{"unchanged": unchanged}
 	if jsonOut {
 		list := make([]map[string]interface{}, len(changes))
 		for i, ch := range changes {
-			list[i] = map[string]interface{}{"category": ch.Category, "item": ch.Item, "old": ch.Old, "new": ch.New}
+			old, nw := ch.Old, ch.New
+			if isPassword(ch) {
+				old, nw = "(hidden)", "(hidden)"
+			}
+			list[i] = map[string]interface{}{"category": ch.Category, "item": ch.Item, "old": old, "new": nw, "missing": ch.Missing}
 		}
 		report["changes"] = list
 	} else {

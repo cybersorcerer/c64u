@@ -3,18 +3,20 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 )
 
 // ConfigChange is one setting whose wanted value differs from the device's.
-// Old is nil when the device has no such setting.
 type ConfigChange struct {
 	Category string
 	Item     string
 	Old      interface{}
 	New      interface{}
+	Missing  bool // the device has no such setting
 }
 
 // ParseConfigFile reads a configuration file in either of the two shapes the
@@ -38,6 +40,14 @@ func ParseConfigFile(data []byte) (ConfigSettings, error) {
 		// Export-Form: {"Kategorie": {"Kategorie": {...}, "errors": []}}
 		if inner, ok := items[cat].(map[string]interface{}); ok {
 			items = inner
+		} else if _, ok := items["errors"]; ok {
+			return nil, fmt.Errorf("category %q holds no settings, only the device's errors: %v", cat, items["errors"])
+		}
+		for item, value := range items {
+			switch value.(type) {
+			case map[string]interface{}, []interface{}:
+				return nil, fmt.Errorf("%s / %s is not a plain value; %s", cat, item, shapes)
+			}
 		}
 		settings[cat] = items
 	}
@@ -61,19 +71,16 @@ func IsIdentity(category, item string) bool {
 }
 
 // DiffConfig lists the settings in wanted whose value differs from current,
-// sorted by category and item. Values compare as text, so 8 and 8.0 are equal.
+// sorted by category and item, compared with valueText.
 func DiffConfig(current, wanted ConfigSettings) []ConfigChange {
 	var changes []ConfigChange
 	for cat, items := range wanted {
 		for item, value := range items {
 			old, known := current[cat][item]
-			if known && fmt.Sprint(old) == fmt.Sprint(value) {
+			if known && valueText(old) == valueText(value) {
 				continue
 			}
-			if !known {
-				old = nil
-			}
-			changes = append(changes, ConfigChange{Category: cat, Item: item, Old: old, New: value})
+			changes = append(changes, ConfigChange{Category: cat, Item: item, Old: old, New: value, Missing: !known})
 		}
 	}
 	sort.Slice(changes, func(i, j int) bool {
@@ -84,6 +91,18 @@ func DiffConfig(current, wanted ConfigSettings) []ConfigChange {
 	})
 	return changes
 }
+
+// valueText is how a value compares: JSON numbers without a fraction as plain
+// integers, so 8, 8.0 and "8" match and 1000000 does not turn into 1e+06.
+func valueText(v interface{}) string {
+	if f, ok := v.(float64); ok && f == math.Trunc(f) && math.Abs(f) < 1e15 {
+		return strconv.FormatInt(int64(f), 10)
+	}
+	return fmt.Sprint(v)
+}
+
+// MaxConfigBodyBytes is the largest request body POST /v1/configs takes.
+const MaxConfigBodyBytes = 32 * 1024
 
 // ApplyConfig sends the changes in one request. The device tries every setting
 // and names the ones it rejected; those come back as failed, the rest applied.
@@ -98,14 +117,15 @@ func (c *Client) ApplyConfig(changes []ConfigChange) (failed []string, err error
 		}
 		body[ch.Category][ch.Item] = ch.New
 	}
+	if encoded, _ := json.Marshal(body); len(encoded) > MaxConfigBodyBytes {
+		return nil, fmt.Errorf("the settings serialise to %d bytes, over the device's 32 KB limit: split the file", len(encoded))
+	}
 	resp, err := c.PostJSON("/v1/configs", body)
 	if err != nil {
 		return nil, err
 	}
 	switch resp.StatusCode {
-	case http.StatusOK:
-		return nil, nil
-	case http.StatusBadRequest:
+	case http.StatusOK, http.StatusBadRequest:
 		return resp.Errors, nil
 	}
 	return nil, fmt.Errorf("API error: %s", strings.Join(resp.Errors, ", "))

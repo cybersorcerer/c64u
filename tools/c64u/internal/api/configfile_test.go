@@ -2,9 +2,11 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -73,7 +75,7 @@ func TestDiffConfig(t *testing.T) {
 	}
 	got := DiffConfig(current, wanted)
 	want := []ConfigChange{
-		{Category: "Audio Mixer", Item: "Vol Ultimate", Old: nil, New: "0 dB"},
+		{Category: "Audio Mixer", Item: "Vol Ultimate", Old: nil, New: "0 dB", Missing: true},
 		{Category: "Drive A Settings", Item: "Drive Type", Old: "1541", New: "1581"},
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -105,5 +107,59 @@ func TestApplyConfig_ReportsFailures(t *testing.T) {
 	}
 	if len(failed) != 1 || body["Drive A Settings"]["Drive Type"] != "1581" {
 		t.Errorf("failed = %v, body = %v", failed, body)
+	}
+}
+
+// An exported category without its settings object, or a setting whose value
+// is not a plain value, is not something the device can take.
+func TestParseConfigFile_RejectsShapes(t *testing.T) {
+	for _, data := range []string{
+		`{"Audio Mixer": {"errors": ["Category not found"]}}`,
+		`{"Audio Mixer": {"Pan Drive 1": {"current": "Left 2"}}}`,
+		`{"Audio Mixer": {"Pan Drive 1": ["Left 2"]}}`,
+	} {
+		if got, err := ParseConfigFile([]byte(data)); err == nil {
+			t.Errorf("%s accepted as %v", data, got)
+		}
+	}
+}
+
+// Large numbers compare by value, and a setting the device reports as null is
+// known, not missing.
+func TestDiffConfig_Values(t *testing.T) {
+	current := ConfigSettings{"C": {"Big": float64(1000000), "Empty": nil}}
+	wanted := ConfigSettings{"C": {"Big": "1000000", "Empty": "x"}}
+	got := DiffConfig(current, wanted)
+	if len(got) != 1 || got[0].Item != "Empty" || got[0].Missing {
+		t.Errorf("got %+v, want only Empty, known to the device", got)
+	}
+	got = DiffConfig(ConfigSettings{"C": {}}, ConfigSettings{"C": {"New": "x"}})
+	if len(got) != 1 || !got[0].Missing {
+		t.Errorf("got %+v, want New marked missing", got)
+	}
+}
+
+// A 200 that still lists errors is not a full success.
+func TestApplyConfig_ErrorsOnSuccess(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"errors": ["'X' is not a valid item name in category 'C'."]}`))
+	}))
+	defer srv.Close()
+	c := &Client{BaseURL: srv.URL, HTTPClient: srv.Client()}
+	failed, err := c.ApplyConfig([]ConfigChange{{Category: "C", Item: "X", New: "1"}})
+	if err != nil || len(failed) != 1 {
+		t.Errorf("failed = %v, err = %v", failed, err)
+	}
+}
+
+// The device takes at most 32 KB; a larger body is refused before sending.
+func TestApplyConfig_BodyLimit(t *testing.T) {
+	c := &Client{BaseURL: "http://127.0.0.1:1", HTTPClient: http.DefaultClient}
+	big := make([]ConfigChange, 0, 400)
+	for i := 0; i < 400; i++ {
+		big = append(big, ConfigChange{Category: "C", Item: fmt.Sprintf("Item %03d with a long name", i), New: strings.Repeat("v", 80)})
+	}
+	if _, err := c.ApplyConfig(big); err == nil || !strings.Contains(err.Error(), "32") {
+		t.Errorf("err = %v, want the 32 KB limit named", err)
 	}
 }

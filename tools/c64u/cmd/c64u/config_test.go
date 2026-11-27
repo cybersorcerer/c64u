@@ -101,7 +101,7 @@ func TestStaticAddress(t *testing.T) {
 func TestChangeValue(t *testing.T) {
 	cases := map[string]api.ConfigChange{
 		"1541 -> 1581":                 {Category: "Drive A Settings", Item: "Drive Type", Old: "1541", New: "1581"},
-		"(not on this device) -> 0 dB": {Category: "Audio Mixer", Item: "Vol Ultimate", New: "0 dB"},
+		"(not on this device) -> 0 dB": {Category: "Audio Mixer", Item: "Vol Ultimate", New: "0 dB", Missing: true},
 		"8 -> 9":                       {Category: "Drive A Settings", Item: "Drive Bus ID", Old: float64(8), New: float64(9)},
 	}
 	for want, ch := range cases {

@@ -257,6 +257,11 @@ the rest is applied. Checked on 1.2.1: a fresh export restored with `--dry-run` 
 changes; an import with an unknown item reported it as failed, still changed `Disk swap delay`
 and left `Host Name` as it was.
 
+`Network Password` goes last, after the identity: it takes effect at once (checked on 1.2.1 - the
+next request without it got `Forbidden`), so `c64u` carries on with the new password and says so;
+from then on pass it with `--password` or `C64U_PASSWORD`. The output never shows the password,
+and GET returns it in plain text, so an export file holds it in plain text - keep it private.
+
 With a category name or pattern (firmware 1.2.1) the three act on the matching categories
 only and list them. `save-to-flash` writes only categories with unsaved changes, and the
 firmware answers a name that matches nothing the same way as one with nothing to save:
