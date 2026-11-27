@@ -304,6 +304,7 @@ is RESTORE. The command prints the list when it starts.
 ```
 c64u cli-config init          # write ~/.config/c64u/config.toml
 c64u cli-config show
-c64u ui                       # full-screen terminal UI
+c64u ui                       # full-screen terminal UI; no 1.2.1 additions yet (input,
+                              # --disasm, restore/import, per-category flash, unlink, heap)
 c64u completion <shell>       # bash | zsh | fish | powershell
 ```

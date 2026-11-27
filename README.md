@@ -267,6 +267,10 @@ Full-screen terminal UI, organised as five tabs:
 - **Config**: Browse and edit device settings, save/load from flash
 - **Streams**: Start the video, audio or debug stream
 
+The TUI covers the commands as they were before firmware 1.2.1. The newer ones - `machine input`,
+`read-mem --disasm`, `config restore`/`import`, per-category flash operations, `drives unlink` and
+`machine heap` - are command-line only for now.
+
 Global keys, in every view:
 
 | Key | Action |
@@ -303,8 +307,9 @@ File viewer:
 | `PgUp` / `PgDn` | Scroll page by page |
 | `Esc` / `q` | Back to the file browser |
 
-Starting a stream from the Streams tab suspends the TUI, hands the terminal to
-the stream viewer, and returns you to the same tab when it exits.
+In the Streams tab, video opens its own window and audio plays in the background; a stream that
+fails to start shows the device's error in the status line. The debug stream suspends the TUI,
+hands the terminal to the stream viewer, and returns you to the same tab when it exits.
 
 #### Data Streams (C64 Ultimate Only)
 
