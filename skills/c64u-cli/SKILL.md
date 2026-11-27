@@ -60,7 +60,7 @@ c64u about           # API version reported by the device
 
 If `c64u info` fails, nothing else will. Check that before debugging anything downstream.
 
-## The four things worth knowing up front
+## The five things worth knowing up front
 
 1. **Verify with `read-mem`, do not assume.** Running a program tells you the upload succeeded,
    not that the program worked. Read the memory it should have changed:

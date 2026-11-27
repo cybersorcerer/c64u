@@ -123,12 +123,25 @@ up to 90 seconds without stopping in between, and suggests the reboot after that
 ## Configuration changes are volatile by default
 
 `c64u config set` takes effect at once but is lost on power-off. Follow it with
-`c64u config save-to-flash` to persist. `reset-to-default` restores factory settings and is not
-undoable from the CLI - export first:
+`c64u config save-to-flash` to persist.
+
+`reset-to-default` changes only the settings in memory; flash keeps the saved values. Until
+something saves, `load-from-flash` brings them back - checked on the device: `Drive Bus ID`
+went 9 → 8 with `reset-to-default "Drive A Settings"` and back to 9 with
+`load-from-flash "Drive A Settings"`. Unsaved changes made before the reset are gone either way,
+so export first when they matter:
 
 ```sh
 c64u config export config-backup.json
 ```
+
+Do not run `save-to-flash` on a device that booted into safe mode: it holds factory defaults in
+memory then, and saving replaces the stored settings with them (firmware 1.2.1 API notes; not
+reproduced here).
+
+All three take a category name or pattern on firmware 1.2.1 and then touch only the matching
+categories - `save-to-flash "C64 and Cartridge Settings"` persists one change without writing
+other experiments to flash.
 
 ## JSON key casing is not uniform
 

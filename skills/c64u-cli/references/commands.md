@@ -186,8 +186,18 @@ c64u drives load-rom-upload <drive> <local-file>
 c64u drives softiec status | enable | disable [--completely] | bus-id | root
 ```
 
-`c64u drives list --json` returns an array of single-key objects, one per drive (`a`, `b`,
-`IEC Drive`), each with `bus_id`, `enabled`, `type`, `rom`, `image_file`, `image_path`.
+`c64u drives list --json` returns an array of single-key objects, one per drive. On a C64
+Ultimate on firmware 1.2.1:
+
+| Key | Fields |
+|---|---|
+| `a`, `b` | `bus_id`, `enabled`, `type` (`1541`...), `rom`, `image_file`, `image_path` |
+| `IEC Drive` (SoftIEC) | `bus_id`, `enabled`, `type` (`DOS emulation`), `last_error`, `partitions` |
+| `Printer Emulation` | `bus_id`, `enabled` |
+
+`last_error` is the SoftIEC DOS status string, e.g. `73,U64HD ULTIMATE DOS V2.0,00,00` after
+power-on; `partitions` is a list of `{id, path}`. An empty drive has `image_file` set to `""`.
+Parse by key, not by position, and expect entries to come and go with the configuration.
 
 `unlink` keeps a mounted disk in the drive but stops writing to its file: on the device a
 `SAVE` after `unlink` left the `.d64` unchanged, the same `SAVE` without it changed the file.

@@ -189,7 +189,7 @@ If it reports `RAM Expansion Unit: Disabled`, REU code will find no hardware:
 
 ```sh
 c64u config set "C64 and Cartridge Settings" "RAM Expansion Unit" Enabled
-c64u config save-to-flash
+c64u config save-to-flash "C64 and Cartridge Settings"     # firmware 1.2.1; older: no argument
 ```
 
 ## Script-friendly output
