@@ -355,3 +355,49 @@ func TestSyncer_CloseWaitsForInFlightCall(t *testing.T) {
 		t.Errorf("calls = %+v, want press a, then release_all last", calls)
 	}
 }
+
+// wheels sums the vertical wheel steps sent in calls.
+func wheels(calls [][]api.InputEvent) (sum, most int) {
+	for _, call := range calls {
+		for _, e := range call {
+			if e.Wheel != nil {
+				sum += e.Wheel.Vertical
+				if e.Wheel.Vertical > most {
+					most = e.Wheel.Vertical
+				}
+			}
+		}
+	}
+	return sum, most
+}
+
+// Device finding: a trackpad scroll queued 208 reports, about four seconds of
+// lag for every click and move behind it. One step per call, the rest dropped.
+func TestSyncer_WheelOneStepPerCall(t *testing.T) {
+	f := &fakeSender{}
+	y := newSyncer(t, f)
+	y.Update(State{WheelV: 30})
+	eventually(t, "the wheel", callCount(f))
+	time.Sleep(50 * time.Millisecond)
+	if sum, most := wheels(f.snapshot()); sum != 1 || most != 1 {
+		t.Errorf("sent %d wheel steps, at most %d per call; want 1 and 1", sum, most)
+	}
+}
+
+// Device finding: the wheel must wait while the firmware is behind, as motion does.
+func TestSyncer_WheelHeldBackWhilePending(t *testing.T) {
+	f := &fakeSender{pending: 10}
+	y := newSyncer(t, f)
+	y.Update(State{DX: 10})
+	eventually(t, "the first move", callCount(f))
+	y.Update(State{WheelV: 5})
+	time.Sleep(50 * time.Millisecond)
+	if sum, _ := wheels(f.snapshot()); sum != 0 {
+		t.Errorf("sent %d wheel steps while 10 reports were pending, want 0", sum)
+	}
+	y.Update(State{WheelV: 3})
+	eventually(t, "the next wheel", func() bool { s, _ := wheels(f.snapshot()); return s > 0 })
+	if sum, _ := wheels(f.snapshot()); sum != 1 {
+		t.Errorf("sent %d wheel steps after the pause, want 1", sum)
+	}
+}

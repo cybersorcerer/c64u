@@ -240,14 +240,18 @@ func (y *Syncer) snapshot() (State, []api.InputEvent) {
 	var snap State
 	// One move per batch; the firmware sends a report every 20ms at most. A
 	// pause holds back the next motion there is, not merely the next batch.
-	if y.pauseMove && (y.want.DX != 0 || y.want.DY != 0) {
+	// Wheel steps queue a report each, so the wheel sends one step per batch,
+	// waits out a pause like motion does, and drops the rest: a trackpad
+	// scroll otherwise queued seconds of reports ahead of every click.
+	moving := y.want.DX != 0 || y.want.DY != 0 || y.want.WheelV != 0 || y.want.WheelH != 0
+	if y.pauseMove && moving {
 		y.pauseMove = false
 	} else if !y.pauseMove {
 		snap.DX, snap.DY = clamp(y.want.DX, 127), clamp(y.want.DY, 127)
+		snap.WheelV, snap.WheelH = clamp(y.want.WheelV, 1), clamp(y.want.WheelH, 1)
 	}
 	y.want.DX = clamp(y.want.DX-snap.DX, maxMouseCarry)
 	y.want.DY = clamp(y.want.DY-snap.DY, maxMouseCarry)
-	snap.WheelV, snap.WheelH = y.want.WheelV, y.want.WheelH
 	y.want.WheelV, y.want.WheelH = 0, 0
 
 	return snap, append(events, Diff(State{}, snap)...)
