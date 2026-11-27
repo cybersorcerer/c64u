@@ -672,7 +672,8 @@ firmware the window falls back to typing into the KERNAL keyboard buffer.
 
 Keyboard modes:
   character  what your layout types arrives, " is Shift+2 on the C64 (default)
-  position   the C64 key in the same place as yours, for games
+  position   the C64 key in the same place as yours, held while you hold it;
+             use it for games, where character mode stutters on held keys
 
 Left Alt/Option is the C= key, right Alt/Option (AltGr) types your layout's
 symbols, Esc is RUN/STOP and Page Up is RESTORE. Gamepads in the standard

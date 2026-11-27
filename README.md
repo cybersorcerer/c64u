@@ -325,9 +325,9 @@ c64u streams stop <stream>
 
 **Streams:** `video` (port 11000), `audio` (port 11001), `debug` (port 11002)
 
-`video` and `audio` open a window and need the graphics and sound libraries of the host, so they
-are in the macOS, Windows and Linux x86_64 binaries but not in the cross-compiled Linux ARM64
-one, where they report that they are unavailable. `debug` is plain output and works everywhere.
+`video` and `audio` open a window and need the graphics and sound libraries of the host; the
+macOS, Windows and Linux binaries load them when the stream starts. `debug` is plain output and
+works everywhere.
 
 **Video Stream**: Opens a native 768×544 window (2× scaled) with accurate VIC colors. PAL (384×272) and NTSC (384×240) supported.
 
@@ -343,7 +343,9 @@ title.
 - **character** (default): what your keyboard layout types arrives on the C64, whatever the
   layout — `"` is Shift+2 on the C64, `@` is typed with AltGr / right Option as usual. Characters
   the C64 lacks (ä, ß, €, …) are ignored.
-- **position**: the C64 key in the same place as yours, for games that read particular keys.
+- **position**: the C64 key in the same place as yours, held as long as you hold it. Use it for
+  games: in character mode every typed character is a short key press, so a held key follows
+  your system's key repeat and stutters in a game that reads the keyboard itself.
 
 | Key                              | C64                                  |
 | -------------------------------- | ------------------------------------ |

@@ -226,9 +226,10 @@ almost always. `start`/`stop` are the manual halves for cases where the receiver
 
 Ports: video 11000, audio 11001, debug 11002.
 
-`video` and `audio` need a window and are not in the Linux ARM64 binary; see `limits.md`.
+`video` and `audio` need a window and the host's graphics and sound libraries; see `limits.md`.
 
-In the video window, keys are held as long as you hold them (firmware 1.2.0 / 3.15). Hotkeys,
+In the video window (firmware 1.2.0 / 3.15) character mode taps each typed character; position
+mode holds keys as long as you hold them, which games need. Hotkeys,
 with Cmd on macOS and Ctrl+Shift elsewhere: Mod+K keyboard mode (character / position), Mod+J
 keyboard joystick, Mod+P swap ports, Mod+L capture the mouse, Mod+U Ultimate menu, Mod+R reset
 (twice). Left Alt is C=, right Alt (AltGr) types the layout's symbols, Esc is RUN/STOP, Page Up

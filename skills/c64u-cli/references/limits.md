@@ -142,6 +142,9 @@ through `machine:input`, so games and the Ultimate menu see them, not only BASIC
 firmware 1.2.0 (C64 Ultimate) or 3.15; on older firmware the window falls back to the keyboard
 buffer, with the same BASIC-only limitation as `sendkey`.
 
+- In character mode (the default) every typed character reaches the C64 as a short tap, so a
+  held key follows the host's key repeat and a game reading the keyboard matrix sees it stutter.
+  Position mode (Mod+K) holds C64 keys as long as the host keys are held; use it for games.
 - The mouse is on control port 1 only; while it is captured a joystick on port 1 is ignored.
   Port 1 shares `$DC01` with the keyboard rows, so while the KERNAL scans the keyboard a button
   reads as a key: the left button (fire, bit 4) types a space at the BASIC prompt, as on a real
