@@ -239,6 +239,8 @@ var infoCmd = &cobra.Command{
 			core := resp.GetString("core_version")
 			hostname := resp.GetString("hostname")
 			uniqueID := resp.GetString("unique_id")
+			ethernetMAC := resp.GetString("ethernet_mac")
+			wifiMAC := resp.GetString("wifi_mac")
 
 			formatter.PrintHeader("C64 Ultimate Device Information")
 			fmt.Println()
@@ -259,6 +261,12 @@ var infoCmd = &cobra.Command{
 			}
 			if uniqueID != "" {
 				formatter.PrintKeyValue("Unique ID", uniqueID)
+			}
+			if ethernetMAC != "" {
+				formatter.PrintKeyValue("Ethernet MAC", ethernetMAC)
+			}
+			if wifiMAC != "" {
+				formatter.PrintKeyValue("Wi-Fi MAC", wifiMAC)
 			}
 		}
 	},
@@ -315,6 +323,7 @@ var cliConfigShowCmd = &cobra.Command{
 			"port":     cfg.Port,
 			"verbose":  cfg.Verbose,
 			"password": passwordState(cfg.Password),
+			"wifi_mac": cfg.WifiMAC,
 		}
 		if cfg.Device != "" {
 			data["device"] = cfg.Device
@@ -322,7 +331,7 @@ var cliConfigShowCmd = &cobra.Command{
 		if len(cfg.Devices) > 0 {
 			devices := make(map[string]interface{}, len(cfg.Devices))
 			for name, d := range cfg.Devices {
-				devices[name] = map[string]interface{}{"host": d.Host, "port": d.Port, "password": passwordState(d.Password)}
+				devices[name] = map[string]interface{}{"host": d.Host, "port": d.Port, "password": passwordState(d.Password), "wifi_mac": d.WifiMAC}
 			}
 			data["devices"] = devices
 			data["default"] = cfg.Default
@@ -343,6 +352,9 @@ var cliConfigShowCmd = &cobra.Command{
 			fmt.Printf("  Host:        %s\n", cfg.Host)
 			fmt.Printf("  Port:        %d\n", cfg.Port)
 			fmt.Printf("  Password:    %s\n", passwordState(cfg.Password))
+			if cfg.WifiMAC != "" {
+				fmt.Printf("  Wi-Fi MAC:   %s\n", cfg.WifiMAC)
+			}
 			fmt.Printf("  Verbose:     %v\n", cfg.Verbose)
 			if configPath != "" {
 				fmt.Printf("  Config File: %s\n", configPath)
@@ -361,7 +373,11 @@ var cliConfigShowCmd = &cobra.Command{
 					if port == 0 {
 						port = 80
 					}
-					fmt.Printf("  %s %-12s %s:%d\n", marker, name, d.Host, port)
+					mac := ""
+					if d.WifiMAC != "" {
+						mac = "  wifi_mac " + d.WifiMAC
+					}
+					fmt.Printf("  %s %-12s %s:%d%s\n", marker, name, d.Host, port, mac)
 				}
 				fmt.Println()
 				fmt.Println("  * = used by this invocation. Select with --device NAME.")

@@ -226,7 +226,12 @@ func (c *Config) resolveDevice() error {
 		case len(c.Devices) == 1:
 			name = c.DeviceNames()[0]
 		default:
-			return nil // flat host/port, or the defaults
+			// Flat host/port, or the defaults. A one-off address is not the
+			// machine the top-level wifi_mac wakes.
+			if explicitHost {
+				c.WifiMAC = ""
+			}
+			return nil
 		}
 	}
 
@@ -334,6 +339,10 @@ port = 80
 # kept here is stored in clear text, so this file is created readable by you
 # only; the C64U_PASSWORD environment variable is the alternative.
 # password = "secret"
+
+# Wi-Fi MAC address of the device, for 'c64u machine poweron' (Wake-on-LAN).
+# 'c64u info' shows it as "Wi-Fi MAC" while the device is on.
+# wifi_mac = "9C:13:9E:ED:D5:EC"
 
 # A second "host" line does not add a device - it replaces the one above.
 # For several machines use named entries instead, selected per command with

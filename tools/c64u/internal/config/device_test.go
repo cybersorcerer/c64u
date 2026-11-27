@@ -158,3 +158,25 @@ func TestResolveDeviceWifiMAC(t *testing.T) {
 		}
 	}
 }
+
+// The flat form keeps its top-level wifi_mac, and drops it for a one-off
+// --host just as a device entry does.
+func TestFlatConfigWifiMAC(t *testing.T) {
+	for _, explicit := range []bool{false, true} {
+		viper.Reset()
+		t.Setenv("C64U_DEVICE", "")
+		ExplicitHost = explicit
+		t.Cleanup(func() { ExplicitHost = false })
+		cfg := Config{Host: "c64u.local", WifiMAC: "9C:13:9E:ED:D5:EC"}
+		if err := cfg.resolveDevice(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := "9C:13:9E:ED:D5:EC"
+		if explicit {
+			want = ""
+		}
+		if cfg.WifiMAC != want {
+			t.Errorf("explicit host %v: WifiMAC = %q, want %q", explicit, cfg.WifiMAC, want)
+		}
+	}
+}
