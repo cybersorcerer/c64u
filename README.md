@@ -36,7 +36,8 @@ older.
   serves; the device loads them when it is switched on, or at once from the Ultimate menu.
 - **Video window as keyboard, joystick and mouse** — keys are held like on real hardware, so games,
   the Ultimate menu and the machine code monitor work, not only BASIC; gamepads are joysticks;
-  the mouse works in GEOS.
+  the mouse works in GEOS. Tested on macOS only so far — if you use Linux or Windows, please
+  help: [#14](https://github.com/cybersorcerer/c64u/issues/14).
 - **Configuration backup** — `c64u config restore` puts a backup from `config export` back and
   saves it to flash; `c64u config import` copies a setup onto a second device.
 - `c64u machine read-mem --disasm` disassembles, illegal opcodes included.
@@ -525,9 +526,9 @@ Losing focus or closing the window releases everything the window was holding.
 Ultimate on firmware 1.2.1. The Windows and Linux builds are compiled from the same code and the
 Linux window opens under GNOME on Wayland, but keyboard, gamepad and mouse are untested there, as
 are other keyboard layouts (US, French, …). If you try them, please report what works and what
-does not in the [issues](https://github.com/cybersorcerer/c64u/issues): your system, your
-layout, and what arrived on the C64 (`c64u machine read-mem 0400 --length 40` shows the first
-screen line).
+does not in [issue #14](https://github.com/cybersorcerer/c64u/issues/14), which has a short
+checklist: your system, your layout, and what arrived on the C64
+(`c64u machine read-mem 0400 --length 40` shows the first screen line).
 
 **Audio Stream**: Plays 48 kHz stereo 16-bit PCM from the C64 audio mixer with automatic gap compensation.
 
