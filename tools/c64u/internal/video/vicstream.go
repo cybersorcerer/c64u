@@ -1,4 +1,4 @@
-//go:build darwin || windows || (linux && cgo)
+//go:build darwin || windows || linux
 
 package video
 
