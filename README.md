@@ -362,7 +362,9 @@ Space and Menu is RUN/STOP. Mod+J turns the keyboard into a joystick too (arrows
 fire). Mod+P swaps the ports.
 
 **Mouse** — Mod+L captures the pointer; motion, buttons and wheel then go to the C64 mouse on
-port 1 (as in GEOS). While it is captured a joystick on port 1 is ignored.
+port 1 (as in GEOS). While it is captured a joystick on port 1 is ignored. Port 1 shares its
+lines with the keyboard matrix, so at the BASIC prompt a click reads as a key press (the left
+button types a space), as on a real C64; programs that use the mouse read it themselves.
 
 **Hotkeys** — the modifier is Cmd on macOS and Ctrl+Shift on Windows and Linux. Letters follow
 your layout's labels.

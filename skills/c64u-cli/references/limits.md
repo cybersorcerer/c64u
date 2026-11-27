@@ -135,6 +135,9 @@ firmware 1.2.0 (C64 Ultimate) or 3.15; on older firmware the window falls back t
 buffer, with the same BASIC-only limitation as `sendkey`.
 
 - The mouse is on control port 1 only; while it is captured a joystick on port 1 is ignored.
+  Port 1 shares `$DC01` with the keyboard rows, so while the KERNAL scans the keyboard a button
+  reads as a key: the left button (fire, bit 4) types a space at the BASIC prompt, as on a real
+  C64 with a 1351.
 - `C=+O`, the monitor's hotkey, does not arrive through `machine:input` - not from a running
   program and not inside the menu. Open the monitor through the menu instead: Mod+U in the window
   (or `c64u machine menu-button`), then F1 › Developer › Machine Code Monitor.
