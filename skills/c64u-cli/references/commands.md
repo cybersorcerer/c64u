@@ -39,7 +39,7 @@ c64u machine menu-button                       # as if the Menu button was press
 c64u machine poweroff                          # U64 only
 
 c64u machine read-mem <address> [--length N | --to ADDR] [-o FILE] [--raw]
-c64u machine read-mem <address> [--length N | --to ADDR] --disasm   # 6502 assembly, illegal opcodes marked *
+c64u machine read-mem <address> [--length N | --to ADDR] --disasm   # 6502, illegal opcodes marked *
 c64u machine write-mem <address> <hexdata>
 c64u machine write-mem-file <address> <file>
 c64u machine sendkey <string> [--delay ms]
@@ -253,9 +253,9 @@ category as `Item: old -> new` and writes nothing. `restore` sends everything, t
 identity last, then saves to flash. `import` skips the identity - `Ethernet Settings`,
 `WiFi settings`, `Host Name` and `Unique ID` - and changes memory only, like `set`. The firmware
 tries every setting in the body and names the ones it rejects; those land under `failed` and
-the rest is applied. Checked on 1.2.1: a fresh export restored with `--dry-run` reports 0 changes; an import
-with an unknown item reported it as failed and still changed `Disk swap delay`, and left
-`Host Name` as it was.
+the rest is applied. Checked on 1.2.1: a fresh export restored with `--dry-run` reports 0
+changes; an import with an unknown item reported it as failed, still changed `Disk swap delay`
+and left `Host Name` as it was.
 
 With a category name or pattern (firmware 1.2.1) the three act on the matching categories
 only and list them. `save-to-flash` writes only categories with unsaved changes, and the
