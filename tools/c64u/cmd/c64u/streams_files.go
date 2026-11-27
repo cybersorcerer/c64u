@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"net"
 	"net/http"
@@ -546,6 +547,10 @@ Examples:
 			apiClient.StreamsStop("debug")
 			return
 		}
+		// Bei ~840k Zeilen/s reicht der Standardpuffer nicht, Pakete gehen verloren
+		if err := conn.SetReadBuffer(8 << 20); err != nil {
+			dbg.Log("debug stream: SetReadBuffer: %v", err)
+		}
 
 		// ── TUI mode ──────────────────────────────────────────────────────────
 		if tuiMode {
@@ -576,6 +581,7 @@ Examples:
 			fmt.Println()
 		}
 
+		out := bufio.NewWriterSize(os.Stdout, 1<<20)
 		buf := make([]byte, 4096)
 		for {
 			n, _, err := conn.ReadFromUDP(buf)
@@ -584,9 +590,10 @@ Examples:
 				break
 			}
 			if n > 0 {
-				dbg.DecodePacket(buf[:n], os.Stdout, raw)
+				dbg.DecodePacket(buf[:n], out, raw)
 			}
 		}
+		out.Flush()
 
 		// Stop stream on C64 Ultimate
 		apiClient.StreamsStop("debug")
