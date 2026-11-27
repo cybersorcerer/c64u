@@ -72,6 +72,13 @@ func (c *Client) DrivesRemove(drive string) (*Response, error) {
 	return c.Put(endpoint, nil)
 }
 
+// DrivesUnlink leaves the disk in the drive but stops writing to its file
+// (firmware 1.2.1).
+func (c *Client) DrivesUnlink(drive string) (*Response, error) {
+	endpoint := fmt.Sprintf("/v1/drives/%s:unlink", drive)
+	return c.Put(endpoint, nil)
+}
+
 // DrivesOn enables selected drive
 func (c *Client) DrivesOn(drive string) (*Response, error) {
 	endpoint := fmt.Sprintf("/v1/drives/%s:on", drive)

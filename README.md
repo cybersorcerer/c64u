@@ -487,6 +487,7 @@ c64u drives list                               # List all drives
 c64u drives mount <drive> <image> [--type TYPE] [--mode MODE]
 c64u drives mount-upload <drive> <file> [--type TYPE] [--mode MODE]
 c64u drives unmount <drive>
+c64u drives unlink <drive>                     # Stop writing to the image file (fw 1.2.1)
 c64u drives reset <drive>
 c64u drives on <drive>
 c64u drives off <drive>

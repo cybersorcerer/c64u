@@ -275,6 +275,34 @@ Example:
 	},
 }
 
+var drivesUnlinkCmd = &cobra.Command{
+	Use:   "unlink <drive>",
+	Short: "Unlink the mounted disk from its file",
+	Long: `Keep the disk in the drive (a, b or softiec) but stop writing to the image file it
+came from. The drive still accepts writes, but they stay in memory and are lost
+when the disk is removed. Needs firmware 1.2.1.
+
+Example:
+  c64u drives unlink a`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		drive := args[0]
+
+		resp, err := apiClient.DrivesUnlink(drive)
+		if err != nil {
+			formatter.Error("Failed to unlink disk", []string{err.Error()})
+			return
+		}
+
+		if resp.HasErrors() {
+			formatter.Error("API returned errors", resp.Errors)
+			return
+		}
+
+		formatter.Success(fmt.Sprintf("Disk in drive %s unlinked from its file", drive), nil)
+	},
+}
+
 // ============================================================================
 // Drive Control
 // ============================================================================
@@ -511,6 +539,7 @@ func init() {
 	drivesCmd.AddCommand(drivesMountCmd)
 	drivesCmd.AddCommand(drivesMountUploadCmd)
 	drivesCmd.AddCommand(drivesUnmountCmd)
+	drivesCmd.AddCommand(drivesUnlinkCmd)
 
 	// Add control commands
 	drivesCmd.AddCommand(drivesResetCmd)

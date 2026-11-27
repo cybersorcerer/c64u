@@ -177,6 +177,7 @@ c64u drives list
 c64u drives mount        <drive> <image>      [--type TYPE] [--mode MODE]
 c64u drives mount-upload <drive> <local-file> [--type TYPE] [--mode MODE]
 c64u drives unmount <drive>
+c64u drives unlink <drive>                     # a, b or softiec; firmware 1.2.1
 c64u drives on | off | reset <drive>
 c64u drives set-mode <drive> <mode>
 c64u drives load-rom        <drive> <file>
@@ -186,6 +187,11 @@ c64u drives softiec status | enable | disable [--completely] | bus-id | root
 
 `c64u drives list --json` returns an array of single-key objects, one per drive (`a`, `b`,
 `IEC Drive`), each with `bus_id`, `enabled`, `type`, `rom`, `image_file`, `image_path`.
+
+`unlink` keeps a mounted disk in the drive but stops writing to its file: on the device a
+`SAVE` after `unlink` left the `.d64` unchanged, the same `SAVE` without it changed the file.
+Mounting with `--mode unlinked` does the same from the start. `drives list` does not show
+the unlinked state, and `unlink` on an empty drive also reports success.
 
 ## Device configuration
 
